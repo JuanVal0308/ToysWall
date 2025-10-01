@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toys World - Tienda Online</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1>🧸 Toys World</h1>
+            <div class="nav-links">
+                <a href="dashboard.html" class="nav-link">Dashboard</a>
+                <a href="inventario.html" class="nav-link">Inventario</a>
+                <a href="venta.html" class="nav-link active">Venta Web</a>
+                <button id="logoutBtn" class="btn btn-secondary">Cerrar Sesión</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="tienda">
+            <h2>🛍️ Tienda Online - Juguetes Disponibles</h2>
+            
+            <div class="tienda-filters">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Buscar juguetes...">
+                </div>
+                
+                <select id="categoriaFilter">
+                    <option value="">Todas las categorías</option>
+                </select>
+                
+                <select id="precioFilter">
+                    <option value="">Todos los precios</option>
+                    <option value="0-50">$0 - $50</option>
+                    <option value="50-100">$50 - $100</option>
+                    <option value="100-200">$100 - $200</option>
+                    <option value="200+">$200+</option>
+                </select>
+                
+                <button id="clearFilters" class="btn btn-secondary">Limpiar Filtros</button>
+            </div>
+
+            <div class="tienda-stats">
+                <div class="stat-card">
+                    <h3 id="totalJuguetes">0</h3>
+                    <p>Juguetes Disponibles</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="totalCategorias">0</h3>
+                    <p>Categorías</p>
+                </div>
+            </div>
+
+            <div id="juguetesList" class="tienda-grid">
+                <!-- Los juguetes se cargarán aquí dinámicamente -->
+            </div>
+        </div>
+    </div>
+
+    <div id="message" class="message" style="display: none;"></div>
+
+    <script src="js/supabase.js"></script>
+    <script src="js/venta.js"></script>
+</body>
+</html>
+

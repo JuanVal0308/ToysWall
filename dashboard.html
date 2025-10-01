@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toys World - Dashboard</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1>🧸 Toys World</h1>
+            <div class="nav-links">
+                <a href="dashboard.html" class="nav-link active">Dashboard</a>
+                <a href="inventario.html" class="nav-link">Inventario</a>
+                <a href="venta.html" class="nav-link">Venta Web</a>
+                <button id="logoutBtn" class="btn btn-secondary">Cerrar Sesión</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="dashboard">
+            <h2>Bienvenido, <span id="username"></span></h2>
+            
+            <!-- Sección de registro de usuarios -->
+            <div class="section">
+                <h3>Registrar Nuevo Usuario</h3>
+                <form id="registerForm" class="form">
+                    <div class="form-group">
+                        <label for="newUsername">Usuario:</label>
+                        <input type="text" id="newUsername" name="username" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="newPassword">Contraseña:</label>
+                        <input type="password" id="newPassword" name="password" required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Registrar Usuario</button>
+                </form>
+            </div>
+
+            <!-- Sección de gestión de juguetes -->
+            <div class="section">
+                <h3>Gestión de Juguetes</h3>
+                <form id="jugueteForm" class="form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="nombre">Nombre:</label>
+                            <input type="text" id="nombre" name="nombre" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="categoria">Categoría:</label>
+                            <input type="text" id="categoria" name="categoria" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="precio">Precio:</label>
+                            <input type="number" id="precio" name="precio" step="0.01" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="cantidad">Cantidad:</label>
+                            <input type="number" id="cantidad" name="cantidad" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="estado">Estado:</label>
+                        <select id="estado" name="estado">
+                            <option value="disponible">Disponible</option>
+                            <option value="vendido">Vendido</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Agregar Juguete</button>
+                </form>
+            </div>
+
+            <!-- Lista de juguetes -->
+            <div class="section">
+                <h3>Inventario Actual</h3>
+                <div id="juguetesList" class="juguetes-list">
+                    <!-- Los juguetes se cargarán aquí dinámicamente -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="message" class="message" style="display: none;"></div>
+
+    <script src="js/supabase.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
+
