@@ -1,118 +1,100 @@
-# Toys Walls - Sistema de Inventario Empresarial
+# Sistema de Inventario - Toys Walls
 
-Aplicación web completa de inventario empresarial construida con React, Tailwind CSS, shadcn/ui y Supabase.
+Sistema web de inventario empresarial desarrollado con HTML, CSS, JavaScript y Supabase.
 
-## Características
-
-- ✅ Autenticación con Supabase Auth
-- ✅ Gestión de inventario (juguetes, categorías, stock por tienda)
-- ✅ Registro de ventas
-- ✅ Gestión de tiendas (CRUD completo para administradores)
-- ✅ Gestión de empleados/vendedores (CRUD)
-- ✅ Generación y envío de facturas por correo
-- ✅ Control de acceso basado en roles (RLS)
-- ✅ Diseño moderno y responsivo
-
-## Requisitos Previos
-
-- Node.js 18+ y npm
-- Cuenta de Supabase
-- Cuenta de Resend (para envío de correos)
-
-## Instalación
-
-1. Clona el repositorio:
-```bash
-git clone <tu-repositorio>
-cd ToysWall
-```
-
-2. Instala las dependencias:
-```bash
-npm install
-```
-
-3. Configura las variables de entorno:
-Crea un archivo `.env.local` con:
-```
-VITE_SUPABASE_URL=tu_supabase_url
-VITE_SUPABASE_ANON_KEY=tu_supabase_anon_key
-```
-
-4. Inicia el servidor de desarrollo:
-```bash
-npm run dev
-```
-
-## Configuración de Supabase
-
-### Tablas necesarias
-
-Asegúrate de tener las siguientes tablas en tu base de datos Supabase:
-
-- `usuarios` (con campos: id, empresa_id, tipo_usuario_id)
-- `empresas` (con campo: nombre)
-- `tipo_usuarios` (con campo: nombre)
-- `juguetes` (con campos: id, empresa_id, nombre, codigo, descripcion, precio, categoria_id)
-- `categorias` (con campos: id, empresa_id, nombre)
-- `tiendas` (con campos: id, empresa_id, nombre, direccion, telefono)
-- `inventario_tiendas` (con campos: id, juguete_id, tienda_id, cantidad)
-- `vendedores` (con campos: id, empresa_id, nombre, codigo, email, telefono)
-- `ventas` (con campos: id, empresa_id, juguete_id, vendedor_id, precio_venta, metodo_pago, fecha_venta)
-- `facturas` (con campos: id, empresa_id, venta_id, nombre_cliente, correo_cliente, total, fecha_factura, items)
-
-### Row Level Security (RLS)
-
-Implementa políticas RLS usando las funciones `current_empresa()` y `current_tipo_usuario()` para asegurar que cada usuario solo pueda acceder a los datos de su empresa.
-
-### Edge Function
-
-1. Crea la Edge Function `send-invoice` en Supabase
-2. Configura las variables de entorno:
-   - `RESEND_API_KEY`: Tu API key de Resend
-   - `SUPABASE_URL`: URL de tu proyecto Supabase
-   - `SUPABASE_SERVICE_ROLE_KEY`: Service role key de Supabase
-
-## Deploy en Vercel
-
-1. Conecta tu repositorio a Vercel
-2. Configura las variables de entorno en Vercel:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-3. Deploy automático con cada push a la rama principal
-
-## Estructura del Proyecto
+## 📋 Estructura del Proyecto
 
 ```
-src/
-├── components/          # Componentes React
-│   ├── ui/             # Componentes de UI (shadcn/ui)
-│   ├── Login.jsx       # Componente de login
-│   ├── Layout.jsx      # Layout principal
-│   ├── Inventario.jsx  # Módulo de inventario
-│   ├── Venta.jsx       # Módulo de ventas
-│   ├── Tiendas.jsx     # Módulo de tiendas
-│   ├── Empleados.jsx   # Módulo de empleados
-│   └── Facturar.jsx    # Módulo de facturación
-├── contexts/           # Contextos de React
-│   └── AuthContext.jsx # Contexto de autenticación
-├── lib/                # Utilidades
-│   ├── supabase.js     # Cliente de Supabase
-│   └── utils.js        # Utilidades generales
-├── App.jsx             # Componente principal
-└── main.jsx            # Punto de entrada
+ToysWall/
+├── Login.html              # Página de inicio de sesión
+├── dashboard.html          # Dashboard principal (solo administradores)
+├── css/
+│   ├── styles.css         # Estilos del login
+│   └── dashboard.css      # Estilos del dashboard
+├── js/
+│   ├── config.js          # Configuración de Supabase
+│   ├── auth.js            # Lógica de autenticación
+│   └── dashboard.js       # Lógica del dashboard
+├── database_setup.sql      # Script completo de configuración de base de datos
+└── SUPABASE_CONFIG.txt     # Configuración de Supabase (URL y Anon Key)
 ```
 
-## Tecnologías Utilizadas
+## 🚀 Configuración Inicial
 
-- **React 18** - Framework de UI
-- **Vite** - Build tool
-- **Tailwind CSS** - Estilos
-- **shadcn/ui** - Componentes de UI
-- **Supabase** - Backend (Auth, Database, Edge Functions)
-- **Resend** - Envío de correos electrónicos
+### 1. Configurar Supabase
 
-## Licencia
+1. Crea un proyecto en [Supabase](https://supabase.com)
+2. Copia la URL y la Anon Key de tu proyecto
+3. Edita `SUPABASE_CONFIG.txt` y agrega tus credenciales:
+   ```
+   SUPABASE_URL=tu_url_aqui
+   SUPABASE_ANON_KEY=tu_anon_key_aqui
+   ```
 
-MIT
+### 2. Configurar Base de Datos
+
+1. Abre el SQL Editor en Supabase
+2. Copia y pega el contenido completo de `database_setup.sql`
+3. Ejecuta el script (Run o Ctrl+Enter)
+4. Verifica que se hayan creado las tablas:
+   - `tipo_usuarios`
+   - `empresas`
+   - `usuarios`
+
+### 3. Configurar JavaScript
+
+El archivo `js/config.js` lee automáticamente las credenciales de `SUPABASE_CONFIG.txt`.
+
+## 🔐 Autenticación
+
+- **Login**: Usuario, Empresa y Contraseña
+- **Tipos de Usuario**:
+  - **Super Administrador** (ID: 1): Acceso completo
+  - **Administrador** (ID: 2): Acceso al dashboard
+  - **Empleado** (ID: 3): Acceso limitado (pendiente de implementar)
+
+## 📝 Usuarios Iniciales
+
+El script `database_setup.sql` crea usuarios de ejemplo:
+- **Super Admin**: `Super Admin` / Empresa: `Toys Walls` / Contraseña: `superadmin123`
+- **Admin**: `admin` / Empresa: `Toys Walls` / Contraseña: `admin123`
+
+## 🎨 Características
+
+- ✅ Autenticación por usuario, empresa y contraseña
+- ✅ Dashboard para administradores
+- ✅ Edición de perfil con verificación de contraseña
+- ✅ Gestión de logos de empresa
+- ✅ Diseño responsive y moderno
+
+## 📱 Páginas
+
+### Login.html
+Página de inicio de sesión con:
+- Selección de empresa (dropdown)
+- Campo de usuario
+- Campo de contraseña con toggle de visibilidad
+- Botón de registro que redirige a WhatsApp
+
+### dashboard.html
+Dashboard principal (solo para administradores) con:
+- Header con logo de empresa y nombre
+- Bienvenida personalizada
+- Nombre de usuario clickeable para editar perfil
+- Modal de edición de perfil:
+  - Edición de nombre de usuario
+  - Edición de email
+  - Cambio de contraseña
+  - Requiere contraseña actual para cualquier cambio
+
+## 🔧 Tecnologías
+
+- **Frontend**: HTML5, CSS3, JavaScript (Vanilla)
+- **Backend**: Supabase (PostgreSQL + API REST)
+- **Iconos**: Font Awesome 6.4.0
+- **Hosting**: Compatible con cualquier hosting estático
+
+## 📄 Licencia
+
+Proyecto privado - Toys Walls
 
