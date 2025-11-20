@@ -38,6 +38,18 @@
                     <i class="fas fa-cash-register"></i>
                     <span>Registrar Venta</span>
                 </button>
+                <button class="sidebar-btn" data-page="juguetes">
+                    <i class="fas fa-toy"></i>
+                    <span>Juguetes</span>
+                </button>
+                <button class="sidebar-btn" data-page="inventario">
+                    <i class="fas fa-boxes"></i>
+                    <span>Inventario</span>
+                </button>
+                <button class="sidebar-btn" data-page="categorias">
+                    <i class="fas fa-tags"></i>
+                    <span>Categorías</span>
+                </button>
                 <button class="sidebar-btn" data-page="bodegas">
                     <i class="fas fa-warehouse"></i>
                     <span>Bodegas</span>
@@ -45,6 +57,10 @@
                 <button class="sidebar-btn" data-page="tiendas">
                     <i class="fas fa-store"></i>
                     <span>Tiendas</span>
+                </button>
+                <button class="sidebar-btn" data-page="empleados">
+                    <i class="fas fa-user-tie"></i>
+                    <span>Empleados</span>
                 </button>
                 <button class="sidebar-btn" data-page="usuarios">
                     <i class="fas fa-users"></i>
@@ -54,14 +70,854 @@
                     <i class="fas fa-truck-loading"></i>
                     <span>Abastecer Tiendas</span>
                 </button>
+                <button class="sidebar-btn" data-page="analisis">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Análisis</span>
+                </button>
             </nav>
         </aside>
 
         <!-- Contenido principal -->
         <main class="dashboard-main">
-            <div class="dashboard-content">
-                <h1>Dashboard</h1>
-                <p>Contenido principal del sistema de inventario</p>
+            <div class="dashboard-content" id="mainContent">
+                <div id="defaultView">
+                    <h1>Dashboard</h1>
+                    <div class="dashboard-summary">
+                        <div class="summary-cards">
+                            <div class="summary-card">
+                                <div class="card-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                    <i class="fas fa-store"></i>
+                                </div>
+                                <div class="card-info">
+                                    <h3 id="totalTiendas">0</h3>
+                                    <p>Tiendas</p>
+                                </div>
+                            </div>
+                            <div class="summary-card">
+                                <div class="card-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                                    <i class="fas fa-warehouse"></i>
+                                </div>
+                                <div class="card-info">
+                                    <h3 id="totalBodegas">0</h3>
+                                    <p>Bodegas</p>
+                                </div>
+                            </div>
+                            <div class="summary-card">
+                                <div class="card-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                                <div class="card-info">
+                                    <h3 id="totalUsuarios">0</h3>
+                                    <p>Usuarios</p>
+                                </div>
+                            </div>
+                            <div class="summary-card">
+                                <div class="card-icon" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                                    <i class="fas fa-dollar-sign"></i>
+                                </div>
+                                <div class="card-info">
+                                    <h3 id="totalGanancias">$0</h3>
+                                    <p>Ganancias Totales</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="summary-charts">
+                            <div class="chart-card">
+                                <h3>Ventas Recientes</h3>
+                                <div id="ventasRecientes" class="ventas-list">
+                                    <p style="text-align: center; color: #64748b; padding: 20px;">Cargando ventas...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Vista de Registrar Venta -->
+                <div id="ventaView" style="display: none;">
+                    <h1>Registrar Venta</h1>
+                    <form id="registrarVentaForm" class="bodega-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="ventaJugueteCodigo">
+                                    <i class="fas fa-barcode"></i> Código del Juguete *
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="ventaJugueteCodigo" 
+                                    name="juguete_codigo" 
+                                    placeholder="Ej: JUG-001"
+                                    required
+                                    autocomplete="off"
+                                >
+                                <div id="jugueteInfo" class="juguete-info" style="display: none;"></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="ventaEmpleadoCodigo">
+                                    <i class="fas fa-id-card"></i> Código del Empleado *
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="ventaEmpleadoCodigo" 
+                                    name="empleado_codigo" 
+                                    placeholder="Ej: EMP-001"
+                                    required
+                                    autocomplete="off"
+                                >
+                                <div id="empleadoInfo" class="empleado-info" style="display: none;"></div>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="ventaPrecio">
+                                    <i class="fas fa-dollar-sign"></i> Precio de Venta *
+                                </label>
+                                <input 
+                                    type="number" 
+                                    id="ventaPrecio" 
+                                    name="precio" 
+                                    placeholder="0.00"
+                                    min="0"
+                                    step="0.01"
+                                    required
+                                >
+                            </div>
+                            <div class="form-group">
+                                <label for="ventaMetodoPago">
+                                    <i class="fas fa-credit-card"></i> Método de Pago *
+                                </label>
+                                <select 
+                                    id="ventaMetodoPago" 
+                                    name="metodo_pago" 
+                                    required
+                                    class="form-select"
+                                >
+                                    <option value="">Selecciona método de pago</option>
+                                    <option value="efectivo">Efectivo</option>
+                                    <option value="transferencia">Transferencia</option>
+                                    <option value="tarjeta">Tarjeta</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="ventaItems" class="venta-items">
+                            <h3>Items de la Venta</h3>
+                            <div id="ventaItemsList"></div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn-secondary" id="agregarItemBtn">
+                                <i class="fas fa-plus"></i> Agregar Item
+                            </button>
+                            <button type="button" class="btn-primary" id="facturarBtn" style="display: none;">
+                                <i class="fas fa-file-invoice"></i> Facturar
+                            </button>
+                            <button type="submit" class="btn-primary">
+                                <i class="fas fa-save"></i> Registrar Venta
+                            </button>
+                        </div>
+                        <div id="ventaErrorMessage" class="error-message" style="display: none;"></div>
+                        <div id="ventaSuccessMessage" class="success-message" style="display: none;"></div>
+                    </form>
+                </div>
+                
+                <!-- Vista de Facturar -->
+                <div id="facturarView" style="display: none;">
+                    <h1>Facturación</h1>
+                    <div class="factura-container">
+                        <div class="factura-header">
+                            <div class="factura-info">
+                                <h2>FACTURA ELECTRÓNICA</h2>
+                                <p><strong>Código:</strong> <span id="facturaCodigo">-</span></p>
+                                <p><strong>Fecha y Hora:</strong> <span id="facturaFecha">-</span></p>
+                            </div>
+                        </div>
+                        <div class="factura-items">
+                            <h3>Items de la Venta</h3>
+                            <table class="factura-table">
+                                <thead>
+                                    <tr>
+                                        <th>Juguete</th>
+                                        <th>Código</th>
+                                        <th>Precio</th>
+                                        <th>Cantidad</th>
+                                        <th>Subtotal</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="facturaItemsBody">
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colspan="4" style="text-align: right; font-weight: bold;">TOTAL:</td>
+                                        <td style="font-weight: bold; font-size: 18px;" id="facturaTotal">$0.00</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        <form id="enviarFacturaForm" class="bodega-form">
+                            <h3>Datos del Cliente</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="clienteNombre">
+                                        <i class="fas fa-user"></i> Nombre del Cliente *
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        id="clienteNombre" 
+                                        name="nombre" 
+                                        placeholder="Ej: Juan Pérez"
+                                        required
+                                    >
+                                </div>
+                                <div class="form-group">
+                                    <label for="clienteDocumento">
+                                        <i class="fas fa-id-card"></i> Documento *
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        id="clienteDocumento" 
+                                        name="documento" 
+                                        placeholder="Ej: 1234567890"
+                                        required
+                                    >
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="clienteEmail">
+                                    <i class="fas fa-envelope"></i> Correo Electrónico *
+                                </label>
+                                <input 
+                                    type="email" 
+                                    id="clienteEmail" 
+                                    name="email" 
+                                    placeholder="cliente@ejemplo.com"
+                                    required
+                                >
+                            </div>
+                            <div id="facturaErrorMessage" class="error-message" style="display: none;"></div>
+                            <div id="facturaSuccessMessage" class="success-message" style="display: none;"></div>
+                            <div class="form-actions">
+                                <button type="button" class="btn-secondary" id="cancelarFacturaBtn">
+                                    <i class="fas fa-times"></i> Cancelar
+                                </button>
+                                <button type="submit" class="btn-primary">
+                                    <i class="fas fa-paper-plane"></i> Enviar Factura
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Vista de Juguetes -->
+                <div id="juguetesView" style="display: none;">
+                    <h1>Agregar Juguetes</h1>
+                    <form id="agregarJugueteForm" class="bodega-form">
+                        <div class="form-group">
+                            <label for="jugueteNombreInput">
+                                <i class="fas fa-toy"></i> Nombre del Juguete *
+                            </label>
+                            <input 
+                                type="text" 
+                                id="jugueteNombreInput" 
+                                name="nombre" 
+                                placeholder="Ej: Pelota de Fútbol"
+                                required
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="jugueteCodigoInput">
+                                <i class="fas fa-barcode"></i> Código *
+                            </label>
+                            <input 
+                                type="text" 
+                                id="jugueteCodigoInput" 
+                                name="codigo" 
+                                placeholder="Ej: JUG-001"
+                                required
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="jugueteCategoriasSelect">
+                                <i class="fas fa-tags"></i> Categorías * (Puedes seleccionar múltiples)
+                            </label>
+                            <div id="categoriasCheckboxes" class="categorias-checkboxes">
+                                <!-- Las categorías se cargarán aquí dinámicamente -->
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="jugueteCantidadInput">
+                                <i class="fas fa-boxes"></i> Cantidad *
+                            </label>
+                            <input 
+                                type="number" 
+                                id="jugueteCantidadInput" 
+                                name="cantidad" 
+                                placeholder="0"
+                                min="0"
+                                required
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="jugueteUbicacionTipo">
+                                <i class="fas fa-map-marker-alt"></i> Ubicación *
+                            </label>
+                            <select 
+                                id="jugueteUbicacionTipo" 
+                                name="ubicacion_tipo" 
+                                required
+                                class="form-select"
+                            >
+                                <option value="">Selecciona tipo de ubicación</option>
+                                <option value="bodega">Bodega</option>
+                                <option value="tienda">Tienda</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="jugueteUbicacionContainer" style="display: none;">
+                            <label for="jugueteUbicacionSelect">
+                                <i class="fas fa-location-dot"></i> Selecciona ubicación *
+                            </label>
+                            <select 
+                                id="jugueteUbicacionSelect" 
+                                name="ubicacion_id" 
+                                class="form-select"
+                            >
+                                <option value="">Selecciona una ubicación</option>
+                            </select>
+                        </div>
+                        <div id="jugueteFormErrorMessage" class="error-message" style="display: none;"></div>
+                        <div id="jugueteFormSuccessMessage" class="success-message" style="display: none;"></div>
+                        <button type="submit" class="btn-primary">
+                            <i class="fas fa-plus"></i> Agregar Juguete
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Vista de Inventario -->
+                <div id="inventarioView" style="display: none;">
+                    <h1>Inventario</h1>
+                    <div class="inventario-filters">
+                        <input 
+                            type="text" 
+                            id="inventarioSearch" 
+                            placeholder="Buscar por nombre, código o categoría..."
+                            class="search-input"
+                        >
+                    </div>
+                    <div class="inventario-table-container">
+                        <table class="inventario-table">
+                            <thead>
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>Código</th>
+                                    <th>Categoría</th>
+                                    <th>Cantidad</th>
+                                    <th>Ubicación</th>
+                                    <th>Tipo</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventarioTableBody">
+                                <tr>
+                                    <td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">
+                                        Cargando inventario...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Vista de Categorías -->
+                <div id="categoriasView" style="display: none;">
+                    <h1>Categorías</h1>
+                    
+                    <!-- Desplegable Agregar Categoría -->
+                    <div class="accordion-section">
+                        <button class="accordion-header" id="agregarCategoriaHeader">
+                            <i class="fas fa-tags"></i>
+                            <span>Agregar Categoría</span>
+                            <i class="fas fa-chevron-down accordion-icon"></i>
+                        </button>
+                        <div class="accordion-content" id="agregarCategoriaContent">
+                            <!-- Lista de categorías existentes -->
+                            <div class="categorias-list" id="categoriasList">
+                                <!-- Las categorías se cargarán aquí dinámicamente -->
+                            </div>
+                            
+                            <!-- Formulario para agregar nueva categoría -->
+                            <div class="form-section">
+                                <h3>Nueva Categoría</h3>
+                                <form id="nuevaCategoriaForm" class="bodega-form">
+                                    <div class="form-group">
+                                        <label for="categoriaNombre">
+                                            <i class="fas fa-tag"></i> Nombre de la Categoría *
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            id="categoriaNombre" 
+                                            name="nombre" 
+                                            placeholder="Ej: Deportes"
+                                            required
+                                        >
+                                    </div>
+                                    <div id="categoriaErrorMessage" class="error-message" style="display: none;"></div>
+                                    <div id="categoriaSuccessMessage" class="success-message" style="display: none;"></div>
+                                    <button type="submit" class="btn-primary">
+                                        <i class="fas fa-plus"></i> Agregar Categoría
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista de Bodegas -->
+                <div id="bodegasView" style="display: none;">
+                    <h1>Bodegas</h1>
+                    
+                    <!-- Desplegable Agregar Bodega -->
+                    <div class="accordion-section">
+                        <button class="accordion-header" id="agregarBodegaHeader">
+                            <i class="fas fa-warehouse"></i>
+                            <span>Agregar Bodega</span>
+                            <i class="fas fa-chevron-down accordion-icon"></i>
+                        </button>
+                        <div class="accordion-content" id="agregarBodegaContent">
+                            <!-- Lista de bodegas existentes -->
+                            <div class="bodegas-list" id="bodegasList">
+                                <!-- Las bodegas se cargarán aquí dinámicamente -->
+                            </div>
+                            
+                            <!-- Formulario para agregar nueva bodega -->
+                            <div class="form-section">
+                                <h3>Nueva Bodega</h3>
+                                <form id="nuevaBodegaForm" class="bodega-form">
+                                    <div class="form-group">
+                                        <label for="bodegaNombre">
+                                            <i class="fas fa-tag"></i> Nombre de la Bodega *
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            id="bodegaNombre" 
+                                            name="nombre" 
+                                            placeholder="Ej: Bodega Central"
+                                            required
+                                        >
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="bodegaDireccion">
+                                            <i class="fas fa-map-marker-alt"></i> Dirección *
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            id="bodegaDireccion" 
+                                            name="direccion" 
+                                            placeholder="Ej: Calle 123 #45-67"
+                                            required
+                                        >
+                                    </div>
+                                    <div id="bodegaErrorMessage" class="error-message" style="display: none;"></div>
+                                    <div id="bodegaSuccessMessage" class="success-message" style="display: none;"></div>
+                                    <button type="submit" class="btn-primary">
+                                        <i class="fas fa-plus"></i> Agregar Bodega
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista de Tiendas -->
+                <div id="tiendasView" style="display: none;">
+                    <h1>Tiendas</h1>
+                    
+                    <!-- Desplegable Agregar Tienda -->
+                    <div class="accordion-section">
+                        <button class="accordion-header" id="agregarTiendaHeader">
+                            <i class="fas fa-store"></i>
+                            <span>Agregar Tienda</span>
+                            <i class="fas fa-chevron-down accordion-icon"></i>
+                        </button>
+                        <div class="accordion-content" id="agregarTiendaContent">
+                            <!-- Lista de tiendas existentes -->
+                            <div class="tiendas-list" id="tiendasList">
+                                <!-- Las tiendas se cargarán aquí dinámicamente -->
+                            </div>
+                            
+                            <!-- Formulario para agregar nueva tienda -->
+                            <div class="form-section">
+                                <h3>Nueva Tienda</h3>
+                                <form id="nuevaTiendaForm" class="bodega-form">
+                                    <div class="form-group">
+                                        <label for="tiendaNombre">
+                                            <i class="fas fa-tag"></i> Nombre de la Tienda *
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            id="tiendaNombre" 
+                                            name="nombre" 
+                                            placeholder="Ej: Tienda Centro"
+                                            required
+                                        >
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="tiendaDireccion">
+                                            <i class="fas fa-map-marker-alt"></i> Dirección *
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            id="tiendaDireccion" 
+                                            name="direccion" 
+                                            placeholder="Ej: Calle 123 #45-67"
+                                            required
+                                        >
+                                    </div>
+                                    <div id="tiendaErrorMessage" class="error-message" style="display: none;"></div>
+                                    <div id="tiendaSuccessMessage" class="success-message" style="display: none;"></div>
+                                    <button type="submit" class="btn-primary">
+                                        <i class="fas fa-plus"></i> Agregar Tienda
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista de Empleados -->
+                <div id="empleadosView" style="display: none;">
+                    <h1>Empleados</h1>
+                    
+                    <!-- Desplegable Agregar Empleado -->
+                    <div class="accordion-section">
+                        <button class="accordion-header" id="agregarEmpleadoHeader">
+                            <i class="fas fa-user-tie"></i>
+                            <span>Agregar Empleado</span>
+                            <i class="fas fa-chevron-down accordion-icon"></i>
+                        </button>
+                        <div class="accordion-content" id="agregarEmpleadoContent">
+                            <!-- Lista de empleados existentes -->
+                            <div class="empleados-list" id="empleadosList">
+                                <!-- Los empleados se cargarán aquí dinámicamente -->
+                            </div>
+                            
+                            <!-- Formulario para agregar nuevo empleado -->
+                            <div class="form-section">
+                                <h3>Nuevo Empleado</h3>
+                                <form id="nuevoEmpleadoForm" class="bodega-form">
+                                    <div class="form-group">
+                                        <label for="empleadoNombre">
+                                            <i class="fas fa-user"></i> Nombre *
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            id="empleadoNombre" 
+                                            name="nombre" 
+                                            placeholder="Ej: Juan Pérez"
+                                            required
+                                        >
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="empleadoTelefono">
+                                                <i class="fas fa-phone"></i> Teléfono *
+                                            </label>
+                                            <input 
+                                                type="tel" 
+                                                id="empleadoTelefono" 
+                                                name="telefono" 
+                                                placeholder="Ej: +57 300 123 4567"
+                                                required
+                                            >
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="empleadoDocumento">
+                                                <i class="fas fa-id-card"></i> Documento *
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                id="empleadoDocumento" 
+                                                name="documento" 
+                                                placeholder="Ej: 1234567890"
+                                                required
+                                            >
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="empleadoCodigo">
+                                                <i class="fas fa-barcode"></i> Código *
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                id="empleadoCodigo" 
+                                                name="codigo" 
+                                                placeholder="Ej: EMP-001"
+                                                required
+                                            >
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="empleadoTienda">
+                                                <i class="fas fa-store"></i> Tienda
+                                            </label>
+                                            <select 
+                                                id="empleadoTienda" 
+                                                name="tienda_id" 
+                                                class="form-select"
+                                            >
+                                                <option value="">Sin tienda asignada</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div id="empleadoErrorMessage" class="error-message" style="display: none;"></div>
+                                    <div id="empleadoSuccessMessage" class="success-message" style="display: none;"></div>
+                                    <button type="submit" class="btn-primary">
+                                        <i class="fas fa-plus"></i> Agregar Empleado
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Vista de Usuarios -->
+                <div id="usuariosView" style="display: none;">
+                    <h1>Usuarios</h1>
+                    
+                    <!-- Desplegable Agregar Usuario -->
+                    <div class="accordion-section">
+                        <button class="accordion-header" id="agregarUsuarioHeader">
+                            <i class="fas fa-users"></i>
+                            <span>Agregar Usuario</span>
+                            <i class="fas fa-chevron-down accordion-icon"></i>
+                        </button>
+                        <div class="accordion-content" id="agregarUsuarioContent">
+                            <!-- Lista de usuarios existentes -->
+                            <div class="usuarios-list" id="usuariosList">
+                                <!-- Los usuarios se cargarán aquí dinámicamente -->
+                            </div>
+                            
+                            <!-- Formulario para agregar nuevo usuario -->
+                            <div class="form-section">
+                                <h3>Nuevo Usuario</h3>
+                                <form id="nuevoUsuarioForm" class="bodega-form">
+                                    <div class="form-group">
+                                        <label for="usuarioNombre">
+                                            <i class="fas fa-user"></i> Nombre de Usuario *
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            id="usuarioNombre" 
+                                            name="nombre" 
+                                            placeholder="Ej: juan.perez"
+                                            required
+                                        >
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="usuarioEmail">
+                                            <i class="fas fa-envelope"></i> Email *
+                                        </label>
+                                        <input 
+                                            type="email" 
+                                            id="usuarioEmail" 
+                                            name="email" 
+                                            placeholder="usuario@ejemplo.com"
+                                            required
+                                        >
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="usuarioPassword">
+                                                <i class="fas fa-lock"></i> Contraseña *
+                                            </label>
+                                            <input 
+                                                type="password" 
+                                                id="usuarioPassword" 
+                                                name="password" 
+                                                placeholder="Mínimo 6 caracteres"
+                                                required
+                                            >
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="usuarioTipo">
+                                                <i class="fas fa-user-tag"></i> Tipo de Usuario *
+                                            </label>
+                                            <select 
+                                                id="usuarioTipo" 
+                                                name="tipo_usuario_id" 
+                                                required
+                                                class="form-select"
+                                            >
+                                                <option value="">Selecciona un tipo</option>
+                                                <option value="2">Administrador</option>
+                                                <option value="3">Empleado</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div id="usuarioErrorMessage" class="error-message" style="display: none;"></div>
+                                    <div id="usuarioSuccessMessage" class="success-message" style="display: none;"></div>
+                                    <button type="submit" class="btn-primary">
+                                        <i class="fas fa-plus"></i> Agregar Usuario
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Vista de Abastecer Tienda -->
+                <div id="abastecerView" style="display: none;">
+                    <h1>Abastecer Tienda</h1>
+                    <form id="abastecerForm" class="bodega-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="origenTipo">
+                                    <i class="fas fa-arrow-up"></i> Origen *
+                                </label>
+                                <select 
+                                    id="origenTipo" 
+                                    name="origen_tipo" 
+                                    required
+                                    class="form-select"
+                                >
+                                    <option value="">Selecciona tipo de origen</option>
+                                    <option value="bodega">Bodega</option>
+                                    <option value="tienda">Tienda</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="origenSelect">
+                                    <i class="fas fa-map-marker-alt"></i> Selecciona Origen *
+                                </label>
+                                <select 
+                                    id="origenSelect" 
+                                    name="origen_id" 
+                                    required
+                                    class="form-select"
+                                >
+                                    <option value="">Primero selecciona el tipo</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="destinoTipo">
+                                    <i class="fas fa-arrow-down"></i> Destino *
+                                </label>
+                                <select 
+                                    id="destinoTipo" 
+                                    name="destino_tipo" 
+                                    required
+                                    class="form-select"
+                                >
+                                    <option value="">Selecciona tipo de destino</option>
+                                    <option value="bodega">Bodega</option>
+                                    <option value="tienda">Tienda</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="destinoSelect">
+                                    <i class="fas fa-map-marker-alt"></i> Selecciona Destino *
+                                </label>
+                                <select 
+                                    id="destinoSelect" 
+                                    name="destino_id" 
+                                    required
+                                    class="form-select"
+                                >
+                                    <option value="">Primero selecciona el tipo</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="juguetesDisponibles">
+                                <i class="fas fa-boxes"></i> Juguetes Disponibles en Origen
+                            </label>
+                            <div id="juguetesDisponiblesList" class="juguetes-disponibles">
+                                <p style="text-align: center; color: #64748b; padding: 20px;">
+                                    Selecciona origen y destino para ver juguetes disponibles
+                                </p>
+                            </div>
+                        </div>
+                        <div id="abastecerErrorMessage" class="error-message" style="display: none;"></div>
+                        <div id="abastecerSuccessMessage" class="success-message" style="display: none;"></div>
+                        <button type="submit" class="btn-primary">
+                            <i class="fas fa-truck"></i> Realizar Movimiento
+                        </button>
+                    </form>
+                </div>
+                
+                <!-- Vista de Análisis -->
+                <div id="analisisView" style="display: none;">
+                    <h1>Análisis y Reportes</h1>
+                    
+                    <div class="analisis-filters">
+                        <div class="filter-group">
+                            <label>Filtro de Ventas:</label>
+                            <select id="filtroVentas" class="form-select">
+                                <option value="todos">Todos los juguetes</option>
+                                <option value="nombre">Por nombre</option>
+                                <option value="dia">Por día</option>
+                                <option value="semana">Por semana</option>
+                                <option value="categoria">Por categoría</option>
+                                <option value="codigo">Por código</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Filtro de Ganancias:</label>
+                            <select id="filtroGanancias" class="form-select">
+                                <option value="total">Total</option>
+                                <option value="dia">Por día</option>
+                                <option value="semana">Por semana</option>
+                                <option value="tienda">Por tienda</option>
+                                <option value="empleado">Por empleado</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="analisis-stats">
+                        <div class="stat-card">
+                            <h3>Total Juguetes Vendidos</h3>
+                            <p id="totalJuguetesVendidos" class="stat-number">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Total Bodegas</h3>
+                            <p id="totalBodegasAnalisis" class="stat-number">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Total Tiendas</h3>
+                            <p id="totalTiendasAnalisis" class="stat-number">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Total Empleados</h3>
+                            <p id="totalEmpleadosAnalisis" class="stat-number">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Ganancias Totales</h3>
+                            <p id="gananciasTotales" class="stat-number">$0</p>
+                        </div>
+                    </div>
+                    
+                    <div class="analisis-export">
+                        <h3>Exportar Datos a Excel</h3>
+                        <div class="export-buttons">
+                            <button class="btn-export" data-export="usuarios">
+                                <i class="fas fa-file-excel"></i> Exportar Usuarios
+                            </button>
+                            <button class="btn-export" data-export="juguetes">
+                                <i class="fas fa-file-excel"></i> Exportar Juguetes
+                            </button>
+                            <button class="btn-export" data-export="facturas">
+                                <i class="fas fa-file-excel"></i> Exportar Facturas
+                            </button>
+                            <button class="btn-export" data-export="ventas">
+                                <i class="fas fa-file-excel"></i> Exportar Ventas
+                            </button>
+                            <button class="btn-export" data-export="movimientos">
+                                <i class="fas fa-file-excel"></i> Exportar Movimientos
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="analisisResults" class="analisis-results">
+                        <!-- Los resultados se mostrarán aquí -->
+                    </div>
+                </div>
             </div>
         </main>
     </div>
@@ -160,9 +1016,276 @@
         </div>
     </div>
 
+    <!-- Modal para editar bodega -->
+    <div class="modal-overlay" id="editBodegaModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Editar Bodega</h3>
+                <button class="modal-close" id="closeEditBodegaModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="editBodegaForm" class="modal-body">
+                <div class="form-group">
+                    <label for="editBodegaNombre">
+                        <i class="fas fa-tag"></i> Nombre de la Bodega *
+                    </label>
+                    <input 
+                        type="text" 
+                        id="editBodegaNombre" 
+                        name="nombre" 
+                        required
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="editBodegaDireccion">
+                        <i class="fas fa-map-marker-alt"></i> Dirección *
+                    </label>
+                    <input 
+                        type="text" 
+                        id="editBodegaDireccion" 
+                        name="direccion" 
+                        required
+                    >
+                </div>
+                <div id="editBodegaErrorMessage" class="error-message" style="display: none;"></div>
+                <div id="editBodegaSuccessMessage" class="success-message" style="display: none;"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="cancelEditBodegaBtn">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para editar categoría -->
+    <div class="modal-overlay" id="editCategoriaModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Editar Categoría</h3>
+                <button class="modal-close" id="closeEditCategoriaModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="editCategoriaForm" class="modal-body">
+                <div class="form-group">
+                    <label for="editCategoriaNombre">
+                        <i class="fas fa-tag"></i> Nombre de la Categoría *
+                    </label>
+                    <input 
+                        type="text" 
+                        id="editCategoriaNombre" 
+                        name="nombre" 
+                        required
+                    >
+                </div>
+                <div id="editCategoriaErrorMessage" class="error-message" style="display: none;"></div>
+                <div id="editCategoriaSuccessMessage" class="success-message" style="display: none;"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="cancelEditCategoriaBtn">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para editar tienda -->
+    <div class="modal-overlay" id="editTiendaModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Editar Tienda</h3>
+                <button class="modal-close" id="closeEditTiendaModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="editTiendaForm" class="modal-body">
+                <div class="form-group">
+                    <label for="editTiendaNombre">
+                        <i class="fas fa-tag"></i> Nombre de la Tienda *
+                    </label>
+                    <input 
+                        type="text" 
+                        id="editTiendaNombre" 
+                        name="nombre" 
+                        required
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="editTiendaDireccion">
+                        <i class="fas fa-map-marker-alt"></i> Dirección *
+                    </label>
+                    <input 
+                        type="text" 
+                        id="editTiendaDireccion" 
+                        name="direccion" 
+                        required
+                    >
+                </div>
+                <div id="editTiendaErrorMessage" class="error-message" style="display: none;"></div>
+                <div id="editTiendaSuccessMessage" class="success-message" style="display: none;"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="cancelEditTiendaBtn">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para editar empleado -->
+    <div class="modal-overlay" id="editEmpleadoModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Editar Empleado</h3>
+                <button class="modal-close" id="closeEditEmpleadoModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="editEmpleadoForm" class="modal-body">
+                <div class="form-group">
+                    <label for="editEmpleadoNombre">
+                        <i class="fas fa-user"></i> Nombre *
+                    </label>
+                    <input 
+                        type="text" 
+                        id="editEmpleadoNombre" 
+                        name="nombre" 
+                        required
+                    >
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editEmpleadoTelefono">
+                            <i class="fas fa-phone"></i> Teléfono *
+                        </label>
+                        <input 
+                            type="tel" 
+                            id="editEmpleadoTelefono" 
+                            name="telefono" 
+                            required
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label for="editEmpleadoDocumento">
+                            <i class="fas fa-id-card"></i> Documento *
+                        </label>
+                        <input 
+                            type="text" 
+                            id="editEmpleadoDocumento" 
+                            name="documento" 
+                            required
+                        >
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editEmpleadoCodigo">
+                            <i class="fas fa-barcode"></i> Código *
+                        </label>
+                        <input 
+                            type="text" 
+                            id="editEmpleadoCodigo" 
+                            name="codigo" 
+                            required
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label for="editEmpleadoTienda">
+                            <i class="fas fa-store"></i> Tienda
+                        </label>
+                        <select 
+                            id="editEmpleadoTienda" 
+                            name="tienda_id" 
+                            class="form-select"
+                        >
+                            <option value="">Sin tienda asignada</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="editEmpleadoErrorMessage" class="error-message" style="display: none;"></div>
+                <div id="editEmpleadoSuccessMessage" class="success-message" style="display: none;"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="cancelEditEmpleadoBtn">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para editar usuario -->
+    <div class="modal-overlay" id="editUsuarioModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Editar Usuario</h3>
+                <button class="modal-close" id="closeEditUsuarioModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="editUsuarioForm" class="modal-body">
+                <div class="form-group">
+                    <label for="editUsuarioNombre">
+                        <i class="fas fa-user"></i> Nombre de Usuario *
+                    </label>
+                    <input 
+                        type="text" 
+                        id="editUsuarioNombre" 
+                        name="nombre" 
+                        required
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="editUsuarioEmail">
+                        <i class="fas fa-envelope"></i> Email *
+                    </label>
+                    <input 
+                        type="email" 
+                        id="editUsuarioEmail" 
+                        name="email" 
+                        required
+                    >
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editUsuarioPassword">
+                            <i class="fas fa-lock"></i> Nueva Contraseña (dejar vacío para no cambiar)
+                        </label>
+                        <input 
+                            type="password" 
+                            id="editUsuarioPassword" 
+                            name="password"
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label for="editUsuarioTipo">
+                            <i class="fas fa-user-tag"></i> Tipo de Usuario *
+                        </label>
+                        <select 
+                            id="editUsuarioTipo" 
+                            name="tipo_usuario_id" 
+                            required
+                            class="form-select"
+                        >
+                            <option value="2">Administrador</option>
+                            <option value="3">Empleado</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="editUsuarioErrorMessage" class="error-message" style="display: none;"></div>
+                <div id="editUsuarioSuccessMessage" class="success-message" style="display: none;"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="cancelEditUsuarioBtn">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts adicionales para funcionalidades -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/config.js"></script>
     <script src="js/dashboard.js"></script>
+    <script src="js/dashboard-funcionalidades.js"></script>
 </body>
 </html>
 

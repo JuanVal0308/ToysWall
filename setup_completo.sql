@@ -5,7 +5,10 @@
 -- INSTRUCCIONES:
 -- 1. Copia TODO este archivo
 -- 2. Pégalo en el SQL Editor de Supabase
--- 3. Ejecuta el script (Run o Ctrl+Enter)
+-- 3. Ejecuta el script completo (Run o Ctrl+Enter)
+-- ============================================
+-- Este script crea todas las tablas, políticas RLS,
+-- índices, triggers y datos iniciales necesarios
 -- ============================================
 
 -- ============================================
@@ -88,22 +91,97 @@ CREATE TABLE IF NOT EXISTS empleados (
 );
 
 -- Tabla: juguetes (actualizada para soportar bodegas y tiendas)
-CREATE TABLE IF NOT EXISTS juguetes (
-    id SERIAL PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL,
-    codigo VARCHAR(50) NOT NULL,
-    categoria_id INTEGER NOT NULL REFERENCES categorias(id) ON DELETE RESTRICT,
-    cantidad INTEGER NOT NULL DEFAULT 0,
-    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
-    bodega_id INTEGER REFERENCES bodegas(id) ON DELETE SET NULL,
-    tienda_id INTEGER REFERENCES tiendas(id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT check_ubicacion CHECK (
-        (bodega_id IS NOT NULL AND tienda_id IS NULL) OR 
-        (bodega_id IS NULL AND tienda_id IS NOT NULL)
-    )
-);
+-- Primero verificar si la tabla existe y actualizarla si es necesario
+DO $$ 
+BEGIN
+    -- Si la tabla no existe, crearla
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'juguetes') THEN
+        CREATE TABLE juguetes (
+            id SERIAL PRIMARY KEY,
+            nombre VARCHAR(100) NOT NULL,
+            codigo VARCHAR(50) NOT NULL,
+            categoria_id INTEGER NOT NULL REFERENCES categorias(id) ON DELETE RESTRICT,
+            cantidad INTEGER NOT NULL DEFAULT 0,
+            empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+            bodega_id INTEGER REFERENCES bodegas(id) ON DELETE SET NULL,
+            tienda_id INTEGER REFERENCES tiendas(id) ON DELETE SET NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            CONSTRAINT check_ubicacion CHECK (
+                (bodega_id IS NOT NULL AND tienda_id IS NULL) OR 
+                (bodega_id IS NULL AND tienda_id IS NOT NULL)
+            )
+        );
+    ELSE
+        -- Si la tabla existe, agregar columnas faltantes
+        -- Agregar empresa_id si no existe
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name = 'juguetes' AND column_name = 'empresa_id') THEN
+            ALTER TABLE juguetes ADD COLUMN empresa_id INTEGER;
+            -- Actualizar empresa_id desde bodegas relacionadas
+            UPDATE juguetes j
+            SET empresa_id = b.empresa_id
+            FROM bodegas b
+            WHERE j.bodega_id = b.id;
+            -- Hacer NOT NULL después de actualizar
+            ALTER TABLE juguetes ALTER COLUMN empresa_id SET NOT NULL;
+            ALTER TABLE juguetes ADD CONSTRAINT juguetes_empresa_id_fkey 
+                FOREIGN KEY (empresa_id) REFERENCES empresas(id) ON DELETE CASCADE;
+        END IF;
+
+        -- Agregar categoria_id si no existe
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name = 'juguetes' AND column_name = 'categoria_id') THEN
+            -- Crear categoría "General" si no existe
+            INSERT INTO categorias (nombre, empresa_id)
+            SELECT DISTINCT 'General', empresa_id
+            FROM empresas
+            WHERE NOT EXISTS (
+                SELECT 1 FROM categorias 
+                WHERE nombre = 'General' AND empresa_id = empresas.id
+            )
+            ON CONFLICT DO NOTHING;
+            
+            ALTER TABLE juguetes ADD COLUMN categoria_id INTEGER;
+            -- Asignar categoría "General" a juguetes existentes
+            UPDATE juguetes j
+            SET categoria_id = c.id
+            FROM categorias c
+            WHERE c.nombre = 'General' 
+            AND c.empresa_id = j.empresa_id;
+            -- Hacer NOT NULL después de actualizar
+            ALTER TABLE juguetes ALTER COLUMN categoria_id SET NOT NULL;
+            ALTER TABLE juguetes ADD CONSTRAINT juguetes_categoria_id_fkey 
+                FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE RESTRICT;
+        END IF;
+
+        -- Agregar tienda_id si no existe
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name = 'juguetes' AND column_name = 'tienda_id') THEN
+            ALTER TABLE juguetes ADD COLUMN tienda_id INTEGER 
+                REFERENCES tiendas(id) ON DELETE SET NULL;
+        END IF;
+
+        -- Eliminar columna categoria (VARCHAR) si existe
+        IF EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'juguetes' AND column_name = 'categoria' 
+                   AND data_type = 'character varying') THEN
+            ALTER TABLE juguetes DROP COLUMN categoria;
+        END IF;
+
+        -- Agregar constraint CHECK si no existe
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'check_ubicacion' 
+            AND conrelid = 'juguetes'::regclass
+        ) THEN
+            ALTER TABLE juguetes ADD CONSTRAINT check_ubicacion CHECK (
+                (bodega_id IS NOT NULL AND tienda_id IS NULL) OR 
+                (bodega_id IS NULL AND tienda_id IS NOT NULL)
+            );
+        END IF;
+    END IF;
+END $$;
 
 -- ============================================
 -- 2. CREAR ÍNDICES
@@ -175,7 +253,7 @@ ON CONFLICT DO NOTHING;
 -- 6. CONFIGURAR ROW LEVEL SECURITY (RLS)
 -- ============================================
 
--- Habilitar RLS
+-- Habilitar RLS en todas las tablas
 ALTER TABLE tipo_usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE empresas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
@@ -185,10 +263,7 @@ ALTER TABLE tiendas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE empleados ENABLE ROW LEVEL SECURITY;
 ALTER TABLE juguetes ENABLE ROW LEVEL SECURITY;
 
--- Eliminar políticas existentes si existen
-DROP POLICY IF EXISTS "Todos pueden ver tipos de usuario" ON tipo_usuarios;
-DROP POLICY IF EXISTS "Usuarios pueden ver empresas" ON empresas;
-DROP POLICY IF EXISTS "Usuarios pueden ver usuarios de su empresa" ON usuarios;
+-- Eliminar políticas existentes si existen (para evitar conflictos)
 DROP POLICY IF EXISTS "tipo_usuarios_select_policy" ON tipo_usuarios;
 DROP POLICY IF EXISTS "empresas_select_policy" ON empresas;
 DROP POLICY IF EXISTS "usuarios_select_policy" ON usuarios;
@@ -214,26 +289,27 @@ DROP POLICY IF EXISTS "juguetes_insert_policy" ON juguetes;
 DROP POLICY IF EXISTS "juguetes_update_policy" ON juguetes;
 DROP POLICY IF EXISTS "juguetes_delete_policy" ON juguetes;
 
--- Crear políticas RLS simples (sin recursión)
+-- Crear políticas RLS para tipo_usuarios
 CREATE POLICY "tipo_usuarios_select_policy"
     ON tipo_usuarios FOR SELECT
     USING (true);
 
+-- Crear políticas RLS para empresas
 CREATE POLICY "empresas_select_policy"
     ON empresas FOR SELECT
     USING (true);
 
+-- Crear políticas RLS para usuarios
 CREATE POLICY "usuarios_select_policy"
     ON usuarios FOR SELECT
     USING (true);
 
--- Política para permitir que los usuarios actualicen sus propios datos
 CREATE POLICY "usuarios_update_policy"
     ON usuarios FOR UPDATE
     USING (true)
     WITH CHECK (true);
 
--- Políticas RLS para bodegas
+-- Crear políticas RLS para bodegas
 CREATE POLICY "bodegas_select_policy"
     ON bodegas FOR SELECT
     USING (true);
@@ -251,7 +327,7 @@ CREATE POLICY "bodegas_delete_policy"
     ON bodegas FOR DELETE
     USING (true);
 
--- Políticas RLS para categorias
+-- Crear políticas RLS para categorias
 CREATE POLICY "categorias_select_policy"
     ON categorias FOR SELECT
     USING (true);
@@ -269,7 +345,7 @@ CREATE POLICY "categorias_delete_policy"
     ON categorias FOR DELETE
     USING (true);
 
--- Políticas RLS para tiendas
+-- Crear políticas RLS para tiendas
 CREATE POLICY "tiendas_select_policy"
     ON tiendas FOR SELECT
     USING (true);
@@ -287,7 +363,7 @@ CREATE POLICY "tiendas_delete_policy"
     ON tiendas FOR DELETE
     USING (true);
 
--- Políticas RLS para empleados
+-- Crear políticas RLS para empleados
 CREATE POLICY "empleados_select_policy"
     ON empleados FOR SELECT
     USING (true);
@@ -305,7 +381,7 @@ CREATE POLICY "empleados_delete_policy"
     ON empleados FOR DELETE
     USING (true);
 
--- Políticas RLS para juguetes
+-- Crear políticas RLS para juguetes
 CREATE POLICY "juguetes_select_policy"
     ON juguetes FOR SELECT
     USING (true);
