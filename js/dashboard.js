@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     if (!userData) {
         // Si no hay usuario, redirigir al login
-        window.location.href = 'Login.html';
+        window.location.href = 'index.html';
         return;
     }
 
@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Verificar que sea administrador (tipo_usuario_id 1 o 2)
     if (user.tipo_usuario_id !== 1 && user.tipo_usuario_id !== 2) {
         alert('No tienes permisos para acceder a esta página');
-        window.location.href = 'Login.html';
+        window.location.href = 'index.html';
         return;
     }
 
@@ -282,7 +282,21 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         } catch (error) {
             console.error('Error al actualizar perfil:', error);
-            showProfileMessage('Error al actualizar la información: ' + error.message, 'error');
+            
+            // Mensaje de error más descriptivo
+            let errorMessage = 'Error al actualizar la información. ';
+            
+            if (error.message && error.message.includes('Failed to fetch')) {
+                errorMessage += 'Error de conexión. Verifica tu conexión a internet.';
+            } else if (error.message && error.message.includes('permission denied') || error.message.includes('RLS')) {
+                errorMessage += 'No tienes permisos para actualizar. Verifica las políticas RLS en Supabase.';
+            } else if (error.message) {
+                errorMessage += error.message;
+            } else {
+                errorMessage += 'Por favor, intenta nuevamente.';
+            }
+            
+            showProfileMessage(errorMessage, 'error');
         } finally {
             saveBtn.disabled = false;
             saveBtnText.textContent = 'Guardar Cambios';
@@ -294,8 +308,28 @@ document.addEventListener('DOMContentLoaded', async function() {
     logoutBtn.addEventListener('click', function() {
         if (confirm('¿Estás seguro de que deseas cerrar sesión?')) {
             sessionStorage.removeItem('user');
-            window.location.href = 'Login.html';
+            window.location.href = 'index.html';
         }
+    });
+
+    // Manejar clicks en los botones del sidebar
+    const sidebarButtons = document.querySelectorAll('.sidebar-btn');
+    
+    sidebarButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            // Remover clase active de todos los botones
+            sidebarButtons.forEach(b => b.classList.remove('active'));
+            
+            // Agregar clase active al botón clickeado
+            this.classList.add('active');
+            
+            // Obtener la página asociada
+            const page = this.getAttribute('data-page');
+            console.log('Navegando a:', page);
+            
+            // Aquí puedes agregar la lógica para cambiar el contenido
+            // Por ahora solo mostramos en consola
+        });
     });
 
     console.log('✅ Dashboard cargado correctamente');

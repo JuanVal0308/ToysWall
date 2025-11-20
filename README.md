@@ -6,7 +6,7 @@ Sistema web de inventario empresarial desarrollado con HTML, CSS, JavaScript y S
 
 ```
 ToysWall/
-├── Login.html              # Página de inicio de sesión
+├── index.html              # Página de inicio de sesión
 ├── dashboard.html          # Dashboard principal (solo administradores)
 ├── css/
 │   ├── styles.css         # Estilos del login
@@ -69,7 +69,7 @@ El script `database_setup.sql` crea usuarios de ejemplo:
 
 ## 📱 Páginas
 
-### Login.html
+### index.html
 Página de inicio de sesión con:
 - Selección de empresa (dropdown)
 - Campo de usuario

@@ -137,11 +137,81 @@ body {
     transform: translateY(-2px);
 }
 
+/* Dashboard Container */
+.dashboard-container {
+    display: flex;
+    min-height: calc(100vh - 92px); /* Altura total menos el header */
+}
+
+/* Sidebar */
+.dashboard-sidebar {
+    width: 280px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    position: sticky;
+    top: 92px; /* Altura del header */
+    height: calc(100vh - 92px);
+    overflow-y: auto;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    z-index: 50;
+}
+
+.sidebar-nav {
+    padding: 24px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sidebar-btn {
+    width: 100%;
+    padding: 16px 24px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: white;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 16px;
+    font-weight: 500;
+    border-left: 4px solid transparent;
+    backdrop-filter: blur(10px);
+}
+
+.sidebar-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-left-color: white;
+    transform: translateX(4px);
+}
+
+.sidebar-btn:active {
+    transform: translateX(2px);
+}
+
+.sidebar-btn.active {
+    background: rgba(255, 255, 255, 0.25);
+    border-left-color: white;
+    font-weight: 600;
+}
+
+.sidebar-btn i {
+    width: 24px;
+    font-size: 18px;
+    text-align: center;
+}
+
+.sidebar-btn span {
+    flex: 1;
+}
+
 /* Main Content */
 .dashboard-main {
+    flex: 1;
     padding: 32px;
-    max-width: 1400px;
-    margin: 0 auto;
+    overflow-y: auto;
 }
 
 .dashboard-content {
@@ -446,6 +516,38 @@ body {
 
     .empresa-name {
         font-size: 14px;
+    }
+
+    .dashboard-container {
+        flex-direction: column;
+    }
+
+    .dashboard-sidebar {
+        width: 100%;
+        position: relative;
+        top: 0;
+        height: auto;
+        max-height: none;
+    }
+
+    .sidebar-nav {
+        flex-direction: row;
+        overflow-x: auto;
+        padding: 16px;
+        gap: 8px;
+    }
+
+    .sidebar-btn {
+        min-width: 160px;
+        white-space: nowrap;
+        border-left: none;
+        border-bottom: 4px solid transparent;
+    }
+
+    .sidebar-btn:hover {
+        border-left: none;
+        border-bottom-color: white;
+        transform: translateY(-2px);
     }
 
     .dashboard-main {

@@ -118,6 +118,7 @@ DROP POLICY IF EXISTS "Usuarios pueden ver usuarios de su empresa" ON usuarios;
 DROP POLICY IF EXISTS "tipo_usuarios_select_policy" ON tipo_usuarios;
 DROP POLICY IF EXISTS "empresas_select_policy" ON empresas;
 DROP POLICY IF EXISTS "usuarios_select_policy" ON usuarios;
+DROP POLICY IF EXISTS "usuarios_update_policy" ON usuarios;
 
 -- Crear políticas RLS simples (sin recursión)
 CREATE POLICY "tipo_usuarios_select_policy"
@@ -131,6 +132,12 @@ CREATE POLICY "empresas_select_policy"
 CREATE POLICY "usuarios_select_policy"
     ON usuarios FOR SELECT
     USING (true);
+
+-- Política para permitir que los usuarios actualicen sus propios datos
+CREATE POLICY "usuarios_update_policy"
+    ON usuarios FOR UPDATE
+    USING (true)
+    WITH CHECK (true);
 
 -- ============================================
 -- 7. FUNCIONES AUXILIARES
