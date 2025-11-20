@@ -218,6 +218,38 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         }
 
+        // Verificar que el nuevo nombre de usuario no esté en uso por otro usuario en la misma empresa
+        if (nombreCambio) {
+            try {
+                const { data: existingUser, error: checkError } = await window.supabaseClient
+                    .from('usuarios')
+                    .select('id, nombre')
+                    .eq('empresa_id', user.empresa_id)
+                    .ilike('nombre', newNombre)
+                    .neq('id', user.id); // Excluir el usuario actual
+
+                if (checkError) {
+                    throw checkError;
+                }
+
+                // Si existe otro usuario con el mismo nombre en la misma empresa
+                if (existingUser && existingUser.length > 0) {
+                    showProfileMessage('Este nombre de usuario ya está en uso en tu empresa. Por favor, elige otro.', 'error');
+                    saveBtn.disabled = false;
+                    saveBtnText.textContent = 'Guardar Cambios';
+                    saveLoadingSpinner.style.display = 'none';
+                    return;
+                }
+            } catch (checkError) {
+                console.error('Error al verificar nombre de usuario:', checkError);
+                showProfileMessage('Error al verificar disponibilidad del nombre. Por favor, intenta nuevamente.', 'error');
+                saveBtn.disabled = false;
+                saveBtnText.textContent = 'Guardar Cambios';
+                saveLoadingSpinner.style.display = 'none';
+                return;
+            }
+        }
+
         // Deshabilitar botón y mostrar loading
         const saveBtn = document.getElementById('saveProfileBtn');
         const saveBtnText = document.getElementById('saveBtnText');
