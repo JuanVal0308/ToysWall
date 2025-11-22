@@ -176,13 +176,15 @@ CREATE INDEX IF NOT EXISTS idx_movimientos_empresa_id ON movimientos(empresa_id)
 -- 3. INSERTAR TIPOS DE USUARIO
 -- ============================================
 
+-- Insertar tipos de usuario (usando DO NOTHING si ya existen)
 INSERT INTO tipo_usuarios (id, nombre, descripcion) VALUES
     (1, 'Super Administrador', 'Acceso completo al sistema'),
     (2, 'Administrador', 'Administrador de ToysWalls, puede gestionar usuarios y datos'),
     (3, 'Empleado', 'Usuario regular, puede ver y registrar datos según permisos')
 ON CONFLICT (id) DO UPDATE SET
     nombre = EXCLUDED.nombre,
-    descripcion = EXCLUDED.descripcion;
+    descripcion = EXCLUDED.descripcion
+WHERE tipo_usuarios.id = EXCLUDED.id;
 
 -- Ajustar secuencia
 SELECT setval('tipo_usuarios_id_seq', 3, true);
@@ -191,12 +193,20 @@ SELECT setval('tipo_usuarios_id_seq', 3, true);
 -- 4. INSERTAR EMPRESA TOYSWALLS
 -- ============================================
 
-INSERT INTO empresas (id, nombre, descripcion, logo_url) VALUES
-    (1, 'ToysWalls', 'Sistema de Inventario de Juguetes', 'https://i.imgur.com/RBbjVnp.jpeg')
-ON CONFLICT (id) DO UPDATE SET
-    nombre = EXCLUDED.nombre,
-    descripcion = EXCLUDED.descripcion,
-    logo_url = EXCLUDED.logo_url;
+-- Insertar empresa ToysWalls si no existe
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM empresas WHERE id = 1) THEN
+        INSERT INTO empresas (id, nombre, descripcion, logo_url) VALUES
+            (1, 'ToysWalls', 'Sistema de Inventario de Juguetes', 'https://i.imgur.com/RBbjVnp.jpeg');
+    ELSE
+        UPDATE empresas SET 
+            nombre = 'ToysWalls', 
+            descripcion = 'Sistema de Inventario de Juguetes', 
+            logo_url = 'https://i.imgur.com/RBbjVnp.jpeg' 
+        WHERE id = 1;
+    END IF;
+END $$;
 
 -- Ajustar secuencia
 SELECT setval('empresas_id_seq', 1, true);
