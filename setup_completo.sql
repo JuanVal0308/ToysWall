@@ -176,15 +176,30 @@ CREATE INDEX IF NOT EXISTS idx_movimientos_empresa_id ON movimientos(empresa_id)
 -- 3. INSERTAR TIPOS DE USUARIO
 -- ============================================
 
--- Insertar tipos de usuario (usando DO NOTHING si ya existen)
-INSERT INTO tipo_usuarios (id, nombre, descripcion) VALUES
-    (1, 'Super Administrador', 'Acceso completo al sistema'),
-    (2, 'Administrador', 'Administrador de ToysWalls, puede gestionar usuarios y datos'),
-    (3, 'Empleado', 'Usuario regular, puede ver y registrar datos según permisos')
-ON CONFLICT (id) DO UPDATE SET
-    nombre = EXCLUDED.nombre,
-    descripcion = EXCLUDED.descripcion
-WHERE tipo_usuarios.id = EXCLUDED.id;
+-- Insertar tipos de usuario si no existen
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM tipo_usuarios WHERE id = 1) THEN
+        INSERT INTO tipo_usuarios (id, nombre, descripcion) VALUES
+            (1, 'Super Administrador', 'Acceso completo al sistema');
+    ELSE
+        UPDATE tipo_usuarios SET nombre = 'Super Administrador', descripcion = 'Acceso completo al sistema' WHERE id = 1;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM tipo_usuarios WHERE id = 2) THEN
+        INSERT INTO tipo_usuarios (id, nombre, descripcion) VALUES
+            (2, 'Administrador', 'Administrador de ToysWalls, puede gestionar usuarios y datos');
+    ELSE
+        UPDATE tipo_usuarios SET nombre = 'Administrador', descripcion = 'Administrador de ToysWalls, puede gestionar usuarios y datos' WHERE id = 2;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM tipo_usuarios WHERE id = 3) THEN
+        INSERT INTO tipo_usuarios (id, nombre, descripcion) VALUES
+            (3, 'Empleado', 'Usuario regular, puede ver y registrar datos según permisos');
+    ELSE
+        UPDATE tipo_usuarios SET nombre = 'Empleado', descripcion = 'Usuario regular, puede ver y registrar datos según permisos' WHERE id = 3;
+    END IF;
+END $$;
 
 -- Ajustar secuencia
 SELECT setval('tipo_usuarios_id_seq', 3, true);
