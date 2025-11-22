@@ -814,100 +814,8 @@ function createUsuarioCard(usuario) {
 // ============================================
 // ABASTECER TIENDA
 // ============================================
-
-function initAbastecer() {
-    const origenTipo = document.getElementById('origenTipo');
-    const origenSelect = document.getElementById('origenSelect');
-    const destinoTipo = document.getElementById('destinoTipo');
-    const destinoSelect = document.getElementById('destinoSelect');
-    const form = document.getElementById('abastecerForm');
-
-    // Cargar opciones según tipo seleccionado
-    origenTipo.addEventListener('change', async function() {
-        await loadUbicacionesPorTipo(this.value, origenSelect);
-        if (this.value && destinoTipo.value) {
-            await loadJuguetesDisponibles();
-        }
-    });
-
-    destinoTipo.addEventListener('change', async function() {
-        await loadUbicacionesPorTipo(this.value, destinoSelect);
-        if (origenTipo.value && this.value) {
-            await loadJuguetesDisponibles();
-        }
-    });
-
-    origenSelect.addEventListener('change', loadJuguetesDisponibles);
-    destinoSelect.addEventListener('change', loadJuguetesDisponibles);
-
-    form.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const origenTipoVal = origenTipo.value;
-        const origenId = parseInt(origenSelect.value);
-        const destinoTipoVal = destinoTipo.value;
-        const destinoId = parseInt(destinoSelect.value);
-        
-        if (!origenTipoVal || !origenId || !destinoTipoVal || !destinoId) {
-            showAbastecerMessage('Por favor, completa todos los campos', 'error');
-            return;
-        }
-
-        // Obtener juguetes seleccionados
-        const juguetesSeleccionados = Array.from(document.querySelectorAll('.juguete-movimiento:checked'))
-            .map(cb => ({
-                id: parseInt(cb.dataset.jugueteId),
-                cantidad: parseInt(cb.dataset.cantidad)
-            }))
-            .filter(j => j.cantidad > 0);
-
-        if (juguetesSeleccionados.length === 0) {
-            showAbastecerMessage('Debes seleccionar al menos un juguete para mover', 'error');
-            return;
-        }
-
-        try {
-            const user = JSON.parse(sessionStorage.getItem('user'));
-            
-            for (const juguete of juguetesSeleccionados) {
-                // Crear movimiento
-                await window.supabaseClient
-                    .from('movimientos')
-                    .insert({
-                        tipo_origen: origenTipoVal,
-                        origen_id: origenId,
-                        tipo_destino: destinoTipoVal,
-                        destino_id: destinoId,
-                        juguete_id: juguete.id,
-                        cantidad: juguete.cantidad,
-                        empresa_id: user.empresa_id
-                    });
-
-                // Actualizar ubicación del juguete
-                const updateData = {};
-                if (destinoTipoVal === 'bodega') {
-                    updateData.bodega_id = destinoId;
-                    updateData.tienda_id = null;
-                } else {
-                    updateData.tienda_id = destinoId;
-                    updateData.bodega_id = null;
-                }
-
-                await window.supabaseClient
-                    .from('juguetes')
-                    .update(updateData)
-                    .eq('id', juguete.id);
-            }
-
-            showAbastecerMessage('Movimiento realizado correctamente', 'success');
-            form.reset();
-            document.getElementById('juguetesDisponiblesList').innerHTML = '';
-        } catch (error) {
-            console.error('Error al realizar movimiento:', error);
-            showAbastecerMessage('Error al realizar el movimiento: ' + error.message, 'error');
-        }
-    });
-}
+// La función initAbastecer está definida más abajo (línea 1734)
+// con la lógica corregida para evitar duplicados
 
 async function loadUbicacionesPorTipo(tipo, selectElement) {
     if (!tipo) {
@@ -1789,16 +1697,33 @@ function initAbastecer() {
             
             for (const juguete of juguetesSeleccionados) {
                 // Obtener juguete actual
-                const { data: jugueteActual } = await window.supabaseClient
+                const { data: jugueteActualData } = await window.supabaseClient
                     .from('juguetes')
                     .select('*')
                     .eq('id', juguete.id)
-                    .single();
+                    .limit(1);
 
-                if (!jugueteActual || jugueteActual.cantidad < juguete.cantidad) {
-                    showAbastecerMessage(`No hay suficiente cantidad del juguete ${jugueteActual?.nombre || ''}`, 'error');
+                if (!jugueteActualData || jugueteActualData.length === 0) {
+                    showAbastecerMessage(`Juguete no encontrado`, 'error');
                     continue;
                 }
+
+                const jugueteActual = jugueteActualData[0];
+
+                if (jugueteActual.cantidad < juguete.cantidad) {
+                    showAbastecerMessage(`No hay suficiente cantidad del juguete ${jugueteActual.nombre || ''}`, 'error');
+                    continue;
+                }
+
+                // Verificar si ya existe un juguete con el mismo código en el destino
+                const campoDestino = destinoTipoVal === 'bodega' ? 'bodega_id' : 'tienda_id';
+                const { data: jugueteExistenteData } = await window.supabaseClient
+                    .from('juguetes')
+                    .select('*')
+                    .eq('codigo', jugueteActual.codigo)
+                    .eq('empresa_id', user.empresa_id)
+                    .eq(campoDestino, destinoId)
+                    .limit(1);
 
                 // Crear movimiento
                 await window.supabaseClient
@@ -1813,30 +1738,54 @@ function initAbastecer() {
                         empresa_id: user.empresa_id
                     });
 
-                // Actualizar cantidad en origen (reducir)
-                await window.supabaseClient
-                    .from('juguetes')
-                    .update({ cantidad: jugueteActual.cantidad - juguete.cantidad })
-                    .eq('id', juguete.id);
-
-                // Actualizar ubicación del juguete (mover a destino)
-                const updateData = {
-                    cantidad: jugueteActual.cantidad - juguete.cantidad
-                };
-                
-                if (destinoTipoVal === 'bodega') {
-                    updateData.bodega_id = destinoId;
-                    updateData.tienda_id = null;
+                if (jugueteExistenteData && jugueteExistenteData.length > 0) {
+                    // Si ya existe un juguete con el mismo código en el destino, sumar la cantidad
+                    const jugueteExistente = jugueteExistenteData[0];
+                    const nuevaCantidadDestino = jugueteExistente.cantidad + juguete.cantidad;
+                    
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .update({ cantidad: nuevaCantidadDestino })
+                        .eq('id', jugueteExistente.id);
                 } else {
-                    updateData.tienda_id = destinoId;
-                    updateData.bodega_id = null;
+                    // Si no existe, crear un nuevo registro en el destino
+                    const nuevoJugueteData = {
+                        nombre: jugueteActual.nombre,
+                        codigo: jugueteActual.codigo,
+                        cantidad: juguete.cantidad,
+                        empresa_id: user.empresa_id,
+                        foto_url: jugueteActual.foto_url || null
+                    };
+                    
+                    if (destinoTipoVal === 'bodega') {
+                        nuevoJugueteData.bodega_id = destinoId;
+                        nuevoJugueteData.tienda_id = null;
+                    } else {
+                        nuevoJugueteData.tienda_id = destinoId;
+                        nuevoJugueteData.bodega_id = null;
+                    }
+                    
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .insert(nuevoJugueteData);
                 }
+
+                // Reducir cantidad en origen
+                const nuevaCantidadOrigen = jugueteActual.cantidad - juguete.cantidad;
                 
-                // Actualizar el juguete existente (moverlo a destino)
-                await window.supabaseClient
-                    .from('juguetes')
-                    .update(updateData)
-                    .eq('id', juguete.id);
+                if (nuevaCantidadOrigen <= 0) {
+                    // Si la cantidad llega a 0 o menos, eliminar el registro del origen
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .delete()
+                        .eq('id', juguete.id);
+                } else {
+                    // Actualizar cantidad en origen
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .update({ cantidad: nuevaCantidadOrigen })
+                        .eq('id', juguete.id);
+                }
             }
 
             showAbastecerMessage('Movimiento realizado correctamente', 'success');
