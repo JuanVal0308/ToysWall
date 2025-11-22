@@ -794,19 +794,45 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
 
             try {
-                const { error } = await window.supabaseClient
+                // Verificar si ya existe un juguete con el mismo código en la misma bodega
+                const { data: jugueteExistenteData } = await window.supabaseClient
                     .from('juguetes')
-                    .insert({
-                        nombre: nombre,
-                        codigo: codigo,
-                        cantidad: cantidad,
-                        bodega_id: currentBodegaId,
-                        empresa_id: user.empresa_id
-                    });
+                    .select('*')
+                    .eq('codigo', codigo)
+                    .eq('empresa_id', user.empresa_id)
+                    .eq('bodega_id', currentBodegaId)
+                    .limit(1);
 
-                if (error) throw error;
+                if (jugueteExistenteData && jugueteExistenteData.length > 0) {
+                    // Si existe, sumar la cantidad al registro existente
+                    const jugueteExistente = jugueteExistenteData[0];
+                    const nuevaCantidad = jugueteExistente.cantidad + cantidad;
+                    
+                    const { error: updateError } = await window.supabaseClient
+                        .from('juguetes')
+                        .update({ cantidad: nuevaCantidad })
+                        .eq('id', jugueteExistente.id);
 
-                showJugueteMessage('Juguete agregado correctamente', 'success');
+                    if (updateError) throw updateError;
+                    
+                    showJugueteMessage(`Juguete actualizado: se agregaron ${cantidad} unidades (Total: ${nuevaCantidad})`, 'success');
+                } else {
+                    // Si no existe, crear un nuevo registro
+                    const { error } = await window.supabaseClient
+                        .from('juguetes')
+                        .insert({
+                            nombre: nombre,
+                            codigo: codigo,
+                            cantidad: cantidad,
+                            bodega_id: currentBodegaId,
+                            empresa_id: user.empresa_id
+                        });
+
+                    if (error) throw error;
+                    
+                    showJugueteMessage('Juguete agregado correctamente', 'success');
+                }
+
                 setTimeout(() => {
                     closeAgregarJuguetesModal();
                 }, 1500);
@@ -955,31 +981,65 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
 
             try {
-                const jugueteData = {
-                    nombre: nombre,
-                    codigo: codigo,
-                    cantidad: cantidad,
-                    empresa_id: user.empresa_id
-                };
-
-                if (fotoUrl) {
-                    jugueteData.foto_url = fotoUrl;
-                }
-
-                if (ubicacionTipo === 'bodega') {
-                    jugueteData.bodega_id = ubicacionId;
-                } else if (ubicacionTipo === 'tienda') {
-                    jugueteData.tienda_id = ubicacionId;
-                }
-
-                // Insertar juguete
-                const { error: jugueteError } = await window.supabaseClient
+                const campoUbicacion = ubicacionTipo === 'bodega' ? 'bodega_id' : 'tienda_id';
+                
+                // Verificar si ya existe un juguete con el mismo código en la misma ubicación
+                const { data: jugueteExistenteData } = await window.supabaseClient
                     .from('juguetes')
-                    .insert(jugueteData);
+                    .select('*')
+                    .eq('codigo', codigo)
+                    .eq('empresa_id', user.empresa_id)
+                    .eq(campoUbicacion, ubicacionId)
+                    .limit(1);
 
-                if (jugueteError) throw jugueteError;
+                if (jugueteExistenteData && jugueteExistenteData.length > 0) {
+                    // Si existe, sumar la cantidad al registro existente
+                    const jugueteExistente = jugueteExistenteData[0];
+                    const nuevaCantidad = jugueteExistente.cantidad + cantidad;
+                    
+                    const updateData = { cantidad: nuevaCantidad };
+                    
+                    // Actualizar foto_url si se proporciona una nueva
+                    if (fotoUrl) {
+                        updateData.foto_url = fotoUrl;
+                    }
+                    
+                    const { error: updateError } = await window.supabaseClient
+                        .from('juguetes')
+                        .update(updateData)
+                        .eq('id', jugueteExistente.id);
 
-                showJugueteFormMessage('Juguete agregado correctamente', 'success');
+                    if (updateError) throw updateError;
+                    
+                    showJugueteFormMessage(`Juguete actualizado: se agregaron ${cantidad} unidades (Total: ${nuevaCantidad})`, 'success');
+                } else {
+                    // Si no existe, crear un nuevo registro
+                    const jugueteData = {
+                        nombre: nombre,
+                        codigo: codigo,
+                        cantidad: cantidad,
+                        empresa_id: user.empresa_id
+                    };
+
+                    if (fotoUrl) {
+                        jugueteData.foto_url = fotoUrl;
+                    }
+
+                    if (ubicacionTipo === 'bodega') {
+                        jugueteData.bodega_id = ubicacionId;
+                    } else if (ubicacionTipo === 'tienda') {
+                        jugueteData.tienda_id = ubicacionId;
+                    }
+
+                    const { error: jugueteError } = await window.supabaseClient
+                        .from('juguetes')
+                        .insert(jugueteData);
+
+                    if (jugueteError) throw jugueteError;
+                    
+                    showJugueteFormMessage('Juguete agregado correctamente', 'success');
+                }
+
                 agregarJugueteForm.reset();
                 document.getElementById('jugueteUbicacionContainer').style.display = 'none';
             } catch (error) {

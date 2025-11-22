@@ -3,9 +3,11 @@
 -- ============================================
 -- Este script consolida juguetes duplicados (mismo código, misma ubicación)
 -- y elimina los registros duplicados, manteniendo solo uno con la suma de cantidades
+-- NOTA: Los juguetes con el mismo código pero en diferentes ubicaciones NO se consolidan
 -- ============================================
 
 -- Paso 1: Crear tabla temporal con juguetes consolidados
+-- Solo consolida si tienen el mismo código Y la misma ubicación (bodega_id o tienda_id)
 CREATE TEMP TABLE IF NOT EXISTS juguetes_consolidados AS
 SELECT 
     empresa_id,
