@@ -131,15 +131,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             // Redirigir después de un breve delay
             setTimeout(() => {
-                // Verificar si es administrador (tipo_usuario_id 1 o 2)
-                if (usuario.tipo_usuario_id === 1 || usuario.tipo_usuario_id === 2) {
-                    window.location.href = 'dashboard.html';
-                } else {
-                    // Si no es administrador, mostrar mensaje o redirigir a otra página
-                    showMessage('Acceso concedido. Redirigiendo...', 'success');
-                    // Aquí puedes redirigir a otra página para empleados
-                    // window.location.href = 'empleado.html';
-                }
+                // Todos los usuarios (admin y empleados) van al dashboard
+                // Los permisos se manejan dentro del dashboard
+                window.location.href = 'dashboard.html';
             }, 1500);
 
         } catch (error) {

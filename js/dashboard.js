@@ -748,14 +748,22 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Abrir modal para agregar juguetes
+    // Abrir modal para agregar juguetes (si existe)
     function openAgregarJuguetesModal(bodegaId) {
         currentBodegaId = bodegaId;
         const modal = document.getElementById('agregarJuguetesModal');
-        modal.style.display = 'flex';
-        document.getElementById('agregarJuguetesForm').reset();
-        document.getElementById('jugueteErrorMessage').style.display = 'none';
-        document.getElementById('jugueteSuccessMessage').style.display = 'none';
+        if (modal) {
+            modal.style.display = 'flex';
+            const form = document.getElementById('agregarJuguetesForm');
+            if (form) form.reset();
+            const errorMsg = document.getElementById('jugueteErrorMessage');
+            const successMsg = document.getElementById('jugueteSuccessMessage');
+            if (errorMsg) errorMsg.style.display = 'none';
+            if (successMsg) successMsg.style.display = 'none';
+        } else {
+            // Si no existe el modal, redirigir a la vista de juguetes
+            showView('juguetes');
+        }
     }
 
     // Formulario para agregar juguetes (desde modal de bodega - obsoleto, usar formulario principal)
@@ -814,23 +822,39 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Cerrar modal de agregar juguetes
+    // Cerrar modal de agregar juguetes (si existe)
     function closeAgregarJuguetesModal() {
         const modal = document.getElementById('agregarJuguetesModal');
-        modal.style.display = 'none';
-        agregarJuguetesForm.reset();
-        document.getElementById('jugueteErrorMessage').style.display = 'none';
-        document.getElementById('jugueteSuccessMessage').style.display = 'none';
-        currentBodegaId = null;
+        if (modal) {
+            modal.style.display = 'none';
+            const form = document.getElementById('agregarJuguetesForm');
+            if (form) form.reset();
+            const errorMsg = document.getElementById('jugueteErrorMessage');
+            const successMsg = document.getElementById('jugueteSuccessMessage');
+            if (errorMsg) errorMsg.style.display = 'none';
+            if (successMsg) successMsg.style.display = 'none';
+            currentBodegaId = null;
+        }
     }
 
-    document.getElementById('closeAgregarJuguetesModal').addEventListener('click', closeAgregarJuguetesModal);
-    document.getElementById('cancelAgregarJuguetesBtn').addEventListener('click', closeAgregarJuguetesModal);
-    document.getElementById('agregarJuguetesModal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeAgregarJuguetesModal();
-        }
-    });
+    // Solo agregar event listeners si los elementos existen
+    const closeModalBtn = document.getElementById('closeAgregarJuguetesModal');
+    const cancelBtn = document.getElementById('cancelAgregarJuguetesBtn');
+    const modal = document.getElementById('agregarJuguetesModal');
+    
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', closeAgregarJuguetesModal);
+    }
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', closeAgregarJuguetesModal);
+    }
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeAgregarJuguetesModal();
+            }
+        });
+    }
 
     // ============================================
     // FUNCIONALIDAD DE JUGUETES
@@ -947,8 +971,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function showJugueteFormMessage(message, type) {
-        const errorMsg = document.getElementById('agregarJugueteErrorMessage');
-        const successMsg = document.getElementById('agregarJugueteSuccessMessage');
+        const errorMsg = document.getElementById('jugueteFormErrorMessage');
+        const successMsg = document.getElementById('jugueteFormSuccessMessage');
         
         if (!errorMsg || !successMsg) return;
         
@@ -983,7 +1007,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 .select(`
                     *,
                     bodegas(nombre, direccion),
-                    tiendas(nombre, ubicacion)
+                    tiendas(nombre, direccion)
                 `)
                 .eq('empresa_id', user.empresa_id)
                 .order('nombre');

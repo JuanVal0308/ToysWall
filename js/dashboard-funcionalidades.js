@@ -1451,7 +1451,7 @@ async function openEditTiendaModal(tiendaId) {
         if (error) throw error;
 
         document.getElementById('editTiendaNombre').value = tienda.nombre;
-        document.getElementById('editTiendaDireccion').value = tienda.direccion;
+        document.getElementById('editTiendaDireccion').value = tienda.direccion || tienda.ubicacion || '';
         window.currentTiendaId = tiendaId;
         
         const modal = document.getElementById('editTiendaModal');
