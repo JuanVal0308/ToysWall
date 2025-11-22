@@ -229,6 +229,23 @@ function initRegistrarVenta() {
 
             const empleado = empleadosData[0];
 
+            // Verificar que el empleado tenga una tienda asignada
+            if (!empleado.tienda_id) {
+                showVentaMessage('El empleado no tiene una tienda asignada. No puede realizar ventas.', 'error');
+                return;
+            }
+
+            // Verificar que el juguete esté en la misma tienda del empleado
+            if (!juguete.tienda_id) {
+                showVentaMessage('El juguete no está disponible en una tienda. Solo se pueden vender juguetes ubicados en tiendas.', 'error');
+                return;
+            }
+
+            if (juguete.tienda_id !== empleado.tienda_id) {
+                showVentaMessage(`El juguete no está disponible en la tienda del empleado. El empleado trabaja en una tienda diferente.`, 'error');
+                return;
+            }
+
             // Agregar item
             ventaItems.push({
                 juguete_id: juguete.id,
