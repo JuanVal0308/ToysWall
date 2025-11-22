@@ -275,6 +275,26 @@ BEGIN
 END $$;
 
 -- ============================================
+-- 5.1. INSERTAR EMPLEADOS DE EJEMPLO
+-- ============================================
+
+-- Insertar empleados de ejemplo si no existen
+DO $$
+BEGIN
+    -- Empleado Jose (puede vender en cualquier parte - sin tienda asignada)
+    IF NOT EXISTS (SELECT 1 FROM empleados WHERE nombre = 'Jose' AND empresa_id = 1) THEN
+        INSERT INTO empleados (nombre, telefono, codigo, documento, empresa_id, tienda_id) VALUES
+            ('Jose', '3000000001', 'EMP-JOSE', '1234567890', 1, NULL);
+    END IF;
+    
+    -- Empleado Sindy (puede vender en cualquier parte - sin tienda asignada)
+    IF NOT EXISTS (SELECT 1 FROM empleados WHERE nombre = 'Sindy' AND empresa_id = 1) THEN
+        INSERT INTO empleados (nombre, telefono, codigo, documento, empresa_id, tienda_id) VALUES
+            ('Sindy', '3000000002', 'EMP-SINDY', '0987654321', 1, NULL);
+    END IF;
+END $$;
+
+-- ============================================
 -- 6. CONFIGURAR ROW LEVEL SECURITY (RLS)
 -- ============================================
 
