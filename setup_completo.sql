@@ -230,21 +230,33 @@ SELECT setval('empresas_id_seq', 1, true);
 -- 5. INSERTAR USUARIOS DE EJEMPLO
 -- ============================================
 
--- Super Administrador
-INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
-    ('Super Admin', 'superadmin@toyswalls.com', 'admin123', 1, 1)
-ON CONFLICT (email) DO NOTHING;
-
--- Administrador
-INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
-    ('Admin', 'admin@toyswalls.com', 'admin123', 1, 2)
-ON CONFLICT (email) DO NOTHING;
-
--- Empleados
-INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
-    ('Juan Pérez', 'juan@toyswalls.com', 'empleado123', 1, 3),
-    ('María García', 'maria@toyswalls.com', 'empleado123', 1, 3)
-ON CONFLICT (email) DO NOTHING;
+-- Insertar usuarios de ejemplo si no existen
+DO $$
+BEGIN
+    -- Super Administrador
+    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE email = 'superadmin@toyswalls.com') THEN
+        INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
+            ('Super Admin', 'superadmin@toyswalls.com', 'admin123', 1, 1);
+    END IF;
+    
+    -- Administrador
+    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE email = 'admin@toyswalls.com') THEN
+        INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
+            ('Admin', 'admin@toyswalls.com', 'admin123', 1, 2);
+    END IF;
+    
+    -- Empleado Juan Pérez
+    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE email = 'juan@toyswalls.com') THEN
+        INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
+            ('Juan Pérez', 'juan@toyswalls.com', 'empleado123', 1, 3);
+    END IF;
+    
+    -- Empleado María García
+    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE email = 'maria@toyswalls.com') THEN
+        INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
+            ('María García', 'maria@toyswalls.com', 'empleado123', 1, 3);
+    END IF;
+END $$;
 
 -- ============================================
 -- 6. CONFIGURAR ROW LEVEL SECURITY (RLS)
