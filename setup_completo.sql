@@ -1,6 +1,6 @@
 -- ============================================
 -- CONFIGURACIÓN COMPLETA DE BASE DE DATOS
--- Toys Walls - Sistema de Inventario Empresarial
+-- Toys Walls - Sistema de Inventario
 -- ============================================
 -- INSTRUCCIONES:
 -- 1. Copia TODO este archivo
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS tipo_usuarios (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Tabla: empresas
+-- Tabla: empresas (solo ToysWalls)
 CREATE TABLE IF NOT EXISTS empresas (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
@@ -38,14 +38,13 @@ CREATE TABLE IF NOT EXISTS empresas (
 CREATE TABLE IF NOT EXISTS usuarios (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nombre VARCHAR(100) NOT NULL,
-    email VARCHAR(255),
+    email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
     tipo_usuario_id INTEGER NOT NULL REFERENCES tipo_usuarios(id) ON DELETE RESTRICT,
     activo BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT unique_usuario_empresa UNIQUE(nombre, empresa_id)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Tabla: bodegas
@@ -56,16 +55,6 @@ CREATE TABLE IF NOT EXISTS bodegas (
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Tabla: categorias
-CREATE TABLE IF NOT EXISTS categorias (
-    id SERIAL PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL,
-    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT unique_categoria_empresa UNIQUE(nombre, empresa_id)
 );
 
 -- Tabla: tiendas
@@ -84,104 +73,81 @@ CREATE TABLE IF NOT EXISTS empleados (
     nombre VARCHAR(100) NOT NULL,
     telefono VARCHAR(20) NOT NULL,
     codigo VARCHAR(50) NOT NULL,
-    ubicacion TEXT NOT NULL,
+    documento VARCHAR(50),
+    ubicacion TEXT,
+    tienda_id INTEGER REFERENCES tiendas(id) ON DELETE SET NULL,
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Tabla: juguetes (actualizada para soportar bodegas y tiendas)
--- Primero verificar si la tabla existe y actualizarla si es necesario
-DO $$ 
-BEGIN
-    -- Si la tabla no existe, crearla
-    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'juguetes') THEN
-        CREATE TABLE juguetes (
-            id SERIAL PRIMARY KEY,
-            nombre VARCHAR(100) NOT NULL,
-            codigo VARCHAR(50) NOT NULL,
-            categoria_id INTEGER NOT NULL REFERENCES categorias(id) ON DELETE RESTRICT,
-            cantidad INTEGER NOT NULL DEFAULT 0,
-            empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
-            bodega_id INTEGER REFERENCES bodegas(id) ON DELETE SET NULL,
-            tienda_id INTEGER REFERENCES tiendas(id) ON DELETE SET NULL,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            CONSTRAINT check_ubicacion CHECK (
-                (bodega_id IS NOT NULL AND tienda_id IS NULL) OR 
-                (bodega_id IS NULL AND tienda_id IS NOT NULL)
-            )
-        );
-    ELSE
-        -- Si la tabla existe, agregar columnas faltantes
-        -- Agregar empresa_id si no existe
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                       WHERE table_name = 'juguetes' AND column_name = 'empresa_id') THEN
-            ALTER TABLE juguetes ADD COLUMN empresa_id INTEGER;
-            -- Actualizar empresa_id desde bodegas relacionadas
-            UPDATE juguetes j
-            SET empresa_id = b.empresa_id
-            FROM bodegas b
-            WHERE j.bodega_id = b.id;
-            -- Hacer NOT NULL después de actualizar
-            ALTER TABLE juguetes ALTER COLUMN empresa_id SET NOT NULL;
-            ALTER TABLE juguetes ADD CONSTRAINT juguetes_empresa_id_fkey 
-                FOREIGN KEY (empresa_id) REFERENCES empresas(id) ON DELETE CASCADE;
-        END IF;
+-- Tabla: juguetes (sin categorías, con foto_url)
+CREATE TABLE IF NOT EXISTS juguetes (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    codigo VARCHAR(50) NOT NULL,
+    cantidad INTEGER NOT NULL DEFAULT 0,
+    foto_url TEXT,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    bodega_id INTEGER REFERENCES bodegas(id) ON DELETE SET NULL,
+    tienda_id INTEGER REFERENCES tiendas(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT check_ubicacion CHECK (
+        (bodega_id IS NOT NULL AND tienda_id IS NULL) OR 
+        (bodega_id IS NULL AND tienda_id IS NOT NULL) OR
+        (bodega_id IS NULL AND tienda_id IS NULL)
+    )
+);
 
-        -- Agregar categoria_id si no existe
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                       WHERE table_name = 'juguetes' AND column_name = 'categoria_id') THEN
-            -- Crear categoría "General" si no existe
-            INSERT INTO categorias (nombre, empresa_id)
-            SELECT DISTINCT 'General', empresa_id
-            FROM empresas
-            WHERE NOT EXISTS (
-                SELECT 1 FROM categorias 
-                WHERE nombre = 'General' AND empresa_id = empresas.id
-            )
-            ON CONFLICT DO NOTHING;
-            
-            ALTER TABLE juguetes ADD COLUMN categoria_id INTEGER;
-            -- Asignar categoría "General" a juguetes existentes
-            UPDATE juguetes j
-            SET categoria_id = c.id
-            FROM categorias c
-            WHERE c.nombre = 'General' 
-            AND c.empresa_id = j.empresa_id;
-            -- Hacer NOT NULL después de actualizar
-            ALTER TABLE juguetes ALTER COLUMN categoria_id SET NOT NULL;
-            ALTER TABLE juguetes ADD CONSTRAINT juguetes_categoria_id_fkey 
-                FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE RESTRICT;
-        END IF;
+-- Tabla: ventas
+CREATE TABLE IF NOT EXISTS ventas (
+    id SERIAL PRIMARY KEY,
+    codigo_venta VARCHAR(50) NOT NULL,
+    juguete_id INTEGER NOT NULL REFERENCES juguetes(id) ON DELETE RESTRICT,
+    empleado_id INTEGER REFERENCES empleados(id) ON DELETE SET NULL,
+    precio_venta DECIMAL(10, 2) NOT NULL,
+    metodo_pago VARCHAR(50) NOT NULL,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
-        -- Agregar tienda_id si no existe
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                       WHERE table_name = 'juguetes' AND column_name = 'tienda_id') THEN
-            ALTER TABLE juguetes ADD COLUMN tienda_id INTEGER 
-                REFERENCES tiendas(id) ON DELETE SET NULL;
-        END IF;
+-- Tabla: facturas
+CREATE TABLE IF NOT EXISTS facturas (
+    id SERIAL PRIMARY KEY,
+    codigo_factura VARCHAR(50) NOT NULL UNIQUE,
+    cliente_nombre VARCHAR(100) NOT NULL,
+    cliente_documento VARCHAR(50) NOT NULL,
+    cliente_email VARCHAR(255) NOT NULL,
+    total DECIMAL(10, 2) NOT NULL,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
-        -- Eliminar columna categoria (VARCHAR) si existe
-        IF EXISTS (SELECT 1 FROM information_schema.columns 
-                   WHERE table_name = 'juguetes' AND column_name = 'categoria' 
-                   AND data_type = 'character varying') THEN
-            ALTER TABLE juguetes DROP COLUMN categoria;
-        END IF;
+-- Tabla: facturas_items
+CREATE TABLE IF NOT EXISTS facturas_items (
+    id SERIAL PRIMARY KEY,
+    factura_id INTEGER NOT NULL REFERENCES facturas(id) ON DELETE CASCADE,
+    juguete_nombre VARCHAR(100) NOT NULL,
+    juguete_codigo VARCHAR(50) NOT NULL,
+    precio DECIMAL(10, 2) NOT NULL,
+    cantidad INTEGER NOT NULL DEFAULT 1,
+    subtotal DECIMAL(10, 2) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
-        -- Agregar constraint CHECK si no existe
-        IF NOT EXISTS (
-            SELECT 1 FROM pg_constraint 
-            WHERE conname = 'check_ubicacion' 
-            AND conrelid = 'juguetes'::regclass
-        ) THEN
-            ALTER TABLE juguetes ADD CONSTRAINT check_ubicacion CHECK (
-                (bodega_id IS NOT NULL AND tienda_id IS NULL) OR 
-                (bodega_id IS NULL AND tienda_id IS NOT NULL)
-            );
-        END IF;
-    END IF;
-END $$;
+-- Tabla: movimientos
+CREATE TABLE IF NOT EXISTS movimientos (
+    id SERIAL PRIMARY KEY,
+    tipo_origen VARCHAR(20) NOT NULL CHECK (tipo_origen IN ('bodega', 'tienda')),
+    origen_id INTEGER NOT NULL,
+    tipo_destino VARCHAR(20) NOT NULL CHECK (tipo_destino IN ('bodega', 'tienda')),
+    destino_id INTEGER NOT NULL,
+    juguete_id INTEGER NOT NULL REFERENCES juguetes(id) ON DELETE RESTRICT,
+    cantidad INTEGER NOT NULL DEFAULT 1,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
 -- ============================================
 -- 2. CREAR ÍNDICES
@@ -190,24 +156,29 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_usuarios_empresa_id ON usuarios(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_usuarios_tipo_usuario_id ON usuarios(tipo_usuario_id);
 CREATE INDEX IF NOT EXISTS idx_usuarios_nombre ON usuarios(nombre);
+CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios(email);
 CREATE INDEX IF NOT EXISTS idx_empresas_nombre ON empresas(nombre);
 CREATE INDEX IF NOT EXISTS idx_bodegas_empresa_id ON bodegas(empresa_id);
-CREATE INDEX IF NOT EXISTS idx_categorias_empresa_id ON categorias(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_tiendas_empresa_id ON tiendas(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_empleados_empresa_id ON empleados(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_empleados_tienda_id ON empleados(tienda_id);
 CREATE INDEX IF NOT EXISTS idx_juguetes_bodega_id ON juguetes(bodega_id);
 CREATE INDEX IF NOT EXISTS idx_juguetes_tienda_id ON juguetes(tienda_id);
-CREATE INDEX IF NOT EXISTS idx_juguetes_categoria_id ON juguetes(categoria_id);
 CREATE INDEX IF NOT EXISTS idx_juguetes_codigo ON juguetes(codigo);
 CREATE INDEX IF NOT EXISTS idx_juguetes_empresa_id ON juguetes(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_ventas_empresa_id ON ventas(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_ventas_juguete_id ON ventas(juguete_id);
+CREATE INDEX IF NOT EXISTS idx_ventas_empleado_id ON ventas(empleado_id);
+CREATE INDEX IF NOT EXISTS idx_facturas_empresa_id ON facturas(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_movimientos_empresa_id ON movimientos(empresa_id);
 
 -- ============================================
 -- 3. INSERTAR TIPOS DE USUARIO
 -- ============================================
 
 INSERT INTO tipo_usuarios (id, nombre, descripcion) VALUES
-    (1, 'Super Administrador', 'Acceso completo al sistema, puede gestionar todas las empresas'),
-    (2, 'Administrador', 'Administrador de su empresa, puede gestionar usuarios y datos de su empresa'),
+    (1, 'Super Administrador', 'Acceso completo al sistema'),
+    (2, 'Administrador', 'Administrador de ToysWalls, puede gestionar usuarios y datos'),
     (3, 'Empleado', 'Usuario regular, puede ver y registrar datos según permisos')
 ON CONFLICT (id) DO UPDATE SET
     nombre = EXCLUDED.nombre,
@@ -217,14 +188,15 @@ ON CONFLICT (id) DO UPDATE SET
 SELECT setval('tipo_usuarios_id_seq', 3, true);
 
 -- ============================================
--- 4. INSERTAR EMPRESA DE EJEMPLO
+-- 4. INSERTAR EMPRESA TOYSWALLS
 -- ============================================
 
-INSERT INTO empresas (id, nombre, descripcion) VALUES
-    (1, 'Toys Walls', 'Empresa principal de juguetes')
+INSERT INTO empresas (id, nombre, descripcion, logo_url) VALUES
+    (1, 'ToysWalls', 'Sistema de Inventario de Juguetes', 'https://i.imgur.com/RBbjVnp.jpeg')
 ON CONFLICT (id) DO UPDATE SET
     nombre = EXCLUDED.nombre,
-    descripcion = EXCLUDED.descripcion;
+    descripcion = EXCLUDED.descripcion,
+    logo_url = EXCLUDED.logo_url;
 
 -- Ajustar secuencia
 SELECT setval('empresas_id_seq', 1, true);
@@ -236,18 +208,18 @@ SELECT setval('empresas_id_seq', 1, true);
 -- Super Administrador
 INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
     ('Super Admin', 'superadmin@toyswalls.com', 'admin123', 1, 1)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (email) DO NOTHING;
 
 -- Administrador
 INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
     ('Admin', 'admin@toyswalls.com', 'admin123', 1, 2)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (email) DO NOTHING;
 
 -- Empleados
 INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
     ('Juan Pérez', 'juan@toyswalls.com', 'empleado123', 1, 3),
     ('María García', 'maria@toyswalls.com', 'empleado123', 1, 3)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (email) DO NOTHING;
 
 -- ============================================
 -- 6. CONFIGURAR ROW LEVEL SECURITY (RLS)
@@ -258,10 +230,13 @@ ALTER TABLE tipo_usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE empresas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bodegas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE categorias ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tiendas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE empleados ENABLE ROW LEVEL SECURITY;
 ALTER TABLE juguetes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ventas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE facturas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE facturas_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE movimientos ENABLE ROW LEVEL SECURITY;
 
 -- Eliminar políticas existentes si existen (para evitar conflictos)
 DROP POLICY IF EXISTS "tipo_usuarios_select_policy" ON tipo_usuarios;
@@ -272,10 +247,6 @@ DROP POLICY IF EXISTS "bodegas_select_policy" ON bodegas;
 DROP POLICY IF EXISTS "bodegas_insert_policy" ON bodegas;
 DROP POLICY IF EXISTS "bodegas_update_policy" ON bodegas;
 DROP POLICY IF EXISTS "bodegas_delete_policy" ON bodegas;
-DROP POLICY IF EXISTS "categorias_select_policy" ON categorias;
-DROP POLICY IF EXISTS "categorias_insert_policy" ON categorias;
-DROP POLICY IF EXISTS "categorias_update_policy" ON categorias;
-DROP POLICY IF EXISTS "categorias_delete_policy" ON categorias;
 DROP POLICY IF EXISTS "tiendas_select_policy" ON tiendas;
 DROP POLICY IF EXISTS "tiendas_insert_policy" ON tiendas;
 DROP POLICY IF EXISTS "tiendas_update_policy" ON tiendas;
@@ -288,6 +259,14 @@ DROP POLICY IF EXISTS "juguetes_select_policy" ON juguetes;
 DROP POLICY IF EXISTS "juguetes_insert_policy" ON juguetes;
 DROP POLICY IF EXISTS "juguetes_update_policy" ON juguetes;
 DROP POLICY IF EXISTS "juguetes_delete_policy" ON juguetes;
+DROP POLICY IF EXISTS "ventas_select_policy" ON ventas;
+DROP POLICY IF EXISTS "ventas_insert_policy" ON ventas;
+DROP POLICY IF EXISTS "facturas_select_policy" ON facturas;
+DROP POLICY IF EXISTS "facturas_insert_policy" ON facturas;
+DROP POLICY IF EXISTS "facturas_items_select_policy" ON facturas_items;
+DROP POLICY IF EXISTS "facturas_items_insert_policy" ON facturas_items;
+DROP POLICY IF EXISTS "movimientos_select_policy" ON movimientos;
+DROP POLICY IF EXISTS "movimientos_insert_policy" ON movimientos;
 
 -- Crear políticas RLS para tipo_usuarios
 CREATE POLICY "tipo_usuarios_select_policy"
@@ -325,24 +304,6 @@ CREATE POLICY "bodegas_update_policy"
 
 CREATE POLICY "bodegas_delete_policy"
     ON bodegas FOR DELETE
-    USING (true);
-
--- Crear políticas RLS para categorias
-CREATE POLICY "categorias_select_policy"
-    ON categorias FOR SELECT
-    USING (true);
-
-CREATE POLICY "categorias_insert_policy"
-    ON categorias FOR INSERT
-    WITH CHECK (true);
-
-CREATE POLICY "categorias_update_policy"
-    ON categorias FOR UPDATE
-    USING (true)
-    WITH CHECK (true);
-
-CREATE POLICY "categorias_delete_policy"
-    ON categorias FOR DELETE
     USING (true);
 
 -- Crear políticas RLS para tiendas
@@ -399,6 +360,42 @@ CREATE POLICY "juguetes_delete_policy"
     ON juguetes FOR DELETE
     USING (true);
 
+-- Crear políticas RLS para ventas
+CREATE POLICY "ventas_select_policy"
+    ON ventas FOR SELECT
+    USING (true);
+
+CREATE POLICY "ventas_insert_policy"
+    ON ventas FOR INSERT
+    WITH CHECK (true);
+
+-- Crear políticas RLS para facturas
+CREATE POLICY "facturas_select_policy"
+    ON facturas FOR SELECT
+    USING (true);
+
+CREATE POLICY "facturas_insert_policy"
+    ON facturas FOR INSERT
+    WITH CHECK (true);
+
+-- Crear políticas RLS para facturas_items
+CREATE POLICY "facturas_items_select_policy"
+    ON facturas_items FOR SELECT
+    USING (true);
+
+CREATE POLICY "facturas_items_insert_policy"
+    ON facturas_items FOR INSERT
+    WITH CHECK (true);
+
+-- Crear políticas RLS para movimientos
+CREATE POLICY "movimientos_select_policy"
+    ON movimientos FOR SELECT
+    USING (true);
+
+CREATE POLICY "movimientos_insert_policy"
+    ON movimientos FOR INSERT
+    WITH CHECK (true);
+
 -- ============================================
 -- 7. FUNCIONES AUXILIARES
 -- ============================================
@@ -411,22 +408,6 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
--- Función para obtener empresa_id del usuario actual (para uso futuro)
-CREATE OR REPLACE FUNCTION current_empresa()
-RETURNS INTEGER AS $$
-    SELECT empresa_id FROM usuarios 
-    WHERE id = (SELECT id FROM usuarios WHERE nombre = current_setting('app.current_user_name', true)::text LIMIT 1)
-    LIMIT 1;
-$$ LANGUAGE sql SECURITY DEFINER;
-
--- Función para obtener tipo_usuario_id del usuario actual (para uso futuro)
-CREATE OR REPLACE FUNCTION current_tipo_usuario()
-RETURNS INTEGER AS $$
-    SELECT tipo_usuario_id FROM usuarios 
-    WHERE id = (SELECT id FROM usuarios WHERE nombre = current_setting('app.current_user_name', true)::text LIMIT 1)
-    LIMIT 1;
-$$ LANGUAGE sql SECURITY DEFINER;
 
 -- ============================================
 -- 8. CREAR TRIGGERS
@@ -460,13 +441,6 @@ CREATE TRIGGER update_bodegas_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
--- Trigger para categorias
-DROP TRIGGER IF EXISTS update_categorias_updated_at ON categorias;
-CREATE TRIGGER update_categorias_updated_at
-    BEFORE UPDATE ON categorias
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
 -- Trigger para tiendas
 DROP TRIGGER IF EXISTS update_tiendas_updated_at ON tiendas;
 CREATE TRIGGER update_tiendas_updated_at
@@ -496,8 +470,8 @@ CREATE TRIGGER update_juguetes_updated_at
 SELECT 'Tipos de Usuario:' as info;
 SELECT * FROM tipo_usuarios ORDER BY id;
 
--- Ver empresas creadas
-SELECT 'Empresas:' as info;
+-- Ver empresa creada
+SELECT 'Empresa:' as info;
 SELECT * FROM empresas ORDER BY id;
 
 -- Ver usuarios creados (sin mostrar contraseñas)
@@ -522,18 +496,24 @@ ORDER BY u.nombre;
 -- USUARIOS DE EJEMPLO CREADOS:
 -- 
 -- Super Administrador:
---   Nombre: "Super Admin"
+--   Email: "superadmin@toyswalls.com"
 --   Contraseña: "admin123"
 -- 
 -- Administrador:
---   Nombre: "Admin"
+--   Email: "admin@toyswalls.com"
 --   Contraseña: "admin123"
 -- 
 -- Empleados:
---   Nombre: "Juan Pérez" o "María García"
+--   Email: "juan@toyswalls.com" o "maria@toyswalls.com"
 --   Contraseña: "empleado123"
 -- 
--- Empresa: "Toys Walls"
+-- Empresa: "ToysWalls"
+-- Logo: https://i.imgur.com/RBbjVnp.jpeg
+-- 
+-- NOTAS IMPORTANTES:
+-- - Todos los usuarios pertenecen a ToysWalls
+-- - El login ahora usa email en lugar de selección de empresa
+-- - Las categorías han sido eliminadas
+-- - Los juguetes ahora tienen un campo foto_url opcional
 -- 
 -- ============================================
-

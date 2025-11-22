@@ -12,12 +12,12 @@
     <header class="dashboard-header">
         <div class="header-content">
             <div class="header-left">
-                <div class="logo-container" id="logoContainer" style="display: none;">
-                    <img id="empresaLogo" src="" alt="Logo empresa" class="empresa-logo">
+                <div class="logo-container" id="logoContainer">
+                    <img id="empresaLogo" src="https://i.imgur.com/RBbjVnp.jpeg" alt="Logo ToysWalls" class="empresa-logo">
                 </div>
                 <div class="empresa-info">
-                    <h2 class="welcome-text">Bienvenido a tu inventario</h2>
-                    <span class="empresa-name" id="empresaNombre">Cargando...</span>
+                    <h2 class="welcome-text">Bienvenido a ToysWalls</h2>
+                    <span class="empresa-name" id="empresaNombre">ToysWalls - Sistema de Inventario</span>
                 </div>
             </div>
             <div class="header-right">
@@ -45,10 +45,6 @@
                 <button class="sidebar-btn" data-page="inventario">
                     <i class="fas fa-boxes"></i>
                     <span>Inventario</span>
-                </button>
-                <button class="sidebar-btn" data-page="categorias">
-                    <i class="fas fa-tags"></i>
-                    <span>Categorías</span>
                 </button>
                 <button class="sidebar-btn" data-page="bodegas">
                     <i class="fas fa-warehouse"></i>
@@ -334,12 +330,16 @@
                             >
                         </div>
                         <div class="form-group">
-                            <label for="jugueteCategoriasSelect">
-                                <i class="fas fa-tags"></i> Categorías * (Puedes seleccionar múltiples)
+                            <label for="jugueteFotoInput">
+                                <i class="fas fa-image"></i> Foto del Juguete (URL)
                             </label>
-                            <div id="categoriasCheckboxes" class="categorias-checkboxes">
-                                <!-- Las categorías se cargarán aquí dinámicamente -->
-                            </div>
+                            <input 
+                                type="url" 
+                                id="jugueteFotoInput" 
+                                name="foto_url" 
+                                placeholder="https://i.imgur.com/ejemplo.jpg"
+                            >
+                            <small class="form-help">Puedes subir la foto a Imgur y pegar la URL aquí</small>
                         </div>
                         <div class="form-group">
                             <label for="jugueteCantidadInput">
@@ -396,7 +396,7 @@
                         <input 
                             type="text" 
                             id="inventarioSearch" 
-                            placeholder="Buscar por nombre, código o categoría..."
+                            placeholder="Buscar por nombre o código..."
                             class="search-input"
                         >
                     </div>
@@ -406,7 +406,7 @@
                                 <tr>
                                     <th>Nombre</th>
                                     <th>Código</th>
-                                    <th>Categoría</th>
+                                    <th>Foto</th>
                                     <th>Cantidad</th>
                                     <th>Ubicación</th>
                                     <th>Tipo</th>
@@ -420,50 +420,6 @@
                                 </tr>
                             </tbody>
                         </table>
-                    </div>
-                </div>
-
-                <!-- Vista de Categorías -->
-                <div id="categoriasView" style="display: none;">
-                    <h1>Categorías</h1>
-                    
-                    <!-- Desplegable Agregar Categoría -->
-                    <div class="accordion-section">
-                        <button class="accordion-header" id="agregarCategoriaHeader">
-                            <i class="fas fa-tags"></i>
-                            <span>Agregar Categoría</span>
-                            <i class="fas fa-chevron-down accordion-icon"></i>
-                        </button>
-                        <div class="accordion-content" id="agregarCategoriaContent">
-                            <!-- Lista de categorías existentes -->
-                            <div class="categorias-list" id="categoriasList">
-                                <!-- Las categorías se cargarán aquí dinámicamente -->
-                            </div>
-                            
-                            <!-- Formulario para agregar nueva categoría -->
-                            <div class="form-section">
-                                <h3>Nueva Categoría</h3>
-                                <form id="nuevaCategoriaForm" class="bodega-form">
-                                    <div class="form-group">
-                                        <label for="categoriaNombre">
-                                            <i class="fas fa-tag"></i> Nombre de la Categoría *
-                                        </label>
-                                        <input 
-                                            type="text" 
-                                            id="categoriaNombre" 
-                                            name="nombre" 
-                                            placeholder="Ej: Deportes"
-                                            required
-                                        >
-                                    </div>
-                                    <div id="categoriaErrorMessage" class="error-message" style="display: none;"></div>
-                                    <div id="categoriaSuccessMessage" class="success-message" style="display: none;"></div>
-                                    <button type="submit" class="btn-primary">
-                                        <i class="fas fa-plus"></i> Agregar Categoría
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
@@ -851,11 +807,10 @@
                             <label>Filtro de Ventas:</label>
                             <select id="filtroVentas" class="form-select">
                                 <option value="todos">Todos los juguetes</option>
-                                <option value="nombre">Por nombre</option>
-                                <option value="dia">Por día</option>
-                                <option value="semana">Por semana</option>
-                                <option value="categoria">Por categoría</option>
-                                <option value="codigo">Por código</option>
+                                    <option value="nombre">Por nombre</option>
+                                    <option value="dia">Por día</option>
+                                    <option value="semana">Por semana</option>
+                                    <option value="codigo">Por código</option>
                             </select>
                         </div>
                         <div class="filter-group">
@@ -1052,37 +1007,6 @@
                 <div id="editBodegaSuccessMessage" class="success-message" style="display: none;"></div>
                 <div class="modal-footer">
                     <button type="button" class="btn-secondary" id="cancelEditBodegaBtn">Cancelar</button>
-                    <button type="submit" class="btn-primary">Guardar Cambios</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Modal para editar categoría -->
-    <div class="modal-overlay" id="editCategoriaModal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Editar Categoría</h3>
-                <button class="modal-close" id="closeEditCategoriaModal">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <form id="editCategoriaForm" class="modal-body">
-                <div class="form-group">
-                    <label for="editCategoriaNombre">
-                        <i class="fas fa-tag"></i> Nombre de la Categoría *
-                    </label>
-                    <input 
-                        type="text" 
-                        id="editCategoriaNombre" 
-                        name="nombre" 
-                        required
-                    >
-                </div>
-                <div id="editCategoriaErrorMessage" class="error-message" style="display: none;"></div>
-                <div id="editCategoriaSuccessMessage" class="success-message" style="display: none;"></div>
-                <div class="modal-footer">
-                    <button type="button" class="btn-secondary" id="cancelEditCategoriaBtn">Cancelar</button>
                     <button type="submit" class="btn-primary">Guardar Cambios</button>
                 </div>
             </form>

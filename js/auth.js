@@ -10,48 +10,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const submitBtn = document.getElementById('submitBtn');
     const btnText = document.getElementById('btnText');
     const loadingSpinner = document.getElementById('loadingSpinner');
-    const empresaSelect = document.getElementById('empresa');
-
-    // Cargar empresas desde Supabase
-    async function loadEmpresas() {
-        try {
-            const { data: empresas, error } = await window.supabaseClient
-                .from('empresas')
-                .select('id, nombre')
-                .order('nombre');
-
-            if (error) {
-                console.error('Error al cargar empresas:', error);
-                showMessage('Error al cargar las empresas. Por favor, recarga la página.', 'error');
-                return;
-            }
-
-            // Limpiar select
-            empresaSelect.innerHTML = '<option value="">Selecciona una empresa</option>';
-
-            // Agregar empresas al select
-            if (empresas && empresas.length > 0) {
-                empresas.forEach(empresa => {
-                    const option = document.createElement('option');
-                    option.value = empresa.id;
-                    option.textContent = empresa.nombre;
-                    empresaSelect.appendChild(option);
-                });
-            } else {
-                const option = document.createElement('option');
-                option.value = '';
-                option.textContent = 'No hay empresas disponibles';
-                option.disabled = true;
-                empresaSelect.appendChild(option);
-            }
-        } catch (error) {
-            console.error('Error al cargar empresas:', error);
-            showMessage('Error al cargar las empresas', 'error');
-        }
-    }
-
-    // Cargar empresas al iniciar
-    await loadEmpresas();
 
     // Función para mostrar/ocultar contraseña
     togglePassword.addEventListener('click', function() {
@@ -100,11 +58,11 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         // Obtener valores del formulario
         const nombreUsuario = document.getElementById('nombreUsuario').value.trim();
-        const empresaId = document.getElementById('empresa').value;
+        const email = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value;
 
         // Validación básica
-        if (!nombreUsuario || !empresaId || !password) {
+        if (!nombreUsuario || !email || !password) {
             showMessage('Por favor, completa todos los campos', 'error');
             return;
         }
@@ -115,10 +73,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         btnText.textContent = 'Iniciando sesión...';
 
         try {
-            // Paso 1: Buscar usuario por nombre EXACTO (case-insensitive) en la tabla usuarios
+            // Buscar usuario por email y nombre (todos pertenecen a ToysWalls)
             const { data: usuarios, error: searchError } = await window.supabaseClient
                 .from('usuarios')
                 .select('*, empresas(id, nombre)')
+                .eq('email', email)
                 .ilike('nombre', nombreUsuario);
 
             if (searchError) {
@@ -129,10 +88,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                 throw new Error('Contraseña o usuario incorrecto');
             }
 
-            // Paso 2: Verificar que el usuario pertenece a la empresa seleccionada
-            // Buscar coincidencia exacta del nombre (case-insensitive) y empresa
+            // Buscar coincidencia exacta del nombre (case-insensitive) y email
             const usuario = usuarios.find(u => 
-                u.empresa_id == empresaId && 
+                u.email.toLowerCase() === email.toLowerCase() && 
                 u.nombre.toLowerCase() === nombreUsuario.toLowerCase()
             );
             
@@ -140,7 +98,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 throw new Error('Contraseña o usuario incorrecto');
             }
 
-            // Paso 3: Verificar que la empresa existe
+            // Verificar que la empresa existe (debería ser ToysWalls)
             if (!usuario.empresas || !usuario.empresas.id) {
                 throw new Error('Contraseña o usuario incorrecto');
             }
@@ -165,6 +123,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             sessionStorage.setItem('user', JSON.stringify({
                 id: usuario.id,
                 nombre: usuario.nombre,
+                email: usuario.email,
                 empresa_id: usuario.empresa_id,
                 empresa_nombre: usuario.empresas.nombre,
                 tipo_usuario_id: usuario.tipo_usuario_id

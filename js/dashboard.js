@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const userNameClick = document.getElementById('userName');
     
     // Cargar información del usuario (el que ingresó)
-    empresaNombreEl.textContent = user.empresa_nombre || 'Empresa';
+    empresaNombreEl.textContent = 'ToysWalls - Sistema de Inventario';
     userNameEl.textContent = user.nombre || 'Usuario';
 
     // Cargar datos completos del usuario desde la base de datos
@@ -73,46 +73,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     await loadUserData();
 
-    // Cargar logo de la empresa
-    async function loadEmpresaLogo() {
-        try {
-            const { data, error } = await window.supabaseClient
-                .from('empresas')
-                .select('logo_url')
-                .eq('id', user.empresa_id)
-                .single();
-
-            if (error) throw error;
-
-            if (data && data.logo_url) {
-                let logoUrl = data.logo_url;
-                
-                // Convertir URL de álbum de Imgur a URL directa si es necesario
-                if (logoUrl.includes('imgur.com/a/')) {
-                    console.warn('URL de álbum de Imgur detectada. Necesitas la URL directa de la imagen.');
-                } else if (logoUrl.includes('imgur.com/') && !logoUrl.includes('i.imgur.com')) {
-                    const imgurId = logoUrl.split('imgur.com/')[1].split('/').pop().split('?')[0];
-                    logoUrl = `https://i.imgur.com/${imgurId}.png`;
-                }
-                
-                empresaLogoEl.src = logoUrl;
-                empresaLogoEl.onerror = function() {
-                    console.error('Error al cargar la imagen del logo desde:', logoUrl);
-                    logoContainer.style.display = 'none';
-                };
-                empresaLogoEl.onload = function() {
-                    logoContainer.style.display = 'flex';
-                };
-            } else {
-                logoContainer.style.display = 'none';
-            }
-        } catch (error) {
-            console.error('Error al cargar logo:', error);
-            logoContainer.style.display = 'none';
-        }
-    }
-
-    await loadEmpresaLogo();
+    // Logo de ToysWalls estático
+    empresaLogoEl.src = 'https://i.imgur.com/RBbjVnp.jpeg';
+    empresaLogoEl.alt = 'Logo ToysWalls';
+    logoContainer.style.display = 'flex';
 
     // Abrir modal al hacer click en el nombre de usuario
     userNameClick.addEventListener('click', function() {
@@ -366,7 +330,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const facturarView = document.getElementById('facturarView');
     const juguetesView = document.getElementById('juguetesView');
     const inventarioView = document.getElementById('inventarioView');
-    const categoriasView = document.getElementById('categoriasView');
     const bodegasView = document.getElementById('bodegasView');
     const tiendasView = document.getElementById('tiendasView');
     const empleadosView = document.getElementById('empleadosView');
@@ -375,7 +338,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const analisisView = document.getElementById('analisisView');
     
     let currentBodegaId = null;
-    let currentCategoriaId = null;
     let currentEmpleadoId = null;
     let currentTiendaId = null;
     let currentUsuarioId = null;
@@ -388,7 +350,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         facturarView.style.display = 'none';
         juguetesView.style.display = 'none';
         inventarioView.style.display = 'none';
-        categoriasView.style.display = 'none';
         bodegasView.style.display = 'none';
         tiendasView.style.display = 'none';
         empleadosView.style.display = 'none';
@@ -414,7 +375,6 @@ document.addEventListener('DOMContentLoaded', async function() {
             case 'juguetes':
                 if (isAdmin) {
                     juguetesView.style.display = 'block';
-                    loadCategoriasForJuguetes();
                     loadUbicacionesForSelect();
                 }
                 break;
@@ -422,12 +382,6 @@ document.addEventListener('DOMContentLoaded', async function() {
                 if (isAdmin) {
                     inventarioView.style.display = 'block';
                     loadInventario();
-                }
-                break;
-            case 'categorias':
-                if (isAdmin) {
-                    categoriasView.style.display = 'block';
-                    loadCategorias();
                 }
                 break;
             case 'bodegas':
@@ -804,43 +758,44 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.getElementById('jugueteSuccessMessage').style.display = 'none';
     }
 
-    // Formulario para agregar juguetes
+    // Formulario para agregar juguetes (desde modal de bodega - obsoleto, usar formulario principal)
     const agregarJuguetesForm = document.getElementById('agregarJuguetesForm');
-    agregarJuguetesForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const nombre = document.getElementById('jugueteNombre').value.trim();
-        const codigo = document.getElementById('jugueteCodigo').value.trim();
-        const categoria = document.getElementById('jugueteCategoria').value.trim();
-        const cantidad = parseInt(document.getElementById('jugueteCantidad').value);
+    if (agregarJuguetesForm) {
+        agregarJuguetesForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const nombre = document.getElementById('jugueteNombre')?.value.trim();
+            const codigo = document.getElementById('jugueteCodigo')?.value.trim();
+            const cantidad = parseInt(document.getElementById('jugueteCantidad')?.value || 0);
 
-        if (!nombre || !codigo || !categoria || isNaN(cantidad) || cantidad < 0) {
-            showJugueteMessage('Por favor, completa todos los campos correctamente', 'error');
-            return;
-        }
+            if (!nombre || !codigo || isNaN(cantidad) || cantidad < 0) {
+                showJugueteMessage('Por favor, completa todos los campos correctamente', 'error');
+                return;
+            }
 
-        try {
-            const { error } = await window.supabaseClient
-                .from('juguetes')
-                .insert({
-                    nombre: nombre,
-                    codigo: codigo,
-                    categoria: categoria,
-                    cantidad: cantidad,
-                    bodega_id: currentBodegaId
-                });
+            try {
+                const { error } = await window.supabaseClient
+                    .from('juguetes')
+                    .insert({
+                        nombre: nombre,
+                        codigo: codigo,
+                        cantidad: cantidad,
+                        bodega_id: currentBodegaId,
+                        empresa_id: user.empresa_id
+                    });
 
-            if (error) throw error;
+                if (error) throw error;
 
-            showJugueteMessage('Juguete agregado correctamente', 'success');
-            setTimeout(() => {
-                closeAgregarJuguetesModal();
-            }, 1500);
-        } catch (error) {
-            console.error('Error al agregar juguete:', error);
-            showJugueteMessage('Error al agregar el juguete: ' + error.message, 'error');
-        }
-    });
+                showJugueteMessage('Juguete agregado correctamente', 'success');
+                setTimeout(() => {
+                    closeAgregarJuguetesModal();
+                }, 1500);
+            } catch (error) {
+                console.error('Error al agregar juguete:', error);
+                showJugueteMessage('Error al agregar el juguete: ' + error.message, 'error');
+            }
+        });
+    }
 
     // Funciones para mostrar mensajes en modal de juguetes
     function showJugueteMessage(message, type) {
@@ -881,33 +836,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     // FUNCIONALIDAD DE JUGUETES
     // ============================================
     
-    // Cargar categorías para el select
-    async function loadCategoriasForSelect() {
-        const select = document.getElementById('jugueteCategoriaSelect');
-        select.innerHTML = '<option value="">Selecciona una categoría</option>';
-        
-        try {
-            const { data: categorias, error } = await window.supabaseClient
-                .from('categorias')
-                .select('*')
-                .eq('empresa_id', user.empresa_id)
-                .order('nombre');
-
-            if (error) throw error;
-
-            if (categorias && categorias.length > 0) {
-                categorias.forEach(categoria => {
-                    const option = document.createElement('option');
-                    option.value = categoria.id;
-                    option.textContent = categoria.nombre;
-                    select.appendChild(option);
-                });
-            }
-        } catch (error) {
-            console.error('Error al cargar categorías:', error);
-        }
-    }
-
     // Cargar ubicaciones (bodegas y tiendas) para el select
     async function loadUbicacionesForSelect() {
         const tipoSelect = document.getElementById('jugueteUbicacionTipo');
@@ -976,13 +904,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             const cantidad = parseInt(document.getElementById('jugueteCantidadInput').value);
             const ubicacionTipo = document.getElementById('jugueteUbicacionTipo').value;
             const ubicacionId = document.getElementById('jugueteUbicacionSelect').value;
-            
-            // Obtener categorías seleccionadas
-            const categoriasSeleccionadas = Array.from(document.querySelectorAll('#categoriasCheckboxes input[type="checkbox"]:checked'))
-                .map(cb => parseInt(cb.value));
+            const fotoUrl = document.getElementById('jugueteFotoInput').value.trim();
 
-            if (!nombre || !codigo || categoriasSeleccionadas.length === 0 || isNaN(cantidad) || cantidad < 0 || !ubicacionTipo || !ubicacionId) {
-                showJugueteFormMessage('Por favor, completa todos los campos y selecciona al menos una categoría', 'error');
+            if (!nombre || !codigo || isNaN(cantidad) || cantidad < 0 || !ubicacionTipo || !ubicacionId) {
+                showJugueteFormMessage('Por favor, completa todos los campos obligatorios', 'error');
                 return;
             }
 
@@ -994,6 +919,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                     empresa_id: user.empresa_id
                 };
 
+                if (fotoUrl) {
+                    jugueteData.foto_url = fotoUrl;
+                }
+
                 if (ubicacionTipo === 'bodega') {
                     jugueteData.bodega_id = ubicacionId;
                 } else if (ubicacionTipo === 'tienda') {
@@ -1001,31 +930,15 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
 
                 // Insertar juguete
-                const { data: juguete, error: jugueteError } = await window.supabaseClient
+                const { error: jugueteError } = await window.supabaseClient
                     .from('juguetes')
-                    .insert(jugueteData)
-                    .select()
-                    .single();
+                    .insert(jugueteData);
 
                 if (jugueteError) throw jugueteError;
-
-                // Agregar categorías
-                for (const categoriaId of categoriasSeleccionadas) {
-                    await window.supabaseClient
-                        .from('juguetes_categorias')
-                        .insert({
-                            juguete_id: juguete.id,
-                            categoria_id: categoriaId
-                        });
-                }
 
                 showJugueteFormMessage('Juguete agregado correctamente', 'success');
                 agregarJugueteForm.reset();
                 document.getElementById('jugueteUbicacionContainer').style.display = 'none';
-                // Recargar categorías
-                if (typeof loadCategoriasForJuguetes === 'function') {
-                    loadCategoriasForJuguetes();
-                }
             } catch (error) {
                 console.error('Error al agregar juguete:', error);
                 showJugueteFormMessage('Error al agregar el juguete: ' + error.message, 'error');
@@ -1069,7 +982,6 @@ document.addEventListener('DOMContentLoaded', async function() {
                 .from('juguetes')
                 .select(`
                     *,
-                    categorias(nombre),
                     bodegas(nombre, direccion),
                     tiendas(nombre, ubicacion)
                 `)
@@ -1092,11 +1004,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                     ? `Tienda: ${juguete.tiendas?.nombre || 'N/A'}`
                     : 'Sin ubicación';
                 const tipo = juguete.bodega_id ? 'Bodega' : juguete.tienda_id ? 'Tienda' : 'N/A';
+                const foto = juguete.foto_url 
+                    ? `<img src="${juguete.foto_url}" alt="${juguete.nombre}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">`
+                    : '<span style="color: #64748b;">Sin foto</span>';
                 
                 row.innerHTML = `
                     <td>${juguete.nombre}</td>
                     <td>${juguete.codigo}</td>
-                    <td>${juguete.categorias?.nombre || 'N/A'}</td>
+                    <td>${foto}</td>
                     <td>${juguete.cantidad}</td>
                     <td>${ubicacion}</td>
                     <td>${tipo}</td>
@@ -1117,269 +1032,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         } catch (error) {
             console.error('Error al cargar inventario:', error);
             tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #ef4444;">Error al cargar el inventario</td></tr>';
-        }
-    }
-
-    // ============================================
-    // FUNCIONALIDAD DE CATEGORÍAS
-    // ============================================
-    
-    // Toggle del acordeón "Agregar Categoría"
-    const agregarCategoriaHeader = document.getElementById('agregarCategoriaHeader');
-    const agregarCategoriaContent = document.getElementById('agregarCategoriaContent');
-    
-    agregarCategoriaHeader.addEventListener('click', function() {
-        agregarCategoriaContent.classList.toggle('active');
-        const icon = agregarCategoriaHeader.querySelector('.accordion-icon');
-        icon.classList.toggle('fa-chevron-down');
-        icon.classList.toggle('fa-chevron-up');
-    });
-
-    // Cargar categorías
-    async function loadCategorias() {
-        const categoriasList = document.getElementById('categoriasList');
-        categoriasList.innerHTML = '<p style="text-align: center; color: #64748b;">Cargando categorías...</p>';
-        
-        try {
-            const { data: categorias, error } = await window.supabaseClient
-                .from('categorias')
-                .select('*')
-                .eq('empresa_id', user.empresa_id)
-                .order('nombre');
-
-            if (error) throw error;
-
-            if (!categorias || categorias.length === 0) {
-                categoriasList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay categorías registradas. Agrega una nueva categoría.</p>';
-                return;
-            }
-
-            categoriasList.innerHTML = '';
-            categorias.forEach(categoria => {
-                const categoriaCard = createCategoriaCard(categoria);
-                categoriasList.appendChild(categoriaCard);
-            });
-        } catch (error) {
-            console.error('Error al cargar categorías:', error);
-            categoriasList.innerHTML = '<p style="text-align: center; color: #ef4444;">Error al cargar las categorías</p>';
-        }
-    }
-
-    // Crear tarjeta de categoría
-    function createCategoriaCard(categoria) {
-        const card = document.createElement('div');
-        card.className = 'bodega-card';
-        card.innerHTML = `
-            <div class="bodega-info">
-                <h3>${categoria.nombre}</h3>
-            </div>
-            <div class="bodega-actions">
-                <button class="menu-toggle" data-categoria-id="${categoria.id}">
-                    <i class="fas fa-ellipsis-v"></i>
-                </button>
-                <div class="dropdown-menu" id="menu-cat-${categoria.id}" style="display: none;">
-                    <button class="dropdown-item" data-action="edit" data-categoria-id="${categoria.id}">
-                        <i class="fas fa-edit"></i> Actualizar
-                    </button>
-                    <button class="dropdown-item danger" data-action="delete" data-categoria-id="${categoria.id}">
-                        <i class="fas fa-trash"></i> Eliminar
-                    </button>
-                </div>
-            </div>
-        `;
-        return card;
-    }
-
-    // Manejar clicks en el menú de categorías
-    document.addEventListener('click', function(e) {
-        if (e.target.closest('.menu-toggle[data-categoria-id]')) {
-            const menuToggle = e.target.closest('.menu-toggle');
-            const categoriaId = menuToggle.getAttribute('data-categoria-id');
-            const menu = document.getElementById(`menu-cat-${categoriaId}`);
-            
-            document.querySelectorAll('.dropdown-menu').forEach(m => {
-                if (m.id !== `menu-cat-${categoriaId}`) {
-                    m.style.display = 'none';
-                }
-            });
-            
-            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-        }
-        
-        if (e.target.closest('.dropdown-item[data-categoria-id]')) {
-            const item = e.target.closest('.dropdown-item');
-            const action = item.getAttribute('data-action');
-            const categoriaId = item.getAttribute('data-categoria-id');
-            
-            document.querySelectorAll('.dropdown-menu').forEach(m => {
-                m.style.display = 'none';
-            });
-            
-            if (action === 'edit') {
-                openEditCategoriaModal(categoriaId);
-            } else if (action === 'delete') {
-                deleteCategoria(categoriaId);
-            }
-        }
-    });
-
-    // Formulario para agregar categoría
-    const nuevaCategoriaForm = document.getElementById('nuevaCategoriaForm');
-    nuevaCategoriaForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const nombre = document.getElementById('categoriaNombre').value.trim();
-        
-        if (!nombre) {
-            showCategoriaMessage('Por favor, ingresa un nombre', 'error');
-            return;
-        }
-
-        try {
-            const { error } = await window.supabaseClient
-                .from('categorias')
-                .insert({
-                    nombre: nombre,
-                    empresa_id: user.empresa_id
-                });
-
-            if (error) throw error;
-
-            showCategoriaMessage('Categoría agregada correctamente', 'success');
-            nuevaCategoriaForm.reset();
-            loadCategorias();
-        } catch (error) {
-            console.error('Error al agregar categoría:', error);
-            showCategoriaMessage('Error al agregar la categoría: ' + error.message, 'error');
-        }
-    });
-
-    function showCategoriaMessage(message, type) {
-        const errorMsg = document.getElementById('categoriaErrorMessage');
-        const successMsg = document.getElementById('categoriaSuccessMessage');
-        
-        errorMsg.style.display = 'none';
-        successMsg.style.display = 'none';
-        
-        if (type === 'error') {
-            errorMsg.textContent = message;
-            errorMsg.style.display = 'flex';
-        } else {
-            successMsg.textContent = message;
-            successMsg.style.display = 'flex';
-        }
-        
-        setTimeout(() => {
-            errorMsg.style.display = 'none';
-            successMsg.style.display = 'none';
-        }, 5000);
-    }
-
-    // Abrir modal para editar categoría
-    async function openEditCategoriaModal(categoriaId) {
-        try {
-            const { data: categoria, error } = await window.supabaseClient
-                .from('categorias')
-                .select('*')
-                .eq('id', categoriaId)
-                .single();
-
-            if (error) throw error;
-
-            document.getElementById('editCategoriaNombre').value = categoria.nombre;
-            currentCategoriaId = categoriaId;
-            
-            const modal = document.getElementById('editCategoriaModal');
-            modal.style.display = 'flex';
-        } catch (error) {
-            console.error('Error al cargar categoría:', error);
-            alert('Error al cargar los datos de la categoría');
-        }
-    }
-
-    // Formulario para editar categoría
-    const editCategoriaForm = document.getElementById('editCategoriaForm');
-    editCategoriaForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const nombre = document.getElementById('editCategoriaNombre').value.trim();
-        
-        if (!nombre) {
-            showEditCategoriaMessage('Por favor, ingresa un nombre', 'error');
-            return;
-        }
-
-        try {
-            const { error } = await window.supabaseClient
-                .from('categorias')
-                .update({ nombre: nombre })
-                .eq('id', currentCategoriaId);
-
-            if (error) throw error;
-
-            showEditCategoriaMessage('Categoría actualizada correctamente', 'success');
-            setTimeout(() => {
-                closeEditCategoriaModal();
-                loadCategorias();
-            }, 1500);
-        } catch (error) {
-            console.error('Error al actualizar categoría:', error);
-            showEditCategoriaMessage('Error al actualizar la categoría: ' + error.message, 'error');
-        }
-    });
-
-    function showEditCategoriaMessage(message, type) {
-        const errorMsg = document.getElementById('editCategoriaErrorMessage');
-        const successMsg = document.getElementById('editCategoriaSuccessMessage');
-        
-        errorMsg.style.display = 'none';
-        successMsg.style.display = 'none';
-        
-        if (type === 'error') {
-            errorMsg.textContent = message;
-            errorMsg.style.display = 'flex';
-        } else {
-            successMsg.textContent = message;
-            successMsg.style.display = 'flex';
-        }
-    }
-
-    function closeEditCategoriaModal() {
-        const modal = document.getElementById('editCategoriaModal');
-        modal.style.display = 'none';
-        editCategoriaForm.reset();
-        document.getElementById('editCategoriaErrorMessage').style.display = 'none';
-        document.getElementById('editCategoriaSuccessMessage').style.display = 'none';
-        currentCategoriaId = null;
-    }
-
-    document.getElementById('closeEditCategoriaModal').addEventListener('click', closeEditCategoriaModal);
-    document.getElementById('cancelEditCategoriaBtn').addEventListener('click', closeEditCategoriaModal);
-    document.getElementById('editCategoriaModal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeEditCategoriaModal();
-        }
-    });
-
-    // Eliminar categoría
-    async function deleteCategoria(categoriaId) {
-        if (!confirm('¿Estás seguro de que deseas eliminar esta categoría? Esta acción no se puede deshacer.')) {
-            return;
-        }
-
-        try {
-            const { error } = await window.supabaseClient
-                .from('categorias')
-                .delete()
-                .eq('id', categoriaId);
-
-            if (error) throw error;
-
-            alert('Categoría eliminada correctamente');
-            loadCategorias();
-        } catch (error) {
-            console.error('Error al eliminar categoría:', error);
-            alert('Error al eliminar la categoría: ' + error.message);
         }
     }
 

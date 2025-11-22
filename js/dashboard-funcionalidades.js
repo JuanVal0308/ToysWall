@@ -496,102 +496,8 @@ function showFacturaMessage(message, type) {
 }
 
 // ============================================
-// JUGUETES - MÚLTIPLES CATEGORÍAS
+// JUGUETES - CON FOTO
 // ============================================
-
-async function loadCategoriasForJuguetes() {
-    const container = document.getElementById('categoriasCheckboxes');
-    if (!container) return;
-    
-    try {
-        const user = JSON.parse(sessionStorage.getItem('user'));
-        const { data: categorias, error } = await window.supabaseClient
-            .from('categorias')
-            .select('*')
-            .eq('empresa_id', user.empresa_id)
-            .order('nombre');
-
-        if (error) throw error;
-
-        container.innerHTML = '';
-        if (categorias && categorias.length > 0) {
-            categorias.forEach(categoria => {
-                const checkbox = document.createElement('div');
-                checkbox.className = 'checkbox-item';
-                checkbox.innerHTML = `
-                    <input type="checkbox" id="cat-${categoria.id}" value="${categoria.id}" name="categorias[]">
-                    <label for="cat-${categoria.id}">${categoria.nombre}</label>
-                `;
-                container.appendChild(checkbox);
-            });
-        }
-    } catch (error) {
-        console.error('Error al cargar categorías:', error);
-    }
-}
-
-// Actualizar formulario de juguetes para múltiples categorías
-const agregarJugueteForm = document.getElementById('agregarJugueteForm');
-if (agregarJugueteForm) {
-    agregarJugueteForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const nombre = document.getElementById('jugueteNombreInput').value.trim();
-        const codigo = document.getElementById('jugueteCodigoInput').value.trim();
-        const cantidad = parseInt(document.getElementById('jugueteCantidadInput').value);
-        const ubicacionTipo = document.getElementById('jugueteUbicacionTipo').value;
-        const ubicacionId = document.getElementById('jugueteUbicacionSelect').value;
-        const categoriasSeleccionadas = Array.from(document.querySelectorAll('#categoriasCheckboxes input[type="checkbox"]:checked'))
-            .map(cb => parseInt(cb.value));
-
-        if (!nombre || !codigo || isNaN(cantidad) || cantidad < 0 || !ubicacionTipo || !ubicacionId || categoriasSeleccionadas.length === 0) {
-            showJugueteFormMessage('Por favor, completa todos los campos y selecciona al menos una categoría', 'error');
-            return;
-        }
-
-        try {
-            const user = JSON.parse(sessionStorage.getItem('user'));
-            const jugueteData = {
-                nombre: nombre,
-                codigo: codigo,
-                cantidad: cantidad,
-                empresa_id: user.empresa_id
-            };
-
-            if (ubicacionTipo === 'bodega') {
-                jugueteData.bodega_id = ubicacionId;
-            } else if (ubicacionTipo === 'tienda') {
-                jugueteData.tienda_id = ubicacionId;
-            }
-
-            const { data: juguete, error: jugueteError } = await window.supabaseClient
-                .from('juguetes')
-                .insert(jugueteData)
-                .select()
-                .single();
-
-            if (jugueteError) throw jugueteError;
-
-            // Agregar categorías
-            for (const categoriaId of categoriasSeleccionadas) {
-                await window.supabaseClient
-                    .from('juguetes_categorias')
-                    .insert({
-                        juguete_id: juguete.id,
-                        categoria_id: categoriaId
-                    });
-            }
-
-            showJugueteFormMessage('Juguete agregado correctamente', 'success');
-            agregarJugueteForm.reset();
-            document.getElementById('jugueteUbicacionContainer').style.display = 'none';
-            loadCategoriasForJuguetes();
-        } catch (error) {
-            console.error('Error al agregar juguete:', error);
-            showJugueteFormMessage('Error al agregar el juguete: ' + error.message, 'error');
-        }
-    });
-}
 
 // ============================================
 // TIENDAS - CON EMPLEADOS Y JUGUETES
@@ -1113,13 +1019,11 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function() {
         initRegistrarVenta();
         initFacturar();
-        loadCategoriasForJuguetes();
         loadTiendasForEmpleados();
     });
 } else {
     initRegistrarVenta();
     initFacturar();
-    loadCategoriasForJuguetes();
     loadTiendasForEmpleados();
 }
 
@@ -1925,7 +1829,6 @@ window.loadTiendas = loadTiendas;
 window.loadUsuarios = loadUsuarios;
 window.loadAnalisis = loadAnalisis;
 window.initAbastecer = initAbastecer;
-window.loadCategoriasForJuguetes = loadCategoriasForJuguetes;
 window.loadTiendasForEmpleados = loadTiendasForEmpleados;
 window.aplicarFiltroVentas = aplicarFiltroVentas;
 window.aplicarFiltroGanancias = aplicarFiltroGanancias;
