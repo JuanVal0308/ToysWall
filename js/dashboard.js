@@ -794,6 +794,20 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
 
             try {
+                // Primero verificar si existe un juguete con el mismo código pero diferente nombre
+                const { data: jugueteConMismoCodigo } = await window.supabaseClient
+                    .from('juguetes')
+                    .select('nombre')
+                    .eq('codigo', codigo)
+                    .eq('empresa_id', user.empresa_id)
+                    .neq('nombre', nombre)
+                    .limit(1);
+                
+                if (jugueteConMismoCodigo && jugueteConMismoCodigo.length > 0) {
+                    showJugueteMessage(`Error: El código "${codigo}" ya está asignado a otro juguete con nombre diferente. El código debe ser único por tipo de juguete.`, 'error');
+                    return;
+                }
+                
                 // Verificar si ya existe un juguete con el mismo código Y nombre en la misma bodega
                 const { data: jugueteExistenteData } = await window.supabaseClient
                     .from('juguetes')
@@ -983,6 +997,20 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             try {
                 const campoUbicacion = ubicacionTipo === 'bodega' ? 'bodega_id' : 'tienda_id';
+                
+                // Primero verificar si existe un juguete con el mismo código pero diferente nombre
+                const { data: jugueteConMismoCodigo } = await window.supabaseClient
+                    .from('juguetes')
+                    .select('nombre')
+                    .eq('codigo', codigo)
+                    .eq('empresa_id', user.empresa_id)
+                    .neq('nombre', nombre)
+                    .limit(1);
+                
+                if (jugueteConMismoCodigo && jugueteConMismoCodigo.length > 0) {
+                    showJugueteFormMessage(`Error: El código "${codigo}" ya está asignado a otro juguete con nombre diferente. El código debe ser único por tipo de juguete.`, 'error');
+                    return;
+                }
                 
                 // Verificar si ya existe un juguete con el mismo código Y nombre en la misma ubicación
                 const { data: jugueteExistenteData } = await window.supabaseClient
