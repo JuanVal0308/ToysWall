@@ -1020,11 +1020,102 @@ if (document.readyState === 'loading') {
         initRegistrarVenta();
         initFacturar();
         loadTiendasForEmpleados();
+        // Asegurar que los formularios de usuarios y tiendas tengan listeners
+        setupUsuarioForm();
+        setupTiendaForm();
     });
 } else {
     initRegistrarVenta();
     initFacturar();
     loadTiendasForEmpleados();
+    setupUsuarioForm();
+    setupTiendaForm();
+}
+
+// Función para configurar formulario de usuarios
+function setupUsuarioForm() {
+    const nuevoUsuarioForm = document.getElementById('nuevoUsuarioForm');
+    if (nuevoUsuarioForm && !nuevoUsuarioForm.hasAttribute('data-listener-added')) {
+        nuevoUsuarioForm.setAttribute('data-listener-added', 'true');
+        nuevoUsuarioForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const nombre = document.getElementById('usuarioNombre').value.trim();
+            const email = document.getElementById('usuarioEmail').value.trim();
+            const password = document.getElementById('usuarioPassword').value;
+            const tipoUsuarioId = parseInt(document.getElementById('usuarioTipo').value);
+            
+            if (!nombre || !email || !password || !tipoUsuarioId) {
+                showUsuarioMessage('Por favor, completa todos los campos', 'error');
+                return;
+            }
+
+            try {
+                const user = JSON.parse(sessionStorage.getItem('user'));
+                const { error } = await window.supabaseClient
+                    .from('usuarios')
+                    .insert({
+                        nombre: nombre,
+                        email: email,
+                        password: password,
+                        tipo_usuario_id: tipoUsuarioId,
+                        empresa_id: user.empresa_id
+                    });
+
+                if (error) throw error;
+
+                showUsuarioMessage('Usuario agregado correctamente', 'success');
+                nuevoUsuarioForm.reset();
+                if (typeof loadUsuarios === 'function') {
+                    loadUsuarios();
+                }
+            } catch (error) {
+                console.error('Error al agregar usuario:', error);
+                showUsuarioMessage('Error al agregar el usuario: ' + error.message, 'error');
+            }
+        });
+    }
+}
+
+// Función para configurar formulario de tiendas
+function setupTiendaForm() {
+    const nuevaTiendaForm = document.getElementById('nuevaTiendaForm');
+    if (nuevaTiendaForm && !nuevaTiendaForm.hasAttribute('data-listener-added')) {
+        nuevaTiendaForm.setAttribute('data-listener-added', 'true');
+        nuevaTiendaForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const nombre = document.getElementById('tiendaNombre').value.trim();
+            const direccion = document.getElementById('tiendaDireccion').value.trim();
+            
+            if (!nombre || !direccion) {
+                showTiendaMessage('Por favor, completa todos los campos', 'error');
+                return;
+            }
+
+            try {
+                const user = JSON.parse(sessionStorage.getItem('user'));
+                const { error } = await window.supabaseClient
+                    .from('tiendas')
+                    .insert({
+                        nombre: nombre,
+                        direccion: direccion,
+                        empresa_id: user.empresa_id
+                    });
+
+                if (error) throw error;
+
+                showTiendaMessage('Tienda agregada correctamente', 'success');
+                nuevaTiendaForm.reset();
+                if (typeof loadTiendas === 'function') {
+                    loadTiendas();
+                }
+            } catch (error) {
+                console.error('Error al agregar tienda:', error);
+                showTiendaMessage('Error al agregar la tienda: ' + error.message, 'error');
+            }
+        });
+    }
 }
 
 // ============================================
@@ -1127,45 +1218,7 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// Formulario para agregar usuario
-const nuevoUsuarioForm = document.getElementById('nuevoUsuarioForm');
-if (nuevoUsuarioForm) {
-    nuevoUsuarioForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const nombre = document.getElementById('usuarioNombre').value.trim();
-        const email = document.getElementById('usuarioEmail').value.trim();
-        const password = document.getElementById('usuarioPassword').value;
-        const tipoUsuarioId = parseInt(document.getElementById('usuarioTipo').value);
-        
-        if (!nombre || !email || !password || !tipoUsuarioId) {
-            showUsuarioMessage('Por favor, completa todos los campos', 'error');
-            return;
-        }
-
-        try {
-            const user = JSON.parse(sessionStorage.getItem('user'));
-            const { error } = await window.supabaseClient
-                .from('usuarios')
-                .insert({
-                    nombre: nombre,
-                    email: email,
-                    password: password,
-                    tipo_usuario_id: tipoUsuarioId,
-                    empresa_id: user.empresa_id
-                });
-
-            if (error) throw error;
-
-            showUsuarioMessage('Usuario agregado correctamente', 'success');
-            nuevoUsuarioForm.reset();
-            loadUsuarios();
-        } catch (error) {
-            console.error('Error al agregar usuario:', error);
-            showUsuarioMessage('Error al agregar el usuario: ' + error.message, 'error');
-        }
-    });
-}
+// Formulario para agregar usuario (se configura en setupUsuarioForm)
 
 function showUsuarioMessage(message, type) {
     const errorMsg = document.getElementById('usuarioErrorMessage');
@@ -1347,41 +1400,7 @@ if (agregarTiendaHeader && agregarTiendaContent) {
     });
 }
 
-// Formulario para agregar tienda
-const nuevaTiendaForm = document.getElementById('nuevaTiendaForm');
-if (nuevaTiendaForm) {
-    nuevaTiendaForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const nombre = document.getElementById('tiendaNombre').value.trim();
-        const direccion = document.getElementById('tiendaDireccion').value.trim();
-        
-        if (!nombre || !direccion) {
-            showTiendaMessage('Por favor, completa todos los campos', 'error');
-            return;
-        }
-
-        try {
-            const user = JSON.parse(sessionStorage.getItem('user'));
-            const { error } = await window.supabaseClient
-                .from('tiendas')
-                .insert({
-                    nombre: nombre,
-                    direccion: direccion,
-                    empresa_id: user.empresa_id
-                });
-
-            if (error) throw error;
-
-            showTiendaMessage('Tienda agregada correctamente', 'success');
-            nuevaTiendaForm.reset();
-            loadTiendas();
-        } catch (error) {
-            console.error('Error al agregar tienda:', error);
-            showTiendaMessage('Error al agregar la tienda: ' + error.message, 'error');
-        }
-    });
-}
+// Formulario para agregar tienda (se configura en setupTiendaForm)
 
 function showTiendaMessage(message, type) {
     const errorMsg = document.getElementById('tiendaErrorMessage');
@@ -1662,39 +1681,24 @@ function initAbastecer() {
                     .update({ cantidad: jugueteActual.cantidad - juguete.cantidad })
                     .eq('id', juguete.id);
 
-                // Verificar si ya existe en destino
-                const campoDestino = destinoTipoVal === 'bodega' ? 'bodega_id' : 'tienda_id';
-                const { data: jugueteDestino } = await window.supabaseClient
-                    .from('juguetes')
-                    .select('*')
-                    .eq('id', juguete.id)
-                    .eq(campoDestino, destinoId)
-                    .single();
-
-                if (jugueteDestino) {
-                    // Actualizar cantidad en destino
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .update({ cantidad: jugueteDestino.cantidad + juguete.cantidad })
-                        .eq('id', juguete.id)
-                        .eq(campoDestino, destinoId);
+                // Actualizar ubicación del juguete (mover a destino)
+                const updateData = {
+                    cantidad: jugueteActual.cantidad - juguete.cantidad
+                };
+                
+                if (destinoTipoVal === 'bodega') {
+                    updateData.bodega_id = destinoId;
+                    updateData.tienda_id = null;
                 } else {
-                    // Crear nuevo registro en destino
-                    const nuevoJuguete = {
-                        nombre: jugueteActual.nombre,
-                        codigo: jugueteActual.codigo,
-                        cantidad: juguete.cantidad,
-                        empresa_id: user.empresa_id
-                    };
-                    if (destinoTipoVal === 'bodega') {
-                        nuevoJuguete.bodega_id = destinoId;
-                    } else {
-                        nuevoJuguete.tienda_id = destinoId;
-                    }
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .insert(nuevoJuguete);
+                    updateData.tienda_id = destinoId;
+                    updateData.bodega_id = null;
                 }
+                
+                // Actualizar el juguete existente (moverlo a destino)
+                await window.supabaseClient
+                    .from('juguetes')
+                    .update(updateData)
+                    .eq('id', juguete.id);
             }
 
             showAbastecerMessage('Movimiento realizado correctamente', 'success');
@@ -1832,4 +1836,6 @@ window.initAbastecer = initAbastecer;
 window.loadTiendasForEmpleados = loadTiendasForEmpleados;
 window.aplicarFiltroVentas = aplicarFiltroVentas;
 window.aplicarFiltroGanancias = aplicarFiltroGanancias;
+window.setupUsuarioForm = setupUsuarioForm;
+window.setupTiendaForm = setupTiendaForm;
 

@@ -34,6 +34,10 @@
         <!-- Sidebar -->
         <aside class="dashboard-sidebar">
             <nav class="sidebar-nav">
+                <button class="sidebar-btn dashboard-home-btn" data-page="default" style="font-size: 0.9em; padding: 8px 12px;">
+                    <i class="fas fa-home"></i>
+                    <span>Dashboard</span>
+                </button>
                 <button class="sidebar-btn" data-page="venta">
                     <i class="fas fa-cash-register"></i>
                     <span>Registrar Venta</span>
@@ -420,6 +424,19 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                    <div class="inventario-summary" style="margin-top: 30px; padding: 20px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                        <h3 style="margin-bottom: 15px; color: #1e293b;">Resumen del Inventario</h3>
+                        <div class="summary-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div class="stat-box" style="background: white; padding: 15px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                <div style="font-size: 24px; font-weight: bold; color: #3b82f6;" id="totalJuguetesInventario">0</div>
+                                <div style="color: #64748b; font-size: 14px; margin-top: 5px;">Total Juguetes</div>
+                            </div>
+                            <div class="stat-box" style="background: white; padding: 15px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                <div style="font-size: 24px; font-weight: bold; color: #10b981;" id="juguetesSinVender">0</div>
+                                <div style="color: #64748b; font-size: 14px; margin-top: 5px;">Sin Vender</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

@@ -413,6 +413,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                     if (typeof loadUsuarios === 'function') {
                         loadUsuarios();
                     }
+                    if (typeof setupUsuarioForm === 'function') {
+                        setupUsuarioForm();
+                    }
                 }
                 break;
             case 'abastecer':
@@ -861,60 +864,67 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ============================================
     
     // Cargar ubicaciones (bodegas y tiendas) para el select
+    let ubicacionListenerAdded = false;
     async function loadUbicacionesForSelect() {
         const tipoSelect = document.getElementById('jugueteUbicacionTipo');
         const ubicacionSelect = document.getElementById('jugueteUbicacionSelect');
         const container = document.getElementById('jugueteUbicacionContainer');
 
-        tipoSelect.addEventListener('change', async function() {
-            const tipo = this.value;
-            ubicacionSelect.innerHTML = '<option value="">Selecciona una ubicación</option>';
-            
-            if (!tipo) {
-                container.style.display = 'none';
-                return;
-            }
+        if (!tipoSelect || !ubicacionSelect || !container) return;
 
-            container.style.display = 'block';
-
-            try {
-                if (tipo === 'bodega') {
-                    const { data: bodegas, error } = await window.supabaseClient
-                        .from('bodegas')
-                        .select('*')
-                        .eq('empresa_id', user.empresa_id)
-                        .order('nombre');
-
-                    if (error) throw error;
-                    if (bodegas) {
-                        bodegas.forEach(bodega => {
-                            const option = document.createElement('option');
-                            option.value = bodega.id;
-                            option.textContent = bodega.nombre;
-                            ubicacionSelect.appendChild(option);
-                        });
-                    }
-                } else if (tipo === 'tienda') {
-                    const { data: tiendas, error } = await window.supabaseClient
-                        .from('tiendas')
-                        .select('*')
-                        .eq('empresa_id', user.empresa_id)
-                        .order('nombre');
-
-                    if (error) throw error;
-                    if (tiendas) {
-                        tiendas.forEach(tienda => {
-                            const option = document.createElement('option');
-                            option.value = tienda.id;
-                            option.textContent = tienda.nombre;
-                            ubicacionSelect.appendChild(option);
-                        });
-                    }
+        // Solo agregar el listener una vez
+        if (!ubicacionListenerAdded) {
+            tipoSelect.addEventListener('change', async function() {
+                const tipo = this.value;
+                ubicacionSelect.innerHTML = '<option value="">Selecciona una ubicación</option>';
+                
+                if (!tipo) {
+                    container.style.display = 'none';
+                    return;
                 }
-            } catch (error) {
-                console.error('Error al cargar ubicaciones:', error);
-            }
-        });
+
+                container.style.display = 'block';
+
+                try {
+                    if (tipo === 'bodega') {
+                        const { data: bodegas, error } = await window.supabaseClient
+                            .from('bodegas')
+                            .select('*')
+                            .eq('empresa_id', user.empresa_id)
+                            .order('nombre');
+
+                        if (error) throw error;
+                        if (bodegas && bodegas.length > 0) {
+                            bodegas.forEach(bodega => {
+                                const option = document.createElement('option');
+                                option.value = bodega.id;
+                                option.textContent = bodega.nombre;
+                                ubicacionSelect.appendChild(option);
+                            });
+                        }
+                    } else if (tipo === 'tienda') {
+                        const { data: tiendas, error } = await window.supabaseClient
+                            .from('tiendas')
+                            .select('*')
+                            .eq('empresa_id', user.empresa_id)
+                            .order('nombre');
+
+                        if (error) throw error;
+                        if (tiendas && tiendas.length > 0) {
+                            tiendas.forEach(tienda => {
+                                const option = document.createElement('option');
+                                option.value = tienda.id;
+                                option.textContent = tienda.nombre;
+                                ubicacionSelect.appendChild(option);
+                            });
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error al cargar ubicaciones:', error);
+                }
+            });
+            ubicacionListenerAdded = true;
+        }
     }
 
     // Formulario para agregar juguete
@@ -1019,8 +1029,27 @@ document.addEventListener('DOMContentLoaded', async function() {
                 return;
             }
 
-            tbody.innerHTML = '';
+            // Filtrar juguetes únicos por código (evitar duplicados)
+            const juguetesUnicos = new Map();
             juguetes.forEach(juguete => {
+                const key = juguete.codigo;
+                if (!juguetesUnicos.has(key) || juguetesUnicos.get(key).cantidad < juguete.cantidad) {
+                    juguetesUnicos.set(key, juguete);
+                }
+            });
+
+            const juguetesFiltrados = Array.from(juguetesUnicos.values());
+            
+            // Calcular totales
+            const totalJuguetes = juguetesFiltrados.reduce((sum, j) => sum + j.cantidad, 0);
+            const juguetesSinVender = juguetesFiltrados.filter(j => j.cantidad > 0).reduce((sum, j) => sum + j.cantidad, 0);
+            
+            // Actualizar resumen
+            document.getElementById('totalJuguetesInventario').textContent = totalJuguetes;
+            document.getElementById('juguetesSinVender').textContent = juguetesSinVender;
+
+            tbody.innerHTML = '';
+            juguetesFiltrados.forEach(juguete => {
                 const row = document.createElement('tr');
                 const ubicacion = juguete.bodega_id 
                     ? `Bodega: ${juguete.bodegas?.nombre || 'N/A'}`
