@@ -549,13 +549,16 @@ async function loadTiendas() {
 function createTiendaCard(tienda) {
     const card = document.createElement('div');
     card.className = 'bodega-card';
+    const direccion = tienda.direccion || tienda.ubicacion || 'Sin dirección';
+    const empleadosCount = tienda.empleados?.length || 0;
+    const juguetesCount = tienda.juguetes?.length || 0;
     card.innerHTML = `
         <div class="bodega-info">
             <h3>${tienda.nombre}</h3>
-            <p><i class="fas fa-map-marker-alt"></i> ${tienda.direccion}</p>
+            <p><i class="fas fa-map-marker-alt"></i> ${direccion}</p>
             <div class="tienda-stats">
-                <span><i class="fas fa-user-tie"></i> ${tienda.empleados.length} Empleados</span>
-                <span><i class="fas fa-boxes"></i> ${tienda.juguetes.length} Juguetes</span>
+                <span><i class="fas fa-user-tie"></i> ${empleadosCount} Empleados</span>
+                <span><i class="fas fa-boxes"></i> ${juguetesCount} Juguetes</span>
             </div>
         </div>
         <div class="bodega-actions">

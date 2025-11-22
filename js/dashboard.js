@@ -396,6 +396,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                     if (typeof loadTiendas === 'function') {
                         loadTiendas();
                     }
+                    if (typeof setupTiendaForm === 'function') {
+                        setupTiendaForm();
+                    }
                 }
                 break;
             case 'empleados':
