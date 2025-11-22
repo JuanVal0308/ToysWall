@@ -543,7 +543,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (e.target.closest('.menu-toggle')) {
             const menuToggle = e.target.closest('.menu-toggle');
             const bodegaId = menuToggle.getAttribute('data-bodega-id');
+            if (!bodegaId) return;
+            
             const menu = document.getElementById(`menu-${bodegaId}`);
+            if (!menu) return;
             
             // Cerrar todos los demás menús
             document.querySelectorAll('.dropdown-menu').forEach(m => {

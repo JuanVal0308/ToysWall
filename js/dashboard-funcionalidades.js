@@ -154,68 +154,94 @@ function initRegistrarVenta() {
     agregarItemBtn.addEventListener('click', async function() {
         const jugueteCodigo = jugueteCodigoInput.value.trim();
         const empleadoCodigo = empleadoCodigoInput.value.trim();
+        const cantidad = parseInt(document.getElementById('ventaCantidad')?.value || 1);
         const precio = parseFloat(document.getElementById('ventaPrecio').value);
         const metodoPago = document.getElementById('ventaMetodoPago').value;
 
-        if (!jugueteCodigo || !empleadoCodigo || !precio || !metodoPago) {
-            showVentaMessage('Por favor, completa todos los campos', 'error');
+        if (!jugueteCodigo || !empleadoCodigo || !precio || !metodoPago || cantidad < 1) {
+            showVentaMessage('Por favor, completa todos los campos correctamente', 'error');
             return;
         }
 
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
             
-            // Verificar juguete
-            const { data: juguetes } = await window.supabaseClient
+            // Verificar juguete (usar limit en lugar de single para evitar error 406)
+            const { data: juguetesData, error: jugueteError } = await window.supabaseClient
                 .from('juguetes')
                 .select('*')
                 .eq('codigo', jugueteCodigo)
                 .eq('empresa_id', user.empresa_id)
-                .single();
+                .limit(1);
 
-            if (!juguetes) {
+            if (jugueteError) {
+                console.error('Error al buscar juguete:', jugueteError);
+                showVentaMessage('Error al buscar juguete: ' + jugueteError.message, 'error');
+                return;
+            }
+
+            if (!juguetesData || juguetesData.length === 0) {
                 showVentaMessage('Juguete no encontrado', 'error');
                 return;
             }
 
-            // Verificar empleado
-            const { data: empleados } = await window.supabaseClient
+            const juguete = juguetesData[0];
+
+            // Verificar que haya suficiente cantidad
+            if (juguete.cantidad < cantidad) {
+                showVentaMessage(`No hay suficiente cantidad. Disponible: ${juguete.cantidad}`, 'error');
+                return;
+            }
+
+            // Verificar empleado (usar limit en lugar de single)
+            const { data: empleadosData, error: empleadoError } = await window.supabaseClient
                 .from('empleados')
                 .select('*')
                 .eq('codigo', empleadoCodigo)
                 .eq('empresa_id', user.empresa_id)
-                .single();
+                .limit(1);
 
-            if (!empleados) {
+            if (empleadoError) {
+                console.error('Error al buscar empleado:', empleadoError);
+                showVentaMessage('Error al buscar empleado: ' + empleadoError.message, 'error');
+                return;
+            }
+
+            if (!empleadosData || empleadosData.length === 0) {
                 showVentaMessage('Empleado no encontrado', 'error');
                 return;
             }
 
+            const empleado = empleadosData[0];
+
             // Agregar item
             ventaItems.push({
-                juguete_id: juguetes.id,
-                juguete_nombre: juguetes.nombre,
-                juguete_codigo: juguetes.codigo,
-                empleado_id: empleados.id,
-                empleado_nombre: empleados.nombre,
-                empleado_codigo: empleados.codigo,
+                juguete_id: juguete.id,
+                juguete_nombre: juguete.nombre,
+                juguete_codigo: juguete.codigo,
+                empleado_id: empleado.id,
+                empleado_nombre: empleado.nombre,
+                empleado_codigo: empleado.codigo,
+                cantidad: cantidad,
                 precio: precio,
                 metodo_pago: metodoPago
             });
 
-            if (typeof updateVentaItemsList === 'function') {
-                updateVentaItemsList();
-            }
+            // Actualizar lista de items
+            updateVentaItemsList();
             
             // Limpiar campos
             jugueteCodigoInput.value = '';
+            empleadoCodigoInput.value = '';
+            document.getElementById('ventaCantidad').value = '1';
             document.getElementById('ventaPrecio').value = '';
-            document.getElementById('jugueteInfo').style.display = 'none';
-            document.getElementById('empleadoInfo').style.display = 'none';
+            document.getElementById('ventaMetodoPago').value = '';
+            const jugueteInfo = document.getElementById('jugueteInfo');
+            const empleadoInfo = document.getElementById('empleadoInfo');
+            if (jugueteInfo) jugueteInfo.style.display = 'none';
+            if (empleadoInfo) empleadoInfo.style.display = 'none';
 
-            if (ventaItems.length > 0) {
-                facturarBtn.style.display = 'inline-block';
-            }
+            showVentaMessage('Item agregado correctamente', 'success');
         } catch (error) {
             console.error('Error al agregar item:', error);
             showVentaMessage('Error al agregar item: ' + error.message, 'error');
@@ -238,14 +264,29 @@ function initRegistrarVenta() {
             // Registrar cada item como venta
             for (const item of ventaItems) {
                 const codigoVenta = await generarCodigoVenta();
+                const cantidad = item.cantidad || 1;
                 
+                // Obtener juguete actual para verificar cantidad
+                const { data: juguete, error: jugueteError } = await window.supabaseClient
+                    .from('juguetes')
+                    .select('cantidad')
+                    .eq('id', item.juguete_id)
+                    .limit(1);
+
+                if (jugueteError) throw jugueteError;
+                if (!juguete || juguete.length === 0 || juguete[0].cantidad < cantidad) {
+                    throw new Error(`No hay suficiente cantidad del juguete ${item.juguete_nombre}`);
+                }
+
+                // Registrar venta
                 const { error } = await window.supabaseClient
                     .from('ventas')
                     .insert({
                         codigo_venta: codigoVenta,
                         juguete_id: item.juguete_id,
                         empleado_id: item.empleado_id,
-                        precio_venta: item.precio,
+                        precio_venta: item.precio * cantidad,
+                        cantidad: cantidad,
                         metodo_pago: item.metodo_pago,
                         empresa_id: user.empresa_id
                     });
@@ -253,18 +294,10 @@ function initRegistrarVenta() {
                 if (error) throw error;
 
                 // Reducir cantidad del juguete
-                const { data: juguete } = await window.supabaseClient
+                await window.supabaseClient
                     .from('juguetes')
-                    .select('cantidad')
-                    .eq('id', item.juguete_id)
-                    .single();
-
-                if (juguete && juguete.cantidad > 0) {
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .update({ cantidad: juguete.cantidad - 1 })
-                        .eq('id', item.juguete_id);
-                }
+                    .update({ cantidad: juguete[0].cantidad - cantidad })
+                    .eq('id', item.juguete_id);
             }
 
             showVentaMessage('Venta registrada correctamente', 'success');
@@ -305,10 +338,12 @@ window.removeVentaItem = function(index) {
 // Función para actualizar lista de items (debe ser global)
 window.updateVentaItemsList = function() {
     const itemsList = document.getElementById('ventaItemsList');
+    const facturarBtn = document.getElementById('facturarBtn');
     if (!itemsList) return;
     
     if (ventaItems.length === 0) {
         itemsList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay items agregados</p>';
+        if (facturarBtn) facturarBtn.style.display = 'none';
         return;
     }
 
@@ -316,16 +351,21 @@ window.updateVentaItemsList = function() {
         <div class="venta-item-card">
             <div class="item-info">
                 <strong>${item.juguete_nombre}</strong> (${item.juguete_codigo})<br>
-                <small>Empleado: ${item.empleado_nombre} | Método: ${item.metodo_pago}</small>
+                <small>Cantidad: ${item.cantidad || 1} | Empleado: ${item.empleado_nombre} | Método: ${item.metodo_pago}</small>
             </div>
             <div class="item-actions">
-                <span class="item-precio">$${item.precio.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span>
+                <span class="item-precio">$${(item.precio * (item.cantidad || 1)).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span>
                 <button type="button" class="btn-remove" onclick="removeVentaItem(${index})">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
         </div>
     `).join('');
+
+    // Mostrar botón facturar si hay items
+    if (facturarBtn && ventaItems.length > 0) {
+        facturarBtn.style.display = 'inline-block';
+    }
 };
 
 function showVentaMessage(message, type) {
