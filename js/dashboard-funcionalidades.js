@@ -673,7 +673,8 @@ function createTiendaCard(tienda) {
     card.className = 'bodega-card';
     const direccion = tienda.direccion || tienda.ubicacion || 'Sin dirección';
     const empleadosCount = tienda.empleados?.length || 0;
-    const juguetesCount = tienda.juguetes?.length || 0;
+    // Sumar las cantidades de todos los juguetes, no contar registros
+    const juguetesCount = tienda.juguetes?.reduce((sum, j) => sum + (j.cantidad || 0), 0) || 0;
     card.innerHTML = `
         <div class="bodega-info">
             <h3>${tienda.nombre}</h3>
