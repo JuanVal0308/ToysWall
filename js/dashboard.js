@@ -367,7 +367,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         switch(viewName) {
             case 'venta':
                 ventaView.style.display = 'block';
-                initRegistrarVenta();
+                // initRegistrarVenta ya se inicializa al cargar la página
+                if (typeof updateVentaItemsList === 'function') {
+                    updateVentaItemsList();
+                }
                 break;
             case 'facturar':
                 // Esta vista se abre desde el botón facturar

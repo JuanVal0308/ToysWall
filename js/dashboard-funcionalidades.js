@@ -64,6 +64,8 @@ async function loadDashboardSummary() {
 // REGISTRAR VENTA
 // ============================================
 
+let registrarVentaInitialized = false;
+
 function initRegistrarVenta() {
     const form = document.getElementById('registrarVentaForm');
     const jugueteCodigoInput = document.getElementById('ventaJugueteCodigo');
@@ -71,6 +73,16 @@ function initRegistrarVenta() {
     const agregarItemBtn = document.getElementById('agregarItemBtn');
     const facturarBtn = document.getElementById('facturarBtn');
     
+    if (!form || !jugueteCodigoInput || !empleadoCodigoInput || !agregarItemBtn || !facturarBtn) {
+        return; // Elementos no disponibles aún
+    }
+
+    // Solo inicializar una vez
+    if (registrarVentaInitialized) {
+        return;
+    }
+    
+    registrarVentaInitialized = true;
     ventaItems = []; // Reiniciar items
 
     // Buscar juguete por código
