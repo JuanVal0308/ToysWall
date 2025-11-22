@@ -162,8 +162,11 @@ function initRegistrarVenta() {
         }
     });
 
-    // Agregar item a la venta
-    agregarItemBtn.addEventListener('click', async function() {
+    // Agregar item a la venta (solo una vez)
+    agregarItemBtn.addEventListener('click', async function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
         const jugueteCodigo = jugueteCodigoInput.value.trim();
         const empleadoCodigo = empleadoCodigoInput.value.trim();
         const cantidad = parseInt(document.getElementById('ventaCantidad')?.value || 1);
