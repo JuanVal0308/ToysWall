@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS ventas (
     juguete_id INTEGER NOT NULL REFERENCES juguetes(id) ON DELETE RESTRICT,
     empleado_id INTEGER REFERENCES empleados(id) ON DELETE SET NULL,
     precio_venta DECIMAL(10, 2) NOT NULL,
+    cantidad INTEGER NOT NULL DEFAULT 1,
     metodo_pago VARCHAR(50) NOT NULL,
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
