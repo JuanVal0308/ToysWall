@@ -271,6 +271,18 @@ ALTER TABLE bodegas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tiendas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE empleados ENABLE ROW LEVEL SECURITY;
 ALTER TABLE juguetes ENABLE ROW LEVEL SECURITY;
+
+-- Agregar columna cantidad a ventas si no existe
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'ventas' AND column_name = 'cantidad'
+    ) THEN
+        ALTER TABLE ventas ADD COLUMN cantidad INTEGER NOT NULL DEFAULT 1;
+    END IF;
+END $$;
+
 ALTER TABLE ventas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE facturas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE facturas_items ENABLE ROW LEVEL SECURITY;
