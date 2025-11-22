@@ -108,7 +108,7 @@ function initRegistrarVenta() {
                 if (juguete.tienda_id) {
                     ubicacionInfo = '<br><small style="color: #10b981;">✓ Disponible en tienda</small>';
                 } else if (juguete.bodega_id) {
-                    ubicacionInfo = '<br><small style="color: #f59e0b;">⚠ Solo disponible en bodega</small>';
+                    ubicacionInfo = '<br><small style="color: #3b82f6;">📦 Disponible en bodega</small>';
                 } else {
                     ubicacionInfo = '<br><small style="color: #ef4444;">✗ Sin ubicación asignada</small>';
                 }
@@ -153,7 +153,12 @@ function initRegistrarVenta() {
             if (empleados && empleados.length > 0) {
                 const empleado = empleados[0];
                 let tiendaInfo = '';
-                if (empleado.tienda_id) {
+                const empleadosEspeciales = ['Jose', 'Sindy'];
+                const esEmpleadoEspecial = empleadosEspeciales.includes(empleado.nombre);
+                
+                if (esEmpleadoEspecial) {
+                    tiendaInfo = '<br><small style="color: #8b5cf6;">⭐ Puede vender en cualquier ubicación</small>';
+                } else if (empleado.tienda_id) {
                     // Obtener nombre de la tienda
                     try {
                         const { data: tienda } = await window.supabaseClient
@@ -260,21 +265,35 @@ function initRegistrarVenta() {
 
             const empleado = empleadosData[0];
 
-            // Verificar que el empleado tenga una tienda asignada
-            if (!empleado.tienda_id) {
-                showVentaMessage('El empleado no tiene una tienda asignada. No puede realizar ventas.', 'error');
-                return;
-            }
+            // Empleados especiales que pueden vender en cualquier parte: Jose y Sindy
+            const empleadosEspeciales = ['Jose', 'Sindy'];
+            const esEmpleadoEspecial = empleadosEspeciales.includes(empleado.nombre);
 
-            // Verificar que el juguete esté en la misma tienda del empleado
-            if (!juguete.tienda_id) {
-                showVentaMessage('El juguete no está disponible en una tienda. Solo se pueden vender juguetes ubicados en tiendas.', 'error');
-                return;
-            }
+            // Si no es empleado especial, verificar restricciones normales
+            if (!esEmpleadoEspecial) {
+                // Verificar que el empleado tenga una tienda asignada
+                if (!empleado.tienda_id) {
+                    showVentaMessage('El empleado no tiene una tienda asignada. No puede realizar ventas.', 'error');
+                    return;
+                }
 
-            if (juguete.tienda_id !== empleado.tienda_id) {
-                showVentaMessage(`El juguete no está disponible en la tienda del empleado. El empleado trabaja en una tienda diferente.`, 'error');
-                return;
+                // Verificar que el juguete esté en la misma tienda del empleado
+                if (!juguete.tienda_id) {
+                    showVentaMessage('El juguete no está disponible en una tienda. Solo se pueden vender juguetes ubicados en tiendas.', 'error');
+                    return;
+                }
+
+                if (juguete.tienda_id !== empleado.tienda_id) {
+                    showVentaMessage(`El juguete no está disponible en la tienda del empleado. El empleado trabaja en una tienda diferente.`, 'error');
+                    return;
+                }
+            } else {
+                // Empleados especiales pueden vender desde tiendas o bodegas
+                // Solo verificar que el juguete tenga alguna ubicación (tienda o bodega)
+                if (!juguete.tienda_id && !juguete.bodega_id) {
+                    showVentaMessage('El juguete no tiene una ubicación asignada.', 'error');
+                    return;
+                }
             }
 
             // Agregar item

@@ -257,6 +257,22 @@ BEGIN
         INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
             ('María García', 'maria@toyswalls.com', 'empleado123', 1, 3);
     END IF;
+    
+    -- Empleados especiales que pueden vender en cualquier parte
+    -- Jose
+    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE email = 'toyswalls@gmail.com' AND nombre = 'Jose') THEN
+        INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
+            ('Jose', 'toyswalls@gmail.com', 'empleado123', 1, 3);
+    END IF;
+    
+    -- Sindy
+    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE email = 'toyswalls@gmail.com' AND nombre = 'Sindy') THEN
+        -- Nota: Como el email debe ser único, usaremos un email diferente para Sindy
+        -- O podemos usar el mismo email si el sistema lo permite con diferentes nombres
+        -- Por ahora, usaremos un email alternativo
+        INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
+            ('Sindy', 'sindy@toyswalls.com', 'empleado123', 1, 3);
+    END IF;
 END $$;
 
 -- ============================================
