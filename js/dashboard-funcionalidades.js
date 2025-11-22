@@ -104,10 +104,19 @@ function initRegistrarVenta() {
             const jugueteInfo = document.getElementById('jugueteInfo');
             if (juguetes && juguetes.length > 0) {
                 const juguete = juguetes[0];
+                let ubicacionInfo = '';
+                if (juguete.tienda_id) {
+                    ubicacionInfo = '<br><small style="color: #10b981;">✓ Disponible en tienda</small>';
+                } else if (juguete.bodega_id) {
+                    ubicacionInfo = '<br><small style="color: #f59e0b;">⚠ Solo disponible en bodega</small>';
+                } else {
+                    ubicacionInfo = '<br><small style="color: #ef4444;">✗ Sin ubicación asignada</small>';
+                }
                 jugueteInfo.innerHTML = `
                     <div class="info-box success">
                         <strong>${juguete.nombre}</strong><br>
                         <small>Cantidad disponible: ${juguete.cantidad}</small>
+                        ${ubicacionInfo}
                     </div>
                 `;
                 jugueteInfo.style.display = 'block';
@@ -143,9 +152,31 @@ function initRegistrarVenta() {
             const empleadoInfo = document.getElementById('empleadoInfo');
             if (empleados && empleados.length > 0) {
                 const empleado = empleados[0];
+                let tiendaInfo = '';
+                if (empleado.tienda_id) {
+                    // Obtener nombre de la tienda
+                    try {
+                        const { data: tienda } = await window.supabaseClient
+                            .from('tiendas')
+                            .select('nombre')
+                            .eq('id', empleado.tienda_id)
+                            .limit(1);
+                        if (tienda && tienda.length > 0) {
+                            tiendaInfo = `<br><small style="color: #10b981;">✓ Tienda: ${tienda[0].nombre}</small>`;
+                        } else {
+                            tiendaInfo = '<br><small style="color: #10b981;">✓ Asignado a una tienda</small>';
+                        }
+                    } catch (error) {
+                        tiendaInfo = '<br><small style="color: #10b981;">✓ Asignado a una tienda</small>';
+                    }
+                } else {
+                    tiendaInfo = '<br><small style="color: #ef4444;">✗ Sin tienda asignada</small>';
+                }
                 empleadoInfo.innerHTML = `
                     <div class="info-box success">
-                        <strong>${empleado.nombre}</strong>
+                        <strong>${empleado.nombre}</strong><br>
+                        <small>Código: ${empleado.codigo}</small>
+                        ${tiendaInfo}
                     </div>
                 `;
                 empleadoInfo.style.display = 'block';
