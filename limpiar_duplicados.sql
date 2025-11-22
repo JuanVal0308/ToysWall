@@ -7,7 +7,7 @@
 -- ============================================
 
 -- Paso 1: Crear tabla temporal con juguetes consolidados
--- Solo consolida si tienen el mismo código Y la misma ubicación (bodega_id o tienda_id)
+-- Solo consolida si tienen el mismo código, nombre Y la misma ubicación (bodega_id o tienda_id)
 CREATE TEMP TABLE IF NOT EXISTS juguetes_consolidados AS
 SELECT 
     empresa_id,
@@ -52,7 +52,7 @@ WHERE id IN (
 -- Paso 4: Limpiar tabla temporal
 DROP TABLE IF EXISTS juguetes_consolidados;
 
--- Verificar resultados
+-- Verificar resultados (debe verificar código Y nombre)
 SELECT 
     codigo,
     nombre,

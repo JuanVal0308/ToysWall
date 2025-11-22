@@ -1715,12 +1715,13 @@ function initAbastecer() {
                     continue;
                 }
 
-                // Verificar si ya existe un juguete con el mismo código en el destino
+                // Verificar si ya existe un juguete con el mismo código Y nombre en el destino
                 const campoDestino = destinoTipoVal === 'bodega' ? 'bodega_id' : 'tienda_id';
                 const { data: jugueteExistenteData } = await window.supabaseClient
                     .from('juguetes')
                     .select('*')
                     .eq('codigo', jugueteActual.codigo)
+                    .eq('nombre', jugueteActual.nombre)
                     .eq('empresa_id', user.empresa_id)
                     .eq(campoDestino, destinoId)
                     .limit(1);

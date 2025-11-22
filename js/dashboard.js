@@ -794,11 +794,12 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
 
             try {
-                // Verificar si ya existe un juguete con el mismo código en la misma bodega
+                // Verificar si ya existe un juguete con el mismo código Y nombre en la misma bodega
                 const { data: jugueteExistenteData } = await window.supabaseClient
                     .from('juguetes')
                     .select('*')
                     .eq('codigo', codigo)
+                    .eq('nombre', nombre)
                     .eq('empresa_id', user.empresa_id)
                     .eq('bodega_id', currentBodegaId)
                     .limit(1);
@@ -983,11 +984,12 @@ document.addEventListener('DOMContentLoaded', async function() {
             try {
                 const campoUbicacion = ubicacionTipo === 'bodega' ? 'bodega_id' : 'tienda_id';
                 
-                // Verificar si ya existe un juguete con el mismo código en la misma ubicación
+                // Verificar si ya existe un juguete con el mismo código Y nombre en la misma ubicación
                 const { data: jugueteExistenteData } = await window.supabaseClient
                     .from('juguetes')
                     .select('*')
                     .eq('codigo', codigo)
+                    .eq('nombre', nombre)
                     .eq('empresa_id', user.empresa_id)
                     .eq(campoUbicacion, ubicacionId)
                     .limit(1);
