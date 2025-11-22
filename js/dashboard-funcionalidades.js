@@ -673,8 +673,20 @@ function createTiendaCard(tienda) {
     card.className = 'bodega-card';
     const direccion = tienda.direccion || tienda.ubicacion || 'Sin dirección';
     const empleadosCount = tienda.empleados?.length || 0;
-    // Sumar las cantidades de todos los juguetes, no contar registros
-    const juguetesCount = tienda.juguetes?.reduce((sum, j) => sum + (j.cantidad || 0), 0) || 0;
+    // Agrupar juguetes por código y sumar cantidades para evitar duplicados
+    const juguetesAgrupados = new Map();
+    if (tienda.juguetes && tienda.juguetes.length > 0) {
+        tienda.juguetes.forEach(juguete => {
+            const codigo = juguete.codigo;
+            const cantidad = juguete.cantidad || 0;
+            if (juguetesAgrupados.has(codigo)) {
+                juguetesAgrupados.set(codigo, juguetesAgrupados.get(codigo) + cantidad);
+            } else {
+                juguetesAgrupados.set(codigo, cantidad);
+            }
+        });
+    }
+    const juguetesCount = Array.from(juguetesAgrupados.values()).reduce((sum, cantidad) => sum + cantidad, 0);
     card.innerHTML = `
         <div class="bodega-info">
             <h3>${tienda.nombre}</h3>
