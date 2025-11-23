@@ -123,7 +123,7 @@ CREATE TABLE IF NOT EXISTS juguetes (
 CREATE TABLE IF NOT EXISTS ventas (
     id SERIAL PRIMARY KEY,
     codigo_venta VARCHAR(50) NOT NULL,
-    juguete_id INTEGER NOT NULL REFERENCES juguetes(id) ON DELETE RESTRICT,
+    juguete_id INTEGER NOT NULL REFERENCES juguetes(id) ON DELETE CASCADE,
     empleado_id INTEGER REFERENCES empleados(id) ON DELETE SET NULL,
     precio_venta DECIMAL(10, 2) NOT NULL,
     cantidad INTEGER NOT NULL DEFAULT 1,
@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS movimientos (
     origen_id INTEGER NOT NULL,
     tipo_destino VARCHAR(20) NOT NULL CHECK (tipo_destino IN ('bodega', 'tienda')),
     destino_id INTEGER NOT NULL,
-    juguete_id INTEGER NOT NULL REFERENCES juguetes(id) ON DELETE RESTRICT,
+    juguete_id INTEGER NOT NULL REFERENCES juguetes(id) ON DELETE CASCADE,
     cantidad INTEGER NOT NULL DEFAULT 1,
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

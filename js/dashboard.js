@@ -336,6 +336,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const usuariosView = document.getElementById('usuariosView');
     const abastecerView = document.getElementById('abastecerView');
     const analisisView = document.getElementById('analisisView');
+    const ajustesView = document.getElementById('ajustesView');
     
     let currentBodegaId = null;
     let currentEmpleadoId = null;
@@ -356,6 +357,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         usuariosView.style.display = 'none';
         abastecerView.style.display = 'none';
         analisisView.style.display = 'none';
+        ajustesView.style.display = 'none';
         
         // Verificar permisos para empleados
         if (isEmpleado && viewName !== 'venta' && viewName !== 'facturar') {
@@ -437,6 +439,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                     analisisView.style.display = 'block';
                     if (typeof loadAnalisis === 'function') {
                         loadAnalisis();
+                    }
+                }
+                break;
+            case 'ajustes':
+                if (isAdmin) {
+                    ajustesView.style.display = 'block';
+                    if (typeof initAjustes === 'function') {
+                        initAjustes();
                     }
                 }
                 break;
@@ -1141,11 +1151,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             // Calcular totales
             const totalJuguetes = juguetesFiltrados.reduce((sum, j) => sum + j.cantidad, 0);
-            const juguetesSinVender = juguetesFiltrados.filter(j => j.cantidad > 0).reduce((sum, j) => sum + j.cantidad, 0);
             
             // Actualizar resumen
             document.getElementById('totalJuguetesInventario').textContent = totalJuguetes;
-            document.getElementById('juguetesSinVender').textContent = juguetesSinVender;
 
             tbody.innerHTML = '';
             juguetesFiltrados.forEach(juguete => {

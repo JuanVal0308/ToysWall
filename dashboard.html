@@ -42,6 +42,10 @@
                     <i class="fas fa-cash-register"></i>
                     <span>Registrar Venta</span>
                 </button>
+                <button class="sidebar-btn" data-page="ajustes">
+                    <i class="fas fa-tools"></i>
+                    <span>Ajustes</span>
+                </button>
                 <button class="sidebar-btn" data-page="juguetes">
                     <i class="fas fa-cube"></i>
                     <span>Juguetes</span>
@@ -220,11 +224,11 @@
                             <button type="button" class="btn-secondary" id="agregarItemBtn">
                                 <i class="fas fa-plus"></i> Agregar Item
                             </button>
-                            <button type="button" class="btn-primary" id="facturarBtn" style="display: none;">
-                                <i class="fas fa-file-invoice"></i> Facturar
-                            </button>
                             <button type="submit" class="btn-primary">
                                 <i class="fas fa-save"></i> Registrar Venta
+                            </button>
+                            <button type="button" class="btn-primary" id="facturarBtn">
+                                <i class="fas fa-file-invoice"></i> Facturar
                             </button>
                         </div>
                         <div id="ventaErrorMessage" class="error-message" style="display: none;"></div>
@@ -445,10 +449,6 @@
                             <div class="stat-box" style="background: white; padding: 15px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                                 <div style="font-size: 24px; font-weight: bold; color: #3b82f6;" id="totalJuguetesInventario">0</div>
                                 <div style="color: #64748b; font-size: 14px; margin-top: 5px;">Total Juguetes</div>
-                            </div>
-                            <div class="stat-box" style="background: white; padding: 15px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                                <div style="font-size: 24px; font-weight: bold; color: #10b981;" id="juguetesSinVender">0</div>
-                                <div style="color: #64748b; font-size: 14px; margin-top: 5px;">Sin Vender</div>
                             </div>
                         </div>
                     </div>
@@ -904,6 +904,42 @@
                         <!-- Los resultados se mostrarán aquí -->
                     </div>
                 </div>
+
+                <!-- Vista de Ajustes -->
+                <div id="ajustesView" style="display: none;">
+                    <h1>Ajustes y Devoluciones</h1>
+                    
+                    <div class="ajustes-section">
+                        <h2>Devoluciones de Ventas</h2>
+                        <p style="color: #64748b; margin-bottom: 20px;">
+                            Selecciona una venta para realizar una devolución. Los juguetes serán agregados nuevamente al inventario en su ubicación original.
+                        </p>
+                        
+                        <div class="form-group" style="margin-bottom: 20px;">
+                            <label for="buscarVentaCodigo">
+                                <i class="fas fa-search"></i> Buscar Venta por Código
+                            </label>
+                            <input 
+                                type="text" 
+                                id="buscarVentaCodigo" 
+                                placeholder="Ej: VENT-20241201-001"
+                                style="max-width: 400px;"
+                            >
+                            <button type="button" class="btn-primary" id="buscarVentaBtn" style="margin-left: 10px;">
+                                <i class="fas fa-search"></i> Buscar
+                            </button>
+                        </div>
+                        
+                        <div id="ventasListContainer" style="margin-top: 20px;">
+                            <p style="text-align: center; color: #64748b; padding: 40px;">
+                                Ingresa un código de venta para buscar y realizar una devolución.
+                            </p>
+                        </div>
+                        
+                        <div id="ajustesErrorMessage" class="error-message" style="display: none;"></div>
+                        <div id="ajustesSuccessMessage" class="success-message" style="display: none;"></div>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
@@ -1236,9 +1272,11 @@
 
     <!-- Scripts adicionales para funcionalidades -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/config.js"></script>
+    <script src="js/email-config.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/dashboard-funcionalidades.js"></script>
 </body>
