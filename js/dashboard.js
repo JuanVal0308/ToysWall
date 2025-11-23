@@ -794,7 +794,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         agregarJuguetesForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const nombre = document.getElementById('jugueteNombre')?.value.trim();
+            const nombre = capitalizarPrimeraLetra(document.getElementById('jugueteNombre')?.value.trim());
             const codigo = document.getElementById('jugueteCodigo')?.value.trim();
             const cantidad = parseInt(document.getElementById('jugueteCantidad')?.value || 0);
 
@@ -993,7 +993,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         agregarJugueteForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const nombre = document.getElementById('jugueteNombreInput').value.trim();
+            const nombre = capitalizarPrimeraLetra(document.getElementById('jugueteNombreInput').value.trim());
             const codigo = document.getElementById('jugueteCodigoInput').value.trim();
             const cantidad = parseInt(document.getElementById('jugueteCantidadInput').value);
             const ubicacionTipo = document.getElementById('jugueteUbicacionTipo').value;
@@ -1121,9 +1121,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     let paginaActualInventario = 1;
     const productosPorPagina = 10;
 
+    // Función para capitalizar la primera letra
+    function capitalizarPrimeraLetra(texto) {
+        if (!texto || typeof texto !== 'string') return texto;
+        return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
+    }
+
     async function loadInventario() {
         const tbody = document.getElementById('inventarioTableBody');
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">Cargando inventario...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">Cargando inventario...</td></tr>';
         
         try {
             const { data: juguetes, error } = await window.supabaseClient
@@ -1139,7 +1145,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (error) throw error;
 
             if (!juguetes || juguetes.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes en el inventario</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes en el inventario</td></tr>';
                 document.getElementById('inventarioPagination').innerHTML = '';
                 return;
             }
@@ -1171,7 +1177,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             configurarBusquedaInventario();
         } catch (error) {
             console.error('Error al cargar inventario:', error);
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #ef4444;">Error al cargar el inventario</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #ef4444;">Error al cargar el inventario</td></tr>';
             document.getElementById('inventarioPagination').innerHTML = '';
         }
     }
@@ -1181,7 +1187,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         const productos = juguetesFiltrados || todosLosJuguetes;
         
         if (!productos || productos.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes para mostrar</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes para mostrar</td></tr>';
             document.getElementById('inventarioPagination').innerHTML = '';
             return;
         }
@@ -1196,23 +1202,37 @@ document.addEventListener('DOMContentLoaded', async function() {
         tbody.innerHTML = '';
         productosPagina.forEach(juguete => {
             const row = document.createElement('tr');
-            const ubicacion = juguete.bodega_id 
-                ? `Bodega: ${juguete.bodegas?.nombre || 'N/A'}`
+            const nombreCapitalizado = capitalizarPrimeraLetra(juguete.nombre);
+            const ubicacionNombre = juguete.bodega_id 
+                ? (juguete.bodegas?.nombre || 'N/A')
                 : juguete.tienda_id 
-                ? `Tienda: ${juguete.tiendas?.nombre || 'N/A'}`
+                ? (juguete.tiendas?.nombre || 'N/A')
+                : 'Sin ubicación';
+            const ubicacion = juguete.bodega_id 
+                ? `Bodega: ${capitalizarPrimeraLetra(ubicacionNombre)}`
+                : juguete.tienda_id 
+                ? `Tienda: ${capitalizarPrimeraLetra(ubicacionNombre)}`
                 : 'Sin ubicación';
             const tipo = juguete.bodega_id ? 'Bodega' : juguete.tienda_id ? 'Tienda' : 'N/A';
             const foto = juguete.foto_url 
-                ? `<img src="${juguete.foto_url}" alt="${juguete.nombre}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">`
+                ? `<img src="${juguete.foto_url}" alt="${nombreCapitalizado}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">`
                 : '<span style="color: #64748b;">Sin foto</span>';
             
             row.innerHTML = `
-                <td>${juguete.nombre}</td>
+                <td>${nombreCapitalizado}</td>
                 <td>${juguete.codigo}</td>
                 <td>${foto}</td>
                 <td>${juguete.cantidad}</td>
                 <td>${ubicacion}</td>
                 <td>${tipo}</td>
+                <td>
+                    <div style="position: relative;">
+                        <button onclick="abrirMenuEditarJuguete(${juguete.id}, event)" 
+                                style="background: none; border: none; cursor: pointer; padding: 5px; color: #64748b; font-size: 18px;">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                    </div>
+                </td>
             `;
             tbody.appendChild(row);
         });
@@ -1340,11 +1360,23 @@ document.addEventListener('DOMContentLoaded', async function() {
                 return;
             }
 
-            // Filtrar juguetes
+            // Filtrar juguetes (búsqueda mejorada: nombre, código, cantidad, ubicación)
             const juguetesFiltrados = todosLosJuguetes.filter(juguete => {
                 const nombre = juguete.nombre?.toLowerCase() || '';
                 const codigo = juguete.codigo?.toLowerCase() || '';
-                return nombre.includes(searchTerm) || codigo.includes(searchTerm);
+                const cantidad = juguete.cantidad?.toString() || '';
+                const ubicacionNombre = juguete.bodega_id 
+                    ? (juguete.bodegas?.nombre?.toLowerCase() || '')
+                    : juguete.tienda_id 
+                    ? (juguete.tiendas?.nombre?.toLowerCase() || '')
+                    : '';
+                const ubicacionTipo = juguete.bodega_id ? 'bodega' : juguete.tienda_id ? 'tienda' : '';
+                
+                return nombre.includes(searchTerm) || 
+                       codigo.includes(searchTerm) || 
+                       cantidad.includes(searchTerm) ||
+                       ubicacionNombre.includes(searchTerm) ||
+                       ubicacionTipo.includes(searchTerm);
             });
 
             // Resetear a página 1 cuando se filtra
@@ -1352,6 +1384,137 @@ document.addEventListener('DOMContentLoaded', async function() {
             renderizarPaginaInventario(juguetesFiltrados);
         });
     }
+
+    // Función global para abrir menú de editar juguete
+    window.abrirMenuEditarJuguete = async function(jugueteId, event) {
+        event.stopPropagation();
+        
+        try {
+            // Buscar el juguete en todosLosJuguetes
+            const juguete = todosLosJuguetes.find(j => j.id === jugueteId);
+            
+            if (!juguete) {
+                // Si no está en la lista, buscarlo en la base de datos
+                const { data, error } = await window.supabaseClient
+                    .from('juguetes')
+                    .select(`
+                        *,
+                        bodegas(nombre, direccion),
+                        tiendas(nombre, direccion)
+                    `)
+                    .eq('id', jugueteId)
+                    .single();
+                
+                if (error || !data) {
+                    alert('Error al cargar el juguete');
+                    return;
+                }
+                
+                // Llenar el formulario
+                document.getElementById('editarJugueteId').value = data.id;
+                document.getElementById('editarJugueteNombre').value = data.nombre;
+                document.getElementById('editarJugueteCodigo').value = data.codigo;
+                document.getElementById('editarJugueteCantidad').value = data.cantidad;
+            } else {
+                // Llenar el formulario con datos del juguete
+                document.getElementById('editarJugueteId').value = juguete.id;
+                document.getElementById('editarJugueteNombre').value = juguete.nombre;
+                document.getElementById('editarJugueteCodigo').value = juguete.codigo;
+                document.getElementById('editarJugueteCantidad').value = juguete.cantidad;
+            }
+            
+            // Mostrar modal
+            document.getElementById('editarJugueteModal').style.display = 'flex';
+            
+            // Ocultar mensajes
+            document.getElementById('editarJugueteErrorMessage').style.display = 'none';
+            document.getElementById('editarJugueteSuccessMessage').style.display = 'none';
+        } catch (error) {
+            console.error('Error al abrir modal de edición:', error);
+            alert('Error al cargar el juguete');
+        }
+    };
+
+    // Función para cerrar modal
+    window.cerrarModalEditarJuguete = function() {
+        document.getElementById('editarJugueteModal').style.display = 'none';
+        document.getElementById('editarJugueteForm').reset();
+        document.getElementById('editarJugueteErrorMessage').style.display = 'none';
+        document.getElementById('editarJugueteSuccessMessage').style.display = 'none';
+    };
+
+    // Configurar formulario de edición
+    document.addEventListener('DOMContentLoaded', function() {
+        const editarJugueteForm = document.getElementById('editarJugueteForm');
+        if (editarJugueteForm) {
+            editarJugueteForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const jugueteId = document.getElementById('editarJugueteId').value;
+                const nombre = capitalizarPrimeraLetra(document.getElementById('editarJugueteNombre').value.trim());
+                const codigo = document.getElementById('editarJugueteCodigo').value.trim();
+                const cantidad = parseInt(document.getElementById('editarJugueteCantidad').value);
+                
+                const errorMsg = document.getElementById('editarJugueteErrorMessage');
+                const successMsg = document.getElementById('editarJugueteSuccessMessage');
+                
+                errorMsg.style.display = 'none';
+                successMsg.style.display = 'none';
+                
+                if (!nombre || !codigo || cantidad < 0) {
+                    errorMsg.textContent = 'Por favor, completa todos los campos correctamente';
+                    errorMsg.style.display = 'block';
+                    return;
+                }
+                
+                try {
+                    const user = JSON.parse(sessionStorage.getItem('user'));
+                    
+                    // Verificar si el código ya existe en otro juguete
+                    const { data: jugueteExistente, error: checkError } = await window.supabaseClient
+                        .from('juguetes')
+                        .select('id, nombre')
+                        .eq('codigo', codigo)
+                        .eq('empresa_id', user.empresa_id)
+                        .neq('id', jugueteId)
+                        .limit(1);
+                    
+                    if (checkError) throw checkError;
+                    
+                    if (jugueteExistente && jugueteExistente.length > 0) {
+                        errorMsg.textContent = `El código "${codigo}" ya está asignado a otro juguete (${jugueteExistente[0].nombre})`;
+                        errorMsg.style.display = 'block';
+                        return;
+                    }
+                    
+                    // Actualizar juguete
+                    const { error: updateError } = await window.supabaseClient
+                        .from('juguetes')
+                        .update({
+                            nombre: nombre,
+                            codigo: codigo,
+                            cantidad: cantidad
+                        })
+                        .eq('id', jugueteId);
+                    
+                    if (updateError) throw updateError;
+                    
+                    successMsg.textContent = 'Juguete actualizado correctamente';
+                    successMsg.style.display = 'block';
+                    
+                    // Recargar inventario después de 1 segundo
+                    setTimeout(async () => {
+                        await loadInventario();
+                        cerrarModalEditarJuguete();
+                    }, 1000);
+                } catch (error) {
+                    console.error('Error al actualizar juguete:', error);
+                    errorMsg.textContent = 'Error al actualizar el juguete: ' + error.message;
+                    errorMsg.style.display = 'block';
+                }
+            });
+        }
+    });
 
     // ============================================
     // FUNCIONALIDAD DE EMPLEADOS
@@ -1439,7 +1602,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         const tiendaNombre = empleado.tiendas ? empleado.tiendas.nombre : 'Sin tienda asignada';
         card.innerHTML = `
             <div class="bodega-info">
-                <h3>${empleado.nombre}</h3>
+                <h3>${capitalizarPrimeraLetra(empleado.nombre)}</h3>
                 <p><i class="fas fa-phone"></i> ${empleado.telefono}</p>
                 <p><i class="fas fa-id-card"></i> Documento: ${empleado.documento || 'N/A'}</p>
                 <p><i class="fas fa-barcode"></i> Código: ${empleado.codigo}</p>
@@ -1501,7 +1664,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         nuevoEmpleadoForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const nombre = document.getElementById('empleadoNombre').value.trim();
+            const nombre = capitalizarPrimeraLetra(document.getElementById('empleadoNombre').value.trim());
             const telefono = document.getElementById('empleadoTelefono').value.trim();
             const documento = document.getElementById('empleadoDocumento').value.trim();
             const codigo = document.getElementById('empleadoCodigo').value.trim();
@@ -1610,7 +1773,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         editEmpleadoForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const nombre = document.getElementById('editEmpleadoNombre').value.trim();
+            const nombre = capitalizarPrimeraLetra(document.getElementById('editEmpleadoNombre').value.trim());
             const telefono = document.getElementById('editEmpleadoTelefono').value.trim();
             const documento = document.getElementById('editEmpleadoDocumento').value.trim();
             const codigo = document.getElementById('editEmpleadoCodigo').value.trim();
