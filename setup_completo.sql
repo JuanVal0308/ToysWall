@@ -12,6 +12,25 @@
 -- ============================================
 
 -- ============================================
+-- 0. MIGRACIONES Y ACTUALIZACIONES
+-- ============================================
+
+-- Migración: Renombrar columna ubicacion a direccion en tiendas (si existe)
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'tiendas' AND column_name = 'ubicacion'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'tiendas' AND column_name = 'direccion'
+    ) THEN
+        ALTER TABLE tiendas RENAME COLUMN ubicacion TO direccion;
+        RAISE NOTICE 'Columna ubicacion renombrada a direccion en la tabla tiendas.';
+    END IF;
+END $$;
+
+-- ============================================
 -- 1. CREAR TABLAS
 -- ============================================
 
@@ -260,15 +279,13 @@ BEGIN
     
     -- Empleados especiales que pueden vender en cualquier parte
     -- Jose (usa toyswalls@gmail.com)
-    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE nombre = 'Jose' AND empresa_id = 1) THEN
+    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE email = 'toyswalls@gmail.com') THEN
         INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
             ('Jose', 'toyswalls@gmail.com', 'empleado123', 1, 3);
     END IF;
     
-    -- Sindy (usa el mismo email compartido toyswalls@gmail.com)
-    -- Nota: Como el email debe ser único en la tabla usuarios, Sindy usará un email alternativo
-    -- pero en la tabla empleados ambos estarán identificados por nombre
-    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE nombre = 'Sindy' AND empresa_id = 1) THEN
+    -- Sindy (usa email alternativo ya que el email debe ser único)
+    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE email = 'sindy.toyswalls@gmail.com') THEN
         INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
             ('Sindy', 'sindy.toyswalls@gmail.com', 'empleado123', 1, 3);
     END IF;
@@ -282,13 +299,13 @@ END $$;
 DO $$
 BEGIN
     -- Empleado Jose (puede vender en cualquier parte - sin tienda asignada)
-    IF NOT EXISTS (SELECT 1 FROM empleados WHERE nombre = 'Jose' AND empresa_id = 1) THEN
+    IF NOT EXISTS (SELECT 1 FROM empleados WHERE codigo = 'EMP-JOSE' AND empresa_id = 1) THEN
         INSERT INTO empleados (nombre, telefono, codigo, documento, empresa_id, tienda_id) VALUES
             ('Jose', '3000000001', 'EMP-JOSE', '1234567890', 1, NULL);
     END IF;
     
     -- Empleado Sindy (puede vender en cualquier parte - sin tienda asignada)
-    IF NOT EXISTS (SELECT 1 FROM empleados WHERE nombre = 'Sindy' AND empresa_id = 1) THEN
+    IF NOT EXISTS (SELECT 1 FROM empleados WHERE codigo = 'EMP-SINDY' AND empresa_id = 1) THEN
         INSERT INTO empleados (nombre, telefono, codigo, documento, empresa_id, tienda_id) VALUES
             ('Sindy', '3000000002', 'EMP-SINDY', '0987654321', 1, NULL);
     END IF;
@@ -454,6 +471,10 @@ CREATE POLICY "ventas_insert_policy"
     ON ventas FOR INSERT
     WITH CHECK (true);
 
+CREATE POLICY "ventas_delete_policy"
+    ON ventas FOR DELETE
+    USING (true);
+
 -- Crear políticas RLS para facturas
 CREATE POLICY "facturas_select_policy"
     ON facturas FOR SELECT
@@ -548,7 +569,80 @@ CREATE TRIGGER update_juguetes_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================
--- 9. VERIFICACIÓN DE DATOS
+-- 9. LIMPIEZA DE DUPLICADOS (OPCIONAL)
+-- ============================================
+-- Esta sección consolida juguetes duplicados (mismo código, nombre y ubicación)
+-- Ejecuta solo si necesitas limpiar duplicados existentes
+
+-- Paso 1: Crear tabla temporal con juguetes consolidados
+DO $$
+DECLARE
+    duplicados_existen BOOLEAN;
+BEGIN
+    -- Verificar si hay duplicados
+    SELECT EXISTS (
+        SELECT 1
+        FROM juguetes
+        GROUP BY empresa_id, codigo, nombre, bodega_id, tienda_id
+        HAVING COUNT(*) > 1
+    ) INTO duplicados_existen;
+    
+    IF duplicados_existen THEN
+        -- Crear tabla temporal con juguetes consolidados
+        CREATE TEMP TABLE IF NOT EXISTS juguetes_consolidados AS
+        SELECT 
+            empresa_id,
+            codigo,
+            nombre,
+            bodega_id,
+            tienda_id,
+            foto_url,
+            SUM(cantidad) as cantidad_total,
+            MIN(id) as id_principal,
+            MIN(created_at) as created_at_original,
+            MAX(updated_at) as updated_at_latest
+        FROM juguetes
+        GROUP BY empresa_id, codigo, nombre, bodega_id, tienda_id, foto_url
+        HAVING COUNT(*) > 1;
+
+        -- Actualizar el registro principal con la cantidad total
+        UPDATE juguetes j
+        SET 
+            cantidad = jc.cantidad_total,
+            updated_at = jc.updated_at_latest
+        FROM juguetes_consolidados jc
+        WHERE j.id = jc.id_principal
+          AND j.empresa_id = jc.empresa_id
+          AND j.codigo = jc.codigo
+          AND j.nombre = jc.nombre
+          AND COALESCE(j.bodega_id, 0) = COALESCE(jc.bodega_id, 0)
+          AND COALESCE(j.tienda_id, 0) = COALESCE(jc.tienda_id, 0);
+
+        -- Eliminar los registros duplicados (mantener solo el principal)
+        DELETE FROM juguetes
+        WHERE id IN (
+            SELECT j.id
+            FROM juguetes j
+            INNER JOIN juguetes_consolidados jc ON
+                j.empresa_id = jc.empresa_id
+                AND j.codigo = jc.codigo
+                AND j.nombre = jc.nombre
+                AND COALESCE(j.bodega_id, 0) = COALESCE(jc.bodega_id, 0)
+                AND COALESCE(j.tienda_id, 0) = COALESCE(jc.tienda_id, 0)
+            WHERE j.id != jc.id_principal
+        );
+
+        -- Limpiar tabla temporal
+        DROP TABLE IF EXISTS juguetes_consolidados;
+        
+        RAISE NOTICE 'Duplicados de juguetes consolidados exitosamente.';
+    ELSE
+        RAISE NOTICE 'No se encontraron duplicados de juguetes.';
+    END IF;
+END $$;
+
+-- ============================================
+-- 10. VERIFICACIÓN DE DATOS
 -- ============================================
 
 -- Ver tipos de usuario creados
@@ -574,6 +668,21 @@ JOIN empresas e ON u.empresa_id = e.id
 JOIN tipo_usuarios tu ON u.tipo_usuario_id = tu.id
 ORDER BY u.nombre;
 
+-- Ver empleados creados
+SELECT 'Empleados:' as info;
+SELECT 
+    e.id,
+    e.nombre,
+    e.codigo,
+    e.telefono,
+    e.documento,
+    t.nombre as tienda_nombre,
+    emp.nombre as empresa_nombre
+FROM empleados e
+JOIN empresas emp ON e.empresa_id = emp.id
+LEFT JOIN tiendas t ON e.tienda_id = t.id
+ORDER BY e.nombre;
+
 -- ============================================
 -- FIN DEL SCRIPT
 -- ============================================
@@ -592,6 +701,234 @@ ORDER BY u.nombre;
 --   Email: "juan@toyswalls.com" o "maria@toyswalls.com"
 --   Contraseña: "empleado123"
 -- 
+-- Empleados Especiales (pueden vender en cualquier parte):
+--   Jose: Email "toyswalls@gmail.com", Contraseña: "empleado123"
+--   Sindy: Email "sindy.toyswalls@gmail.com", Contraseña: "empleado123"
+-- 
+-- Empresa: "ToysWalls"
+-- Logo: https://i.imgur.com/RBbjVnp.jpeg
+-- 
+-- NOTAS IMPORTANTES:
+-- - Todos los usuarios pertenecen a ToysWalls
+-- - El login ahora usa email en lugar de selección de empresa
+-- - Las categorías han sido eliminadas
+-- - Los juguetes ahora tienen un campo foto_url opcional
+-- - El código de juguete debe ser único por nombre (no puede haber mismo código con diferente nombre)
+-- - Los juguetes con mismo código y nombre en la misma ubicación se consolidan sumando cantidades
+-- - La columna "ubicacion" en tiendas se renombra automáticamente a "direccion" si existe
+-- - Los duplicados de juguetes se consolidan automáticamente al ejecutar este script
+-- 
+-- ============================================
+
+-- Función para actualizar updated_at automáticamente
+
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+
+RETURNS TRIGGER AS $$
+
+BEGIN
+
+    NEW.updated_at = NOW();
+
+    RETURN NEW;
+
+END;
+
+$$ LANGUAGE plpgsql;
+
+
+
+-- ============================================
+
+-- 8. CREAR TRIGGERS
+
+-- ============================================
+
+
+
+-- Trigger para tipo_usuarios
+
+DROP TRIGGER IF EXISTS update_tipo_usuarios_updated_at ON tipo_usuarios;
+
+CREATE TRIGGER update_tipo_usuarios_updated_at
+
+    BEFORE UPDATE ON tipo_usuarios
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- Trigger para empresas
+
+DROP TRIGGER IF EXISTS update_empresas_updated_at ON empresas;
+
+CREATE TRIGGER update_empresas_updated_at
+
+    BEFORE UPDATE ON empresas
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- Trigger para usuarios
+
+DROP TRIGGER IF EXISTS update_usuarios_updated_at ON usuarios;
+
+CREATE TRIGGER update_usuarios_updated_at
+
+    BEFORE UPDATE ON usuarios
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- Trigger para bodegas
+
+DROP TRIGGER IF EXISTS update_bodegas_updated_at ON bodegas;
+
+CREATE TRIGGER update_bodegas_updated_at
+
+    BEFORE UPDATE ON bodegas
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- Trigger para tiendas
+
+DROP TRIGGER IF EXISTS update_tiendas_updated_at ON tiendas;
+
+CREATE TRIGGER update_tiendas_updated_at
+
+    BEFORE UPDATE ON tiendas
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- Trigger para empleados
+
+DROP TRIGGER IF EXISTS update_empleados_updated_at ON empleados;
+
+CREATE TRIGGER update_empleados_updated_at
+
+    BEFORE UPDATE ON empleados
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- Trigger para juguetes
+
+DROP TRIGGER IF EXISTS update_juguetes_updated_at ON juguetes;
+
+CREATE TRIGGER update_juguetes_updated_at
+
+    BEFORE UPDATE ON juguetes
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- ============================================
+
+-- 9. VERIFICACIÓN DE DATOS
+
+-- ============================================
+
+
+
+-- Ver tipos de usuario creados
+
+SELECT 'Tipos de Usuario:' as info;
+
+SELECT * FROM tipo_usuarios ORDER BY id;
+
+
+
+-- Ver empresa creada
+SELECT 'Empresa:' as info;
+SELECT * FROM empresas ORDER BY id;
+
+
+
+-- Ver usuarios creados (sin mostrar contraseñas)
+
+SELECT 'Usuarios:' as info;
+
+SELECT 
+
+    u.id,
+
+    u.nombre,
+
+    u.email,
+
+    e.nombre as empresa_nombre,
+
+    tu.nombre as tipo_usuario_nombre,
+
+    u.activo,
+
+    u.created_at
+
+FROM usuarios u
+
+JOIN empresas e ON u.empresa_id = e.id
+
+JOIN tipo_usuarios tu ON u.tipo_usuario_id = tu.id
+
+ORDER BY u.nombre;
+
+
+
+-- ============================================
+
+-- FIN DEL SCRIPT
+
+-- ============================================
+
+-- 
+
+-- USUARIOS DE EJEMPLO CREADOS:
+
+-- 
+
+-- Super Administrador:
+
+--   Email: "superadmin@toyswalls.com"
+--   Contraseña: "admin123"
+
+-- 
+
+-- Administrador:
+
+--   Email: "admin@toyswalls.com"
+--   Contraseña: "admin123"
+
+-- 
+
+-- Empleados:
+
+--   Email: "juan@toyswalls.com" o "maria@toyswalls.com"
+--   Contraseña: "empleado123"
+
+-- 
+
 -- Empresa: "ToysWalls"
 -- Logo: https://i.imgur.com/RBbjVnp.jpeg
 -- 
@@ -601,4 +938,230 @@ ORDER BY u.nombre;
 -- - Las categorías han sido eliminadas
 -- - Los juguetes ahora tienen un campo foto_url opcional
 -- 
+
 -- ============================================
+
+
+
+-- Función para actualizar updated_at automáticamente
+
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+
+RETURNS TRIGGER AS $$
+
+BEGIN
+
+    NEW.updated_at = NOW();
+
+    RETURN NEW;
+
+END;
+
+$$ LANGUAGE plpgsql;
+
+
+
+-- ============================================
+
+-- 8. CREAR TRIGGERS
+
+-- ============================================
+
+
+
+-- Trigger para tipo_usuarios
+
+DROP TRIGGER IF EXISTS update_tipo_usuarios_updated_at ON tipo_usuarios;
+
+CREATE TRIGGER update_tipo_usuarios_updated_at
+
+    BEFORE UPDATE ON tipo_usuarios
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- Trigger para empresas
+
+DROP TRIGGER IF EXISTS update_empresas_updated_at ON empresas;
+
+CREATE TRIGGER update_empresas_updated_at
+
+    BEFORE UPDATE ON empresas
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- Trigger para usuarios
+
+DROP TRIGGER IF EXISTS update_usuarios_updated_at ON usuarios;
+
+CREATE TRIGGER update_usuarios_updated_at
+
+    BEFORE UPDATE ON usuarios
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- Trigger para bodegas
+
+DROP TRIGGER IF EXISTS update_bodegas_updated_at ON bodegas;
+
+CREATE TRIGGER update_bodegas_updated_at
+
+    BEFORE UPDATE ON bodegas
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- Trigger para tiendas
+
+DROP TRIGGER IF EXISTS update_tiendas_updated_at ON tiendas;
+
+CREATE TRIGGER update_tiendas_updated_at
+
+    BEFORE UPDATE ON tiendas
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- Trigger para empleados
+
+DROP TRIGGER IF EXISTS update_empleados_updated_at ON empleados;
+
+CREATE TRIGGER update_empleados_updated_at
+
+    BEFORE UPDATE ON empleados
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- Trigger para juguetes
+
+DROP TRIGGER IF EXISTS update_juguetes_updated_at ON juguetes;
+
+CREATE TRIGGER update_juguetes_updated_at
+
+    BEFORE UPDATE ON juguetes
+
+    FOR EACH ROW
+
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- ============================================
+
+-- 9. VERIFICACIÓN DE DATOS
+
+-- ============================================
+
+
+
+-- Ver tipos de usuario creados
+
+SELECT 'Tipos de Usuario:' as info;
+
+SELECT * FROM tipo_usuarios ORDER BY id;
+
+
+
+-- Ver empresa creada
+SELECT 'Empresa:' as info;
+SELECT * FROM empresas ORDER BY id;
+
+
+
+-- Ver usuarios creados (sin mostrar contraseñas)
+
+SELECT 'Usuarios:' as info;
+
+SELECT 
+
+    u.id,
+
+    u.nombre,
+
+    u.email,
+
+    e.nombre as empresa_nombre,
+
+    tu.nombre as tipo_usuario_nombre,
+
+    u.activo,
+
+    u.created_at
+
+FROM usuarios u
+
+JOIN empresas e ON u.empresa_id = e.id
+
+JOIN tipo_usuarios tu ON u.tipo_usuario_id = tu.id
+
+ORDER BY u.nombre;
+
+
+
+-- ============================================
+
+-- FIN DEL SCRIPT
+
+-- ============================================
+
+-- 
+
+-- USUARIOS DE EJEMPLO CREADOS:
+
+-- 
+
+-- Super Administrador:
+
+--   Email: "superadmin@toyswalls.com"
+--   Contraseña: "admin123"
+
+-- 
+
+-- Administrador:
+
+--   Email: "admin@toyswalls.com"
+--   Contraseña: "admin123"
+
+-- 
+
+-- Empleados:
+
+--   Email: "juan@toyswalls.com" o "maria@toyswalls.com"
+--   Contraseña: "empleado123"
+
+-- 
+
+-- Empresa: "ToysWalls"
+-- Logo: https://i.imgur.com/RBbjVnp.jpeg
+-- 
+-- NOTAS IMPORTANTES:
+-- - Todos los usuarios pertenecen a ToysWalls
+-- - El login ahora usa email en lugar de selección de empresa
+-- - Las categorías han sido eliminadas
+-- - Los juguetes ahora tienen un campo foto_url opcional
+-- 
+
+-- ============================================
+
+
