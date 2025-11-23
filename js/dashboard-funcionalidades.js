@@ -548,8 +548,7 @@ async function showVentasParaFacturar() {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
         
-        // Buscar ventas que no tienen factura asociada
-        // (asumiendo que una venta facturada tiene un campo relacionado o se verifica por facturas_items)
+        // Buscar ventas que NO han sido facturadas
         const { data: ventas, error } = await window.supabaseClient
             .from('ventas')
             .select(`
@@ -558,6 +557,7 @@ async function showVentasParaFacturar() {
                 empleados(nombre, codigo)
             `)
             .eq('empresa_id', user.empresa_id)
+            .eq('facturada', false) // Solo ventas no facturadas
             .order('created_at', { ascending: false })
             .limit(50); // Últimas 50 ventas
 
@@ -647,7 +647,7 @@ async function facturarVentaRegistrada(codigoVenta) {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
         
-        // Obtener todas las ventas con ese código
+        // Obtener todas las ventas con ese código que NO estén facturadas
         const { data: ventas, error } = await window.supabaseClient
             .from('ventas')
             .select(`
@@ -656,12 +656,26 @@ async function facturarVentaRegistrada(codigoVenta) {
                 empleados(nombre, codigo)
             `)
             .eq('codigo_venta', codigoVenta)
-            .eq('empresa_id', user.empresa_id);
+            .eq('empresa_id', user.empresa_id)
+            .eq('facturada', false); // Solo ventas no facturadas
 
         if (error) throw error;
 
         if (!ventas || ventas.length === 0) {
-            showVentaMessage('Venta no encontrada', 'error');
+            // Verificar si la venta existe pero ya fue facturada
+            const { data: ventasFacturadas } = await window.supabaseClient
+                .from('ventas')
+                .select('id')
+                .eq('codigo_venta', codigoVenta)
+                .eq('empresa_id', user.empresa_id)
+                .eq('facturada', true)
+                .limit(1);
+            
+            if (ventasFacturadas && ventasFacturadas.length > 0) {
+                showVentaMessage('Esta venta ya fue facturada anteriormente. No se puede facturar dos veces.', 'error');
+            } else {
+                showVentaMessage('Venta no encontrada', 'error');
+            }
             return;
         }
 
@@ -713,7 +727,8 @@ async function facturarVentaRegistrada(codigoVenta) {
             codigo_factura: codigoFactura,
             items: itemsParaFacturar,
             total: total,
-            codigo_venta: codigoVenta // Guardar para referencia
+            codigo_venta: codigoVenta, // Guardar para referencia
+            ventas_ids: ventas.map(v => v.id) // Guardar IDs de las ventas para marcarlas como facturadas
         };
     } catch (error) {
         console.error('Error al facturar venta registrada:', error);
@@ -762,10 +777,13 @@ function showFacturarView() {
     document.getElementById('facturaTotal').textContent = '$' + total.toLocaleString('es-CO', { minimumFractionDigits: 2 });
     
     // Guardar datos para enviar
+    // Nota: Cuando se factura desde items nuevos (no desde ventas registradas),
+    // no hay codigo_venta, así que no se marca nada como facturado
     currentFacturaData = {
         codigo_factura: codigoFactura,
         items: ventaItems,
-        total: total
+        total: total,
+        codigo_venta: null // No hay código de venta porque son items nuevos
     };
 }
 
@@ -835,6 +853,21 @@ function initFacturar() {
                         cantidad: cantidad,
                         subtotal: subtotal
                     });
+            }
+            
+            // Marcar las ventas como facturadas para evitar que se facturen nuevamente
+            if (currentFacturaData.codigo_venta) {
+                const { error: updateError } = await window.supabaseClient
+                    .from('ventas')
+                    .update({ facturada: true })
+                    .eq('codigo_venta', currentFacturaData.codigo_venta)
+                    .eq('empresa_id', user.empresa_id)
+                    .eq('facturada', false); // Solo actualizar las que no estén facturadas
+                
+                if (updateError) {
+                    console.error('Error al marcar ventas como facturadas:', updateError);
+                    // No lanzar error aquí, la factura ya se creó
+                }
             }
             
             // Enviar correo electrónico con la factura
@@ -910,328 +943,70 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, facturaData, 
     }).join('');
 
     const fecha = new Date().toLocaleString('es-CO');
+    // URL del logo - debe ser accesible públicamente
     const logoUrl = 'https://i.imgur.com/RBbjVnp.jpeg';
     
+    // Verificar que el logo URL sea válida
+    if (!logoUrl || logoUrl.trim() === '') {
+        console.warn('Logo URL no definida, usando placeholder');
+    }
+    
+    // Generar HTML solo con el contenido del body (sin DOCTYPE, html, head)
+    // Usar estilos inline para mejor compatibilidad con clientes de correo
     const facturaHTML = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { 
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-                    line-height: 1.6; 
-                    color: #333; 
-                    background-color: #f1f5f9;
-                    padding: 10px;
-                    -webkit-text-size-adjust: 100%;
-                    -ms-text-size-adjust: 100%;
-                }
-                .email-container { 
-                    max-width: 600px; 
-                    margin: 0 auto; 
-                    background: white;
-                    border-radius: 12px;
-                    overflow: hidden;
-                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                }
-                .header { 
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                    color: white; 
-                    padding: 30px 20px; 
-                    text-align: center; 
-                }
-                .logo-container {
-                    margin-bottom: 15px;
-                }
-                .logo {
-                    max-width: 150px;
-                    height: auto;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-                    display: block;
-                    margin: 0 auto;
-                }
-                .header h1 {
-                    font-size: 28px;
-                    margin-bottom: 8px;
-                    font-weight: 700;
-                }
-                .header p {
-                    font-size: 14px;
-                    opacity: 0.9;
-                }
-                .content { 
-                    padding: 25px 20px; 
-                }
-                .factura-info { 
-                    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); 
-                    padding: 20px; 
-                    border-radius: 10px; 
-                    margin-bottom: 25px;
-                    border-left: 4px solid #8b5cf6;
-                }
-                .factura-info h2 {
-                    color: #8b5cf6;
-                    margin-bottom: 12px;
-                    font-size: 20px;
-                }
-                .factura-info p {
-                    margin: 6px 0;
-                    color: #495057;
-                    font-size: 14px;
-                    word-break: break-word;
-                }
-                .factura-info strong {
-                    color: #1e293b;
-                    font-weight: 600;
-                }
-                .items-section {
-                    margin: 25px 0;
-                }
-                .items-section h3 {
-                    color: #1e293b;
-                    margin-bottom: 15px;
-                    font-size: 18px;
-                    padding-bottom: 8px;
-                    border-bottom: 2px solid #e2e8f0;
-                }
-                .table-wrapper {
-                    overflow-x: auto;
-                    -webkit-overflow-scrolling: touch;
-                    margin: 0 -5px;
-                }
-                table { 
-                    width: 100%; 
-                    min-width: 500px;
-                    border-collapse: collapse; 
-                    background: white; 
-                    border-radius: 10px; 
-                    overflow: hidden;
-                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-                    table-layout: fixed;
-                }
-                thead {
-                    background: linear-gradient(135deg, #8b5cf6 0%, #667eea 100%);
-                }
-                th { 
-                    color: white; 
-                    padding: 10px 8px; 
-                    text-align: left; 
-                    font-weight: 600;
-                    font-size: 12px;
-                    text-transform: uppercase;
-                    letter-spacing: 0.3px;
-                }
-                th:nth-child(1) { width: 8%; }
-                th:nth-child(2) { width: 25%; }
-                th:nth-child(3) { width: 15%; }
-                th:nth-child(4) { width: 18%; }
-                th:nth-child(5) { width: 12%; }
-                th:nth-child(6) { width: 22%; text-align: right; }
-                th:last-child {
-                    text-align: right;
-                }
-                tbody tr {
-                    border-bottom: 1px solid #e2e8f0;
-                }
-                tbody tr:hover {
-                    background-color: #f8f9fa;
-                }
-                td {
-                    padding: 10px 8px;
-                    font-size: 13px;
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                }
-                tfoot {
-                    background: #f8f9fa;
-                    border-top: 3px solid #8b5cf6;
-                }
-                .total-row {
-                    font-size: 16px;
-                    font-weight: 700;
-                }
-                .total-label {
-                    text-align: right;
-                    padding: 15px 10px;
-                    color: #1e293b;
-                    font-size: 16px;
-                }
-                .total-amount {
-                    text-align: right;
-                    padding: 15px 10px;
-                    color: #10b981;
-                    font-size: 20px;
-                    font-weight: 700;
-                }
-                .footer { 
-                    text-align: center; 
-                    margin-top: 30px; 
-                    padding-top: 25px;
-                    border-top: 2px solid #e2e8f0;
-                    color: #64748b; 
-                    font-size: 13px; 
-                }
-                .footer p {
-                    margin: 6px 0;
-                }
-                .footer .brand {
-                    color: #8b5cf6;
-                    font-weight: 600;
-                    font-size: 15px;
-                }
-                /* Estilos para móvil */
-                @media only screen and (max-width: 600px) {
-                    body {
-                        padding: 5px;
-                    }
-                    .email-container {
-                        max-width: 100%;
-                        border-radius: 8px;
-                    }
-                    .header {
-                        padding: 25px 15px;
-                    }
-                    .logo {
-                        max-width: 120px;
-                    }
-                    .header h1 {
-                        font-size: 24px;
-                    }
-                    .header p {
-                        font-size: 13px;
-                    }
-                    .content {
-                        padding: 20px 15px;
-                    }
-                    .factura-info {
-                        padding: 15px;
-                    }
-                    .factura-info h2 {
-                        font-size: 18px;
-                    }
-                    .factura-info p {
-                        font-size: 13px;
-                    }
-                    .items-section h3 {
-                        font-size: 16px;
-                    }
-                    .table-wrapper {
-                        margin: 0;
-                    }
-                    table {
-                        min-width: 100%;
-                        font-size: 12px;
-                    }
-                    th {
-                        padding: 8px 6px;
-                        font-size: 11px;
-                    }
-                    td {
-                        padding: 8px 6px;
-                        font-size: 12px;
-                    }
-                    .total-label {
-                        font-size: 14px;
-                        padding: 12px 8px;
-                    }
-                    .total-amount {
-                        font-size: 18px;
-                        padding: 12px 8px;
-                    }
-                    .footer {
-                        font-size: 12px;
-                        margin-top: 25px;
-                        padding-top: 20px;
-                    }
-                }
-                /* Estilos para pantallas muy pequeñas */
-                @media only screen and (max-width: 400px) {
-                    .header {
-                        padding: 20px 10px;
-                    }
-                    .logo {
-                        max-width: 100px;
-                    }
-                    .header h1 {
-                        font-size: 20px;
-                    }
-                    .content {
-                        padding: 15px 10px;
-                    }
-                    .factura-info {
-                        padding: 12px;
-                    }
-                    th {
-                        padding: 6px 4px;
-                        font-size: 10px;
-                    }
-                    td {
-                        padding: 6px 4px;
-                        font-size: 11px;
-                    }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="email-container">
-                <div class="header">
-                    <div class="logo-container">
-                        <img src="${logoUrl}" alt="ToysWalls Logo" class="logo" style="max-width: 150px; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);" />
-                    </div>
-                    <h1>TOYS WALLS</h1>
-                    <p>Sistema de Inventario</p>
+        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center;">
+                <div style="margin-bottom: 15px;">
+                    <img src="${logoUrl}" alt="ToysWalls Logo" style="max-width: 150px; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2); display: block; margin: 0 auto;" />
                 </div>
-                <div class="content">
-                    <div class="factura-info">
-                        <h2>FACTURA ELECTRÓNICA</h2>
-                        <p><strong>Código de Factura:</strong> ${facturaData.codigo_factura}</p>
-                        <p><strong>Fecha y Hora:</strong> ${fecha}</p>
-                        <p><strong>Cliente:</strong> ${clienteNombre}</p>
-                        <p><strong>Correo:</strong> ${clienteEmail}</p>
+                <h1 style="font-size: 28px; margin: 0 0 8px 0; font-weight: 700; color: white;">TOYS WALLS</h1>
+                <p style="font-size: 14px; margin: 0; opacity: 0.9;">Sistema de Inventario</p>
+            </div>
+            <div style="padding: 25px 20px;">
+                <div style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 20px; border-radius: 10px; margin-bottom: 25px; border-left: 4px solid #8b5cf6;">
+                    <h2 style="color: #8b5cf6; margin: 0 0 12px 0; font-size: 20px; font-weight: 600;">FACTURA ELECTRÓNICA</h2>
+                    <p style="margin: 6px 0; color: #495057; font-size: 14px; word-break: break-word;"><strong style="color: #1e293b; font-weight: 600;">Código de Factura:</strong> ${facturaData.codigo_factura}</p>
+                    <p style="margin: 6px 0; color: #495057; font-size: 14px; word-break: break-word;"><strong style="color: #1e293b; font-weight: 600;">Fecha y Hora:</strong> ${fecha}</p>
+                    <p style="margin: 6px 0; color: #495057; font-size: 14px; word-break: break-word;"><strong style="color: #1e293b; font-weight: 600;">Cliente:</strong> ${clienteNombre}</p>
+                    <p style="margin: 6px 0; color: #495057; font-size: 14px; word-break: break-word;"><strong style="color: #1e293b; font-weight: 600;">Correo:</strong> ${clienteEmail}</p>
+                </div>
+                
+                <div style="margin: 25px 0;">
+                    <h3 style="color: #1e293b; margin: 0 0 15px 0; font-size: 18px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Detalle de la Compra</h3>
+                    <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -5px;">
+                        <table style="width: 100%; min-width: 500px; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); table-layout: fixed;">
+                            <thead>
+                                <tr style="background: linear-gradient(135deg, #8b5cf6 0%, #667eea 100%);">
+                                    <th style="color: white; padding: 10px 8px; text-align: center; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 8%;">#</th>
+                                    <th style="color: white; padding: 10px 8px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 25%;">Juguete</th>
+                                    <th style="color: white; padding: 10px 8px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 15%;">Código</th>
+                                    <th style="color: white; padding: 10px 8px; text-align: right; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 18%;">Precio Unit.</th>
+                                    <th style="color: white; padding: 10px 8px; text-align: center; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 12%;">Cant.</th>
+                                    <th style="color: white; padding: 10px 8px; text-align: right; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 22%;">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${itemsHTML}
+                            </tbody>
+                            <tfoot style="background: #f8f9fa; border-top: 3px solid #8b5cf6;">
+                                <tr>
+                                    <td colspan="5" style="text-align: right; padding: 15px 10px; color: #1e293b; font-size: 16px; font-weight: 700;">TOTAL A PAGAR:</td>
+                                    <td style="text-align: right; padding: 15px 10px; color: #10b981; font-size: 20px; font-weight: 700;">$${facturaData.total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
                     </div>
-                    
-                    <div class="items-section">
-                        <h3>Detalle de la Compra</h3>
-                        <div class="table-wrapper">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th style="text-align: center;">#</th>
-                                        <th>Juguete</th>
-                                        <th>Código</th>
-                                        <th style="text-align: right;">Precio Unit.</th>
-                                        <th style="text-align: center;">Cant.</th>
-                                        <th style="text-align: right;">Subtotal</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${itemsHTML}
-                                </tbody>
-                                <tfoot>
-                                    <tr class="total-row">
-                                        <td colspan="5" class="total-label">TOTAL A PAGAR:</td>
-                                        <td class="total-amount">$${facturaData.total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    </div>
-                    
-                    <div class="footer">
-                        <p class="brand">ToysWalls - Sistema de Inventario</p>
-                        <p>Gracias por su compra. Esperamos verlo pronto.</p>
-                        <p style="margin-top: 15px; font-size: 12px; color: #94a3b8;">
-                            Este es un correo automático, por favor no responda a este mensaje.
-                        </p>
-                    </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 30px; padding-top: 25px; border-top: 2px solid #e2e8f0; color: #64748b; font-size: 13px;">
+                    <p style="margin: 6px 0; color: #8b5cf6; font-weight: 600; font-size: 15px;">ToysWalls - Sistema de Inventario</p>
+                    <p style="margin: 6px 0;">Gracias por su compra. Esperamos verlo pronto.</p>
+                    <p style="margin: 21px 0 0 0; font-size: 12px; color: #94a3b8;">
+                        Este es un correo automático, por favor no responda a este mensaje.
+                    </p>
                 </div>
             </div>
-        </body>
-        </html>
+        </div>
     `;
 
     // Usar EmailJS para enviar el correo
@@ -2694,31 +2469,33 @@ async function aplicarFiltroVentas(filtro) {
         }
 
         resultsDiv.innerHTML = `
-            <h3>Resultados de Ventas</h3>
-            <table class="inventario-table">
-                <thead>
-                    <tr>
-                        <th>Código</th>
-                        <th>Juguete</th>
-                        <th>Empleado</th>
-                        <th>Precio</th>
-                        <th>Método</th>
-                        <th>Fecha</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${ventas.map(v => `
+            <h3>Resultados de Ventas (${ventas.length} ${ventas.length === 1 ? 'venta' : 'ventas'})</h3>
+            <div class="inventario-table-container">
+                <table class="inventario-table">
+                    <thead>
                         <tr>
-                            <td>${v.codigo_venta}</td>
-                            <td>${v.juguetes?.nombre || 'N/A'}</td>
-                            <td>${v.empleados?.nombre || 'N/A'}</td>
-                            <td>$${parseFloat(v.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
-                            <td>${v.metodo_pago}</td>
-                            <td>${new Date(v.created_at).toLocaleDateString('es-CO')}</td>
+                            <th>Código</th>
+                            <th>Juguete</th>
+                            <th>Empleado</th>
+                            <th>Precio</th>
+                            <th>Método</th>
+                            <th>Fecha</th>
                         </tr>
-                    `).join('')}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        ${ventas.map(v => `
+                            <tr>
+                                <td>${v.codigo_venta || 'N/A'}</td>
+                                <td>${v.juguetes?.nombre || 'N/A'}</td>
+                                <td>${v.empleados?.nombre || 'N/A'}</td>
+                                <td>$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                                <td>${v.metodo_pago || 'N/A'}</td>
+                                <td>${new Date(v.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
         `;
     } catch (error) {
         console.error('Error al aplicar filtro:', error);
@@ -2754,12 +2531,35 @@ async function aplicarFiltroGanancias(filtro) {
 
         if (error) throw error;
 
-        const total = ventas?.reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0) || 0;
+        if (!ventas || ventas.length === 0) {
+            resultsDiv.innerHTML = `
+                <div class="stat-card" style="max-width: 500px; margin: 0 auto; text-align: center;">
+                    <h3>Ganancias ${filtro === 'dia' ? 'del Día' : filtro === 'semana' ? 'de la Semana' : 'Totales'}</h3>
+                    <p class="stat-number" style="color: #64748b;">$0.00</p>
+                    <p style="color: #64748b; font-size: 14px; margin-top: 8px;">No hay ventas registradas</p>
+                </div>
+            `;
+            return;
+        }
+
+        const total = ventas.reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0);
+        const promedio = total / ventas.length;
+        const tituloFiltro = filtro === 'dia' ? 'del Día' : filtro === 'semana' ? 'de la Semana' : 'Totales';
 
         resultsDiv.innerHTML = `
-            <div class="stat-card" style="max-width: 400px; margin: 0 auto;">
-                <h3>Ganancias ${filtro === 'dia' ? 'del Día' : filtro === 'semana' ? 'de la Semana' : 'Totales'}</h3>
-                <p class="stat-number">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</p>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 24px;">
+                <div class="stat-card" style="text-align: center;">
+                    <h3 style="font-size: 16px; margin-bottom: 12px; color: #64748b;">Ganancias ${tituloFiltro}</h3>
+                    <p class="stat-number" style="color: #059669; font-size: 32px;">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</p>
+                </div>
+                <div class="stat-card" style="text-align: center;">
+                    <h3 style="font-size: 16px; margin-bottom: 12px; color: #64748b;">Total Ventas</h3>
+                    <p class="stat-number" style="color: #667eea; font-size: 32px;">${ventas.length}</p>
+                </div>
+                <div class="stat-card" style="text-align: center;">
+                    <h3 style="font-size: 16px; margin-bottom: 12px; color: #64748b;">Promedio por Venta</h3>
+                    <p class="stat-number" style="color: #764ba2; font-size: 32px;">$${promedio.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</p>
+                </div>
             </div>
         `;
     } catch (error) {
@@ -2807,6 +2607,50 @@ function initAjustes() {
             await buscarVentaParaDevolucion();
         }
     });
+
+    // Cargar ventas recientes en ajustes
+    cargarVentasRecientesAjustes();
+}
+
+async function cargarVentasRecientesAjustes() {
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        
+        // Cargar ventas recientes
+        const { data: ventasRecientes } = await window.supabaseClient
+            .from('ventas')
+            .select(`
+                *,
+                juguetes(nombre, codigo),
+                empleados(nombre, codigo)
+            `)
+            .eq('empresa_id', user.empresa_id)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+        const ventasList = document.getElementById('ajustesVentasRecientes');
+        if (ventasList) {
+            if (ventasRecientes && ventasRecientes.length > 0) {
+                ventasList.innerHTML = ventasRecientes.map(v => `
+                    <div class="venta-item">
+                        <div class="venta-info">
+                            <strong>${v.juguetes?.nombre || 'N/A'}</strong>
+                            <span>${v.codigo_venta || 'Sin código'} - ${new Date(v.created_at).toLocaleString('es-CO')}</span>
+                        </div>
+                        <div class="venta-precio">$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                `).join('');
+            } else {
+                ventasList.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No hay ventas recientes</p>';
+            }
+        }
+    } catch (error) {
+        console.error('Error al cargar ventas recientes en ajustes:', error);
+        const ventasList = document.getElementById('ajustesVentasRecientes');
+        if (ventasList) {
+            ventasList.innerHTML = '<p style="text-align: center; color: #ef4444; padding: 20px;">Error al cargar ventas</p>';
+        }
+    }
 }
 
 async function buscarVentaParaDevolucion() {

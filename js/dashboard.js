@@ -22,12 +22,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         return;
     }
     
-    // Ocultar botones del sidebar para empleados
+    // Ocultar botones del sidebar para empleados (solo mostrar Dashboard, Registrar Venta, Inventario, Ajustes y Análisis)
     if (isEmpleado) {
         const sidebarButtons = document.querySelectorAll('.sidebar-btn');
         sidebarButtons.forEach(btn => {
             const page = btn.getAttribute('data-page');
-            if (page !== 'venta' && page !== 'facturar') {
+            // Permitir: Dashboard (default), Registrar Venta (venta), Inventario (inventario), Ajustes (ajustes), Análisis (analisis)
+            if (page !== 'default' && page !== 'venta' && page !== 'facturar' && page !== 'inventario' && page !== 'ajustes' && page !== 'analisis') {
                 btn.style.display = 'none';
             }
         });
@@ -343,6 +344,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     let currentTiendaId = null;
     let currentUsuarioId = null;
     let ventaItems = []; // Array para almacenar items de la venta actual
+    let ultimoJugueteAgregado = null; // Variable global para guardar el último juguete agregado (para deshacer)
 
     function showView(viewName) {
         // Ocultar todas las vistas
@@ -359,8 +361,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         analisisView.style.display = 'none';
         ajustesView.style.display = 'none';
         
-        // Verificar permisos para empleados
-        if (isEmpleado && viewName !== 'venta' && viewName !== 'facturar') {
+        // Verificar permisos para empleados (pueden acceder a Dashboard, Registrar Venta, Inventario, Ajustes y Análisis)
+        if (isEmpleado && viewName !== 'default' && viewName !== 'venta' && viewName !== 'facturar' && viewName !== 'inventario' && viewName !== 'ajustes' && viewName !== 'analisis') {
             alert('No tienes permisos para acceder a esta sección');
             return;
         }
@@ -388,10 +390,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
                 break;
             case 'inventario':
-                if (isAdmin) {
-                    inventarioView.style.display = 'block';
-                    loadInventario();
-                }
+                inventarioView.style.display = 'block';
+                loadInventario();
                 break;
             case 'bodegas':
                 if (isAdmin) {
@@ -439,24 +439,20 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
                 break;
             case 'analisis':
-                if (isAdmin) {
-                    analisisView.style.display = 'block';
-                    if (typeof loadAnalisis === 'function') {
-                        loadAnalisis();
-                    }
+                analisisView.style.display = 'block';
+                if (typeof loadAnalisis === 'function') {
+                    loadAnalisis();
                 }
                 break;
             case 'ajustes':
-                if (isAdmin) {
-                    ajustesView.style.display = 'block';
-                    if (typeof initAjustes === 'function') {
-                        initAjustes();
-                    }
+                ajustesView.style.display = 'block';
+                if (typeof initAjustes === 'function') {
+                    initAjustes();
                 }
                 break;
             default:
                 defaultView.style.display = 'block';
-                if (isAdmin) {
+                if (typeof loadDashboardSummary === 'function') {
                     loadDashboardSummary();
                 }
                 break;
@@ -1151,7 +1147,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                     };
                     
                     // Habilitar botón deshacer
-                    actualizarEstadoBotonDeshacer(true);
+                    if (window.actualizarEstadoBotonDeshacer) {
+                        window.actualizarEstadoBotonDeshacer(true);
+                    }
                     
                     showJugueteFormMessage(`Juguete actualizado: se agregaron ${cantidad} unidades (Total: ${nuevaCantidad})`, 'success');
                 } else {
@@ -1187,8 +1185,12 @@ document.addEventListener('DOMContentLoaded', async function() {
                         tipo: 'insert'
                     };
                     
+                    console.log('Nuevo juguete guardado para deshacer:', ultimoJugueteAgregado);
+                    
                     // Habilitar botón deshacer
-                    actualizarEstadoBotonDeshacer(true);
+                    if (window.actualizarEstadoBotonDeshacer) {
+                        window.actualizarEstadoBotonDeshacer(true);
+                    }
 
                 showJugueteFormMessage('Juguete agregado correctamente', 'success');
                 }
@@ -1204,11 +1206,15 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Función para deshacer el último juguete agregado
     window.deshacerUltimoJuguete = async function() {
+        console.log('=== INICIO deshacerUltimoJuguete ===');
+        console.log('ultimoJugueteAgregado:', ultimoJugueteAgregado);
+        
         const deshacerBtn = document.getElementById('deshacerUltimoJugueteBtn');
         
         // Verificar que el botón existe y está habilitado
         if (!deshacerBtn) {
-            console.log('Botón deshacer no encontrado');
+            console.error('Botón deshacer no encontrado en el DOM');
+            alert('Error: No se encontró el botón deshacer. Por favor, recarga la página.');
             return;
         }
         
@@ -1220,107 +1226,160 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Verificar que hay un juguete para deshacer
         if (!ultimoJugueteAgregado) {
             console.log('No hay juguete para deshacer');
-            showJugueteFormMessage('No hay ningún juguete reciente para deshacer', 'error');
-            actualizarEstadoBotonDeshacer(false);
+            alert('No hay ningún juguete reciente para deshacer');
+            if (window.actualizarEstadoBotonDeshacer) {
+                window.actualizarEstadoBotonDeshacer(false);
+            }
             return;
         }
 
         // Confirmar acción
-        if (!confirm('¿Estás seguro de que deseas deshacer el último juguete agregado?\n\nEsta acción eliminará el último registro que agregaste.')) {
+        const confirmacion = confirm('¿Estás seguro de que deseas deshacer el último juguete agregado?\n\nEsta acción eliminará el último registro que agregaste.');
+        if (!confirmacion) {
+            console.log('Usuario canceló la operación');
             return;
         }
 
         // Deshabilitar el botón inmediatamente para prevenir múltiples clics
-        actualizarEstadoBotonDeshacer(false);
+        if (window.actualizarEstadoBotonDeshacer) {
+            window.actualizarEstadoBotonDeshacer(false);
+        }
         
         // Mostrar mensaje de procesamiento
-        showJugueteFormMessage('Procesando deshacer...', 'success');
+        if (typeof showJugueteFormMessage === 'function') {
+            showJugueteFormMessage('Procesando deshacer...', 'success');
+        }
 
         try {
+            const user = JSON.parse(sessionStorage.getItem('user'));
+            if (!user || !user.empresa_id) {
+                throw new Error('No se pudo obtener la información del usuario');
+            }
+
             let operacionExitosa = false;
             
             if (ultimoJugueteAgregado.tipo === 'insert') {
                 // Eliminar el registro completo
                 console.log('Eliminando juguete con ID:', ultimoJugueteAgregado.id);
                 
+                // Verificar que el juguete existe antes de eliminarlo
+                const { data: jugueteVerificado, error: verificarError } = await window.supabaseClient
+                    .from('juguetes')
+                    .select('id, empresa_id')
+                    .eq('id', ultimoJugueteAgregado.id)
+                    .eq('empresa_id', user.empresa_id)
+                    .single();
+
+                if (verificarError) {
+                    console.error('Error al verificar juguete:', verificarError);
+                    throw new Error('No se pudo verificar el juguete: ' + verificarError.message);
+                }
+
+                if (!jugueteVerificado) {
+                    throw new Error('El juguete no existe o no pertenece a tu empresa');
+                }
+                
                 const { data: jugueteEliminado, error } = await window.supabaseClient
                     .from('juguetes')
                     .delete()
                     .eq('id', ultimoJugueteAgregado.id)
+                    .eq('empresa_id', user.empresa_id)
                     .select();
 
                 if (error) {
                     console.error('Error al eliminar:', error);
-                    throw error;
+                    throw new Error('Error al eliminar el juguete: ' + (error.message || 'Error desconocido') + '. Código: ' + (error.code || 'N/A'));
                 }
                 
                 if (jugueteEliminado && jugueteEliminado.length > 0) {
                     operacionExitosa = true;
                     console.log('Juguete eliminado exitosamente:', jugueteEliminado[0]);
-                    showJugueteFormMessage('Juguete eliminado correctamente. Actualizando inventario...', 'success');
+                    if (typeof showJugueteFormMessage === 'function') {
+                        showJugueteFormMessage('Juguete eliminado correctamente. Actualizando inventario...', 'success');
+                    }
                 } else {
                     console.warn('No se encontró el juguete para eliminar');
-                    showJugueteFormMessage('El juguete ya no existe en la base de datos', 'error');
+                    throw new Error('El juguete ya no existe en la base de datos');
                 }
             } else if (ultimoJugueteAgregado.tipo === 'update') {
                 // Restaurar la cantidad original
                 console.log('Restaurando cantidad del juguete con ID:', ultimoJugueteAgregado.id);
+                console.log('Cantidad original:', ultimoJugueteAgregado.cantidadOriginal);
                 
                 const { data: jugueteActualizado, error } = await window.supabaseClient
                     .from('juguetes')
                     .update({ cantidad: ultimoJugueteAgregado.cantidadOriginal })
                     .eq('id', ultimoJugueteAgregado.id)
+                    .eq('empresa_id', user.empresa_id)
                     .select();
 
                 if (error) {
                     console.error('Error al actualizar:', error);
-                    throw error;
+                    throw new Error('Error al restaurar la cantidad: ' + (error.message || 'Error desconocido') + '. Código: ' + (error.code || 'N/A'));
                 }
                 
                 if (jugueteActualizado && jugueteActualizado.length > 0) {
                     operacionExitosa = true;
                     console.log('Cantidad restaurada exitosamente');
-                    showJugueteFormMessage(`Cantidad restaurada a ${ultimoJugueteAgregado.cantidadOriginal}. Actualizando inventario...`, 'success');
+                    if (typeof showJugueteFormMessage === 'function') {
+                        showJugueteFormMessage(`Cantidad restaurada a ${ultimoJugueteAgregado.cantidadOriginal}. Actualizando inventario...`, 'success');
+                    }
                 } else {
                     console.warn('No se pudo actualizar el juguete');
-                    showJugueteFormMessage('No se pudo restaurar la cantidad del juguete', 'error');
+                    throw new Error('No se pudo restaurar la cantidad del juguete. El juguete puede no existir.');
                 }
+            } else {
+                throw new Error('Tipo de operación desconocido: ' + ultimoJugueteAgregado.tipo);
             }
 
             // Limpiar variable después de procesar
+            const jugueteDeshecho = ultimoJugueteAgregado;
             ultimoJugueteAgregado = null;
 
             // Actualizar inventario y totales si la operación fue exitosa
             if (operacionExitosa) {
                 console.log('Actualizando inventario y totales...');
                 
-                // Recargar inventario
-                await loadInventario();
-                
-                // Recargar dashboard summary
-                if (typeof loadDashboardSummary === 'function') {
-                    await loadDashboardSummary();
+                try {
+                    // Recargar inventario
+                    if (typeof loadInventario === 'function') {
+                        await loadInventario();
+                    }
+                    
+                    // Recargar dashboard summary
+                    if (typeof loadDashboardSummary === 'function') {
+                        await loadDashboardSummary();
+                    }
+                    
+                    // Recargar tiendas
+                    if (typeof loadTiendas === 'function') {
+                        await loadTiendas();
+                    }
+                    
+                    // Recargar bodegas
+                    if (typeof loadBodegas === 'function') {
+                        await loadBodegas();
+                    }
+                    
+                    console.log('Inventario actualizado correctamente');
+                } catch (updateError) {
+                    console.error('Error al actualizar vistas:', updateError);
+                    // No lanzar error aquí, la operación principal fue exitosa
                 }
-                
-                // Recargar tiendas
-                if (typeof loadTiendas === 'function') {
-                    await loadTiendas();
-                }
-                
-                // Recargar bodegas
-                if (typeof loadBodegas === 'function') {
-                    await loadBodegas();
-                }
-                
-                console.log('Inventario actualizado correctamente');
             }
         } catch (error) {
-            console.error('Error al deshacer:', error);
-            showJugueteFormMessage('Error al deshacer: ' + (error.message || 'Error desconocido'), 'error');
+            console.error('Error completo al deshacer:', error);
+            const mensajeError = error.message || 'Error desconocido';
+            alert('Error al deshacer: ' + mensajeError + '\n\nPor favor, verifica la consola para más detalles.');
+            if (typeof showJugueteFormMessage === 'function') {
+                showJugueteFormMessage('Error al deshacer: ' + mensajeError, 'error');
+            }
             // Limpiar variable incluso si hay error
             ultimoJugueteAgregado = null;
             // Mantener el botón deshabilitado
         }
+        
+        console.log('=== FIN deshacerUltimoJuguete ===');
     };
 
     // Función para toggle de ubicaciones
@@ -1404,11 +1463,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     let paginaActualInventario = 1;
     const productosPorPagina = 10;
     
-    // Variable para guardar el último juguete agregado (para deshacer)
-    let ultimoJugueteAgregado = null;
-    
     // Función para habilitar/deshabilitar el botón deshacer
-    function actualizarEstadoBotonDeshacer(habilitado) {
+    window.actualizarEstadoBotonDeshacer = function(habilitado) {
         const deshacerBtn = document.getElementById('deshacerUltimoJugueteBtn');
         if (deshacerBtn) {
             if (habilitado && ultimoJugueteAgregado) {
@@ -1419,6 +1475,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 deshacerBtn.style.background = '#ef4444';
                 deshacerBtn.style.color = 'white';
                 deshacerBtn.style.border = 'none';
+                console.log('Botón deshacer habilitado');
             } else {
                 // Deshabilitar botón - color gris
                 deshacerBtn.disabled = true;
@@ -1427,19 +1484,58 @@ document.addEventListener('DOMContentLoaded', async function() {
                 deshacerBtn.style.background = '#94a3b8';
                 deshacerBtn.style.color = 'white';
                 deshacerBtn.style.border = 'none';
+                console.log('Botón deshacer deshabilitado');
             }
+        }
+    };
+    
+    // Función para inicializar el botón deshacer
+    function inicializarBotonDeshacer() {
+        const deshacerBtn = document.getElementById('deshacerUltimoJugueteBtn');
+        if (deshacerBtn) {
+            console.log('Botón deshacer encontrado, inicializando...');
+            
+            // Remover listeners anteriores si existen (clonar y reemplazar)
+            const nuevoBtn = deshacerBtn.cloneNode(true);
+            deshacerBtn.parentNode.replaceChild(nuevoBtn, deshacerBtn);
+            
+            // Inicializar estado
+            if (window.actualizarEstadoBotonDeshacer) {
+                window.actualizarEstadoBotonDeshacer(false);
+            }
+            
+            // Agregar event listener
+            nuevoBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('=== Click en botón deshacer detectado ===');
+                console.log('window.deshacerUltimoJuguete existe?', typeof window.deshacerUltimoJuguete === 'function');
+                console.log('ultimoJugueteAgregado:', ultimoJugueteAgregado);
+                
+                if (typeof window.deshacerUltimoJuguete === 'function') {
+                    window.deshacerUltimoJuguete();
+                } else {
+                    console.error('window.deshacerUltimoJuguete no está definido');
+                    alert('Error: La función de deshacer no está disponible. Por favor, recarga la página.');
+                }
+            });
+            
+            console.log('Botón deshacer inicializado correctamente');
+        } else {
+            console.warn('Botón deshacer no encontrado en el DOM');
         }
     }
     
-    // Inicializar el botón como deshabilitado al cargar
-    document.addEventListener('DOMContentLoaded', function() {
-        const deshacerBtn = document.getElementById('deshacerUltimoJugueteBtn');
-        if (deshacerBtn) {
-            actualizarEstadoBotonDeshacer(false);
-            // Agregar event listener
-            deshacerBtn.addEventListener('click', window.deshacerUltimoJuguete);
-        }
-    });
+    // Intentar inicializar cuando el DOM esté listo
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', inicializarBotonDeshacer);
+    } else {
+        inicializarBotonDeshacer();
+    }
+    
+    // También intentar después de delays por si el botón se carga dinámicamente
+    setTimeout(inicializarBotonDeshacer, 500);
+    setTimeout(inicializarBotonDeshacer, 1000);
 
     // Función para capitalizar la primera letra
     function capitalizarPrimeraLetra(texto) {

@@ -128,14 +128,16 @@
                         </div>
                         <div class="summary-charts">
                             <div class="chart-card">
-                                <h3>Ventas del Mes Actual</h3>
-                                <p class="chart-subtitle-small">Resumen de ventas diarias</p>
-                                <canvas id="dashboardVentasChart"></canvas>
-                            </div>
-                            <div class="chart-card">
                                 <h3>Ventas Recientes</h3>
                                 <div id="ventasRecientes" class="ventas-list">
                                     <p style="text-align: center; color: #64748b; padding: 20px;">Cargando ventas...</p>
+                                </div>
+                            </div>
+                            <div class="chart-card">
+                                <h3>Ventas del Mes Actual</h3>
+                                <p class="chart-subtitle-small">Resumen de ventas diarias</p>
+                                <div class="dashboard-chart-container">
+                                    <canvas id="dashboardVentasChart"></canvas>
                                 </div>
                             </div>
                         </div>
@@ -255,25 +257,27 @@
                         </div>
                         <div class="factura-items">
                             <h3>Items de la Venta</h3>
-                            <table class="factura-table">
-                                <thead>
-                                    <tr>
-                                        <th>Juguete</th>
-                                        <th>Código</th>
-                                        <th>Precio</th>
-                                        <th>Cantidad</th>
-                                        <th>Subtotal</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="facturaItemsBody">
-                                </tbody>
-                                <tfoot>
-                                    <tr>
-                                        <td colspan="4" style="text-align: right; font-weight: bold;">TOTAL:</td>
-                                        <td style="font-weight: bold; font-size: 18px;" id="facturaTotal">$0.00</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
+                            <div class="factura-table-wrapper">
+                                <table class="factura-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Juguete</th>
+                                            <th>Código</th>
+                                            <th>Precio</th>
+                                            <th>Cantidad</th>
+                                            <th>Subtotal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="facturaItemsBody">
+                                    </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td colspan="4" style="text-align: right; font-weight: bold; word-wrap: break-word;">TOTAL:</td>
+                                            <td style="font-weight: bold; font-size: 18px; word-wrap: break-word;" id="facturaTotal">$0.00</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
                         </div>
                         <form id="enviarFacturaForm" class="bodega-form">
                             <h3>Datos del Cliente</h3>
@@ -411,11 +415,11 @@
                         </div>
                         <div id="jugueteFormErrorMessage" class="error-message" style="display: none;"></div>
                         <div id="jugueteFormSuccessMessage" class="success-message" style="display: none;"></div>
-                        <div style="display: flex; gap: 10px; margin-top: 20px;">
-                            <button type="submit" class="btn-primary" style="flex: 1;">
-                            <i class="fas fa-plus"></i> Agregar Juguete
-                        </button>
-                            <button type="button" id="deshacerUltimoJugueteBtn" class="btn-secondary" style="padding: 12px 24px; border-radius: 8px; font-size: 14px;">
+                        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 20px;">
+                            <button type="submit" class="btn-primary" style="width: 100%;">
+                                <i class="fas fa-plus"></i> Agregar Juguete
+                            </button>
+                            <button type="button" id="deshacerUltimoJugueteBtn" class="btn-secondary" style="width: 100%; padding: 12px 24px; border-radius: 8px; font-size: 14px;">
                                 <i class="fas fa-undo"></i> Deshacer
                             </button>
                         </div>
@@ -917,7 +921,9 @@
                         <div class="chart-container">
                             <h3>Ventas por Día del Mes Actual</h3>
                             <p class="chart-subtitle">Análisis detallado de ventas diarias</p>
-                            <canvas id="ventasPorDiaChart"></canvas>
+                            <div class="chart-wrapper">
+                                <canvas id="ventasPorDiaChart"></canvas>
+                            </div>
                             <div class="chart-info" id="ventasPorDiaInfo">
                                 <p><strong>Día con más ventas:</strong> <span id="diaMaxVentas">-</span></p>
                                 <p><strong>Día con menos ventas:</strong> <span id="diaMinVentas">-</span></p>
@@ -927,7 +933,9 @@
                         <div class="chart-container">
                             <h3>Ventas por Hora del Día</h3>
                             <p class="chart-subtitle">Análisis de horas con mayor actividad de ventas</p>
-                            <canvas id="ventasPorHoraChart"></canvas>
+                            <div class="chart-wrapper">
+                                <canvas id="ventasPorHoraChart"></canvas>
+                            </div>
                             <div class="chart-info" id="ventasPorHoraInfo">
                                 <p><strong>Hora con más ventas:</strong> <span id="horaMaxVentas">-</span></p>
                                 <p><strong>Hora con menos ventas:</strong> <span id="horaMinVentas">-</span></p>
@@ -937,7 +945,9 @@
                         <div class="chart-container">
                             <h3>Ventas por Día por Tienda</h3>
                             <p class="chart-subtitle">Análisis de ventas diarias por tienda</p>
-                            <canvas id="ventasPorDiaTiendaChart"></canvas>
+                            <div class="chart-wrapper">
+                                <canvas id="ventasPorDiaTiendaChart"></canvas>
+                            </div>
                             <div class="chart-info" id="ventasPorDiaTiendaInfo">
                                 <p><strong>Tienda con más ventas:</strong> <span id="tiendaMaxVentas">-</span></p>
                             </div>
@@ -946,13 +956,17 @@
                         <div class="chart-container">
                             <h3>Ventas por Hora por Tienda</h3>
                             <p class="chart-subtitle">Análisis de ventas por hora por tienda</p>
-                            <canvas id="ventasPorHoraTiendaChart"></canvas>
+                            <div class="chart-wrapper">
+                                <canvas id="ventasPorHoraTiendaChart"></canvas>
+                            </div>
                         </div>
                         
                         <div class="chart-container">
                             <h3>Ventas por Empleado</h3>
                             <p class="chart-subtitle">Análisis de ventas realizadas por cada empleado</p>
-                            <canvas id="ventasPorEmpleadoChart"></canvas>
+                            <div class="chart-wrapper">
+                                <canvas id="ventasPorEmpleadoChart"></canvas>
+                            </div>
                             <div class="chart-info" id="ventasPorEmpleadoInfo">
                                 <p><strong>Empleado con más ventas:</strong> <span id="empleadoMaxVentas">-</span></p>
                             </div>
@@ -968,6 +982,16 @@
                 <div id="ajustesView" style="display: none;">
                     <h1>Ajustes y Devoluciones</h1>
                     
+                    <div class="ajustes-section" style="margin-bottom: 30px;">
+                        <h2>Ventas Recientes</h2>
+                        <p style="color: #64748b; margin-bottom: 20px;">
+                            Últimas ventas registradas en el sistema.
+                        </p>
+                        <div id="ajustesVentasRecientes" class="ventas-list">
+                            <p style="text-align: center; color: #64748b; padding: 20px;">Cargando ventas...</p>
+                        </div>
+                    </div>
+                    
                     <div class="ajustes-section">
                         <h2>Devoluciones de Ventas</h2>
                         <p style="color: #64748b; margin-bottom: 20px;">
@@ -978,15 +1002,17 @@
                             <label for="buscarVentaCodigo">
                                 <i class="fas fa-search"></i> Buscar Venta por Código
                             </label>
-                            <input 
-                                type="text" 
-                                id="buscarVentaCodigo" 
-                                placeholder="Ej: VENT-20241201-001"
-                                style="max-width: 400px;"
-                            >
-                            <button type="button" class="btn-primary" id="buscarVentaBtn" style="margin-left: 10px;">
-                                <i class="fas fa-search"></i> Buscar
-                            </button>
+                            <div style="display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap;">
+                                <input 
+                                    type="text" 
+                                    id="buscarVentaCodigo" 
+                                    placeholder="Ej: VENT-20241201-001"
+                                    style="flex: 1; min-width: 200px; max-width: 100%;"
+                                >
+                                <button type="button" class="btn-primary" id="buscarVentaBtn" style="padding: 12px 20px; white-space: nowrap;">
+                                    <i class="fas fa-search"></i> Buscar
+                                </button>
+                            </div>
                         </div>
                         
                         <div id="ventasListContainer" style="margin-top: 20px;">

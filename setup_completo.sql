@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS ventas (
     cantidad INTEGER NOT NULL DEFAULT 1,
     metodo_pago VARCHAR(50) NOT NULL,
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    facturada BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -189,6 +190,7 @@ CREATE INDEX IF NOT EXISTS idx_juguetes_empresa_id ON juguetes(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_ventas_empresa_id ON ventas(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_ventas_juguete_id ON ventas(juguete_id);
 CREATE INDEX IF NOT EXISTS idx_ventas_empleado_id ON ventas(empleado_id);
+CREATE INDEX IF NOT EXISTS idx_ventas_facturada ON ventas(facturada, codigo_venta);
 CREATE INDEX IF NOT EXISTS idx_facturas_empresa_id ON facturas(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_movimientos_empresa_id ON movimientos(empresa_id);
 
