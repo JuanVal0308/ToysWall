@@ -1116,6 +1116,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     // FUNCIONALIDAD DE INVENTARIO
     // ============================================
     
+    // Variable global para almacenar todos los juguetes y la página actual
+    let todosLosJuguetes = [];
+    let paginaActualInventario = 1;
+    const productosPorPagina = 10;
+
     async function loadInventario() {
         const tbody = document.getElementById('inventarioTableBody');
         tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">Cargando inventario...</td></tr>';
@@ -1135,6 +1140,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             if (!juguetes || juguetes.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes en el inventario</td></tr>';
+                document.getElementById('inventarioPagination').innerHTML = '';
                 return;
             }
 
@@ -1147,52 +1153,204 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
             });
 
-            const juguetesFiltrados = Array.from(juguetesUnicos.values());
+            todosLosJuguetes = Array.from(juguetesUnicos.values());
             
             // Calcular totales
-            const totalJuguetes = juguetesFiltrados.reduce((sum, j) => sum + j.cantidad, 0);
+            const totalJuguetes = todosLosJuguetes.reduce((sum, j) => sum + j.cantidad, 0);
             
             // Actualizar resumen
             document.getElementById('totalJuguetesInventario').textContent = totalJuguetes;
 
-            tbody.innerHTML = '';
-            juguetesFiltrados.forEach(juguete => {
-                const row = document.createElement('tr');
-                const ubicacion = juguete.bodega_id 
-                    ? `Bodega: ${juguete.bodegas?.nombre || 'N/A'}`
-                    : juguete.tienda_id 
-                    ? `Tienda: ${juguete.tiendas?.nombre || 'N/A'}`
-                    : 'Sin ubicación';
-                const tipo = juguete.bodega_id ? 'Bodega' : juguete.tienda_id ? 'Tienda' : 'N/A';
-                const foto = juguete.foto_url 
-                    ? `<img src="${juguete.foto_url}" alt="${juguete.nombre}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">`
-                    : '<span style="color: #64748b;">Sin foto</span>';
-                
-                row.innerHTML = `
-                    <td>${juguete.nombre}</td>
-                    <td>${juguete.codigo}</td>
-                    <td>${foto}</td>
-                    <td>${juguete.cantidad}</td>
-                    <td>${ubicacion}</td>
-                    <td>${tipo}</td>
-                `;
-                tbody.appendChild(row);
-            });
+            // Resetear a página 1 cuando se carga el inventario
+            paginaActualInventario = 1;
+            
+            // Renderizar la primera página
+            renderizarPaginaInventario();
 
-            // Agregar funcionalidad de búsqueda
-            const searchInput = document.getElementById('inventarioSearch');
-            searchInput.addEventListener('input', function() {
-                const searchTerm = this.value.toLowerCase();
-                const rows = tbody.querySelectorAll('tr');
-                rows.forEach(row => {
-                    const text = row.textContent.toLowerCase();
-                    row.style.display = text.includes(searchTerm) ? '' : 'none';
-                });
-            });
+            // Configurar búsqueda
+            configurarBusquedaInventario();
         } catch (error) {
             console.error('Error al cargar inventario:', error);
             tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #ef4444;">Error al cargar el inventario</td></tr>';
+            document.getElementById('inventarioPagination').innerHTML = '';
         }
+    }
+
+    function renderizarPaginaInventario(juguetesFiltrados = null) {
+        const tbody = document.getElementById('inventarioTableBody');
+        const productos = juguetesFiltrados || todosLosJuguetes;
+        
+        if (!productos || productos.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes para mostrar</td></tr>';
+            document.getElementById('inventarioPagination').innerHTML = '';
+            return;
+        }
+
+        // Calcular paginación
+        const totalPaginas = Math.ceil(productos.length / productosPorPagina);
+        const inicio = (paginaActualInventario - 1) * productosPorPagina;
+        const fin = inicio + productosPorPagina;
+        const productosPagina = productos.slice(inicio, fin);
+
+        // Renderizar productos de la página actual
+        tbody.innerHTML = '';
+        productosPagina.forEach(juguete => {
+            const row = document.createElement('tr');
+            const ubicacion = juguete.bodega_id 
+                ? `Bodega: ${juguete.bodegas?.nombre || 'N/A'}`
+                : juguete.tienda_id 
+                ? `Tienda: ${juguete.tiendas?.nombre || 'N/A'}`
+                : 'Sin ubicación';
+            const tipo = juguete.bodega_id ? 'Bodega' : juguete.tienda_id ? 'Tienda' : 'N/A';
+            const foto = juguete.foto_url 
+                ? `<img src="${juguete.foto_url}" alt="${juguete.nombre}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">`
+                : '<span style="color: #64748b;">Sin foto</span>';
+            
+            row.innerHTML = `
+                <td>${juguete.nombre}</td>
+                <td>${juguete.codigo}</td>
+                <td>${foto}</td>
+                <td>${juguete.cantidad}</td>
+                <td>${ubicacion}</td>
+                <td>${tipo}</td>
+            `;
+            tbody.appendChild(row);
+        });
+
+        // Renderizar controles de paginación
+        renderizarPaginacionInventario(totalPaginas, productos.length);
+    }
+
+    function renderizarPaginacionInventario(totalPaginas, totalProductos) {
+        const paginationContainer = document.getElementById('inventarioPagination');
+        
+        if (totalPaginas <= 1) {
+            paginationContainer.innerHTML = '';
+            return;
+        }
+
+        let paginacionHTML = '<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">';
+        
+        // Botón Anterior
+        if (paginaActualInventario > 1) {
+            paginacionHTML += `
+                <button onclick="cambiarPaginaInventario(${paginaActualInventario - 1})" 
+                        style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    <i class="fas fa-chevron-left"></i> Anterior
+                </button>
+            `;
+        }
+
+        // Pestañas de páginas (mostrar máximo 7 pestañas)
+        const maxPestañas = 7;
+        let inicioPestañas = Math.max(1, paginaActualInventario - Math.floor(maxPestañas / 2));
+        let finPestañas = Math.min(totalPaginas, inicioPestañas + maxPestañas - 1);
+        
+        if (finPestañas - inicioPestañas < maxPestañas - 1) {
+            inicioPestañas = Math.max(1, finPestañas - maxPestañas + 1);
+        }
+
+        // Primera página si no está visible
+        if (inicioPestañas > 1) {
+            paginacionHTML += `
+                <button onclick="cambiarPaginaInventario(1)" 
+                        style="padding: 8px 12px; background: ${paginaActualInventario === 1 ? '#3b82f6' : 'white'}; 
+                               color: ${paginaActualInventario === 1 ? 'white' : '#3b82f6'}; 
+                               border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: ${paginaActualInventario === 1 ? 'bold' : 'normal'};">
+                    1
+                </button>
+            `;
+            if (inicioPestañas > 2) {
+                paginacionHTML += '<span style="color: #64748b; padding: 0 4px;">...</span>';
+            }
+        }
+
+        // Pestañas visibles
+        for (let i = inicioPestañas; i <= finPestañas; i++) {
+            paginacionHTML += `
+                <button onclick="cambiarPaginaInventario(${i})" 
+                        style="padding: 8px 12px; background: ${paginaActualInventario === i ? '#3b82f6' : 'white'}; 
+                               color: ${paginaActualInventario === i ? 'white' : '#3b82f6'}; 
+                               border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: ${paginaActualInventario === i ? 'bold' : 'normal'};">
+                    ${i}
+                </button>
+            `;
+        }
+
+        // Última página si no está visible
+        if (finPestañas < totalPaginas) {
+            if (finPestañas < totalPaginas - 1) {
+                paginacionHTML += '<span style="color: #64748b; padding: 0 4px;">...</span>';
+            }
+            paginacionHTML += `
+                <button onclick="cambiarPaginaInventario(${totalPaginas})" 
+                        style="padding: 8px 12px; background: ${paginaActualInventario === totalPaginas ? '#3b82f6' : 'white'}; 
+                               color: ${paginaActualInventario === totalPaginas ? 'white' : '#3b82f6'}; 
+                               border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: ${paginaActualInventario === totalPaginas ? 'bold' : 'normal'};">
+                    ${totalPaginas}
+                </button>
+            `;
+        }
+
+        // Botón Siguiente
+        if (paginaActualInventario < totalPaginas) {
+            paginacionHTML += `
+                <button onclick="cambiarPaginaInventario(${paginaActualInventario + 1})" 
+                        style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    Siguiente <i class="fas fa-chevron-right"></i>
+                </button>
+            `;
+        }
+
+        // Información de paginación
+        const inicio = (paginaActualInventario - 1) * productosPorPagina + 1;
+        const fin = Math.min(paginaActualInventario * productosPorPagina, totalProductos);
+        paginacionHTML += `
+            <span style="color: #64748b; font-size: 14px; margin-left: 12px;">
+                Mostrando ${inicio}-${fin} de ${totalProductos} productos
+            </span>
+        `;
+
+        paginacionHTML += '</div>';
+        paginationContainer.innerHTML = paginacionHTML;
+    }
+
+    // Función global para cambiar de página
+    window.cambiarPaginaInventario = function(nuevaPagina) {
+        paginaActualInventario = nuevaPagina;
+        renderizarPaginaInventario();
+        // Scroll al inicio de la tabla
+        document.getElementById('inventarioView').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    function configurarBusquedaInventario() {
+        const searchInput = document.getElementById('inventarioSearch');
+        
+        // Remover listeners anteriores si existen
+        const newSearchInput = searchInput.cloneNode(true);
+        searchInput.parentNode.replaceChild(newSearchInput, searchInput);
+        
+        newSearchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase().trim();
+            
+            if (searchTerm === '') {
+                // Si no hay búsqueda, mostrar todos los juguetes
+                paginaActualInventario = 1;
+                renderizarPaginaInventario();
+                return;
+            }
+
+            // Filtrar juguetes
+            const juguetesFiltrados = todosLosJuguetes.filter(juguete => {
+                const nombre = juguete.nombre?.toLowerCase() || '';
+                const codigo = juguete.codigo?.toLowerCase() || '';
+                return nombre.includes(searchTerm) || codigo.includes(searchTerm);
+            });
+
+            // Resetear a página 1 cuando se filtra
+            paginaActualInventario = 1;
+            renderizarPaginaInventario(juguetesFiltrados);
+        });
     }
 
     // ============================================
