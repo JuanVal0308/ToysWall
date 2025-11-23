@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Logo de ToysWalls estático
     empresaLogoEl.src = 'https://i.imgur.com/RBbjVnp.jpeg';
     empresaLogoEl.alt = 'Logo ToysWalls';
-    logoContainer.style.display = 'flex';
+                    logoContainer.style.display = 'flex';
 
     // Abrir modal al hacer click en el nombre de usuario
     userNameClick.addEventListener('click', function() {
@@ -381,6 +381,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                 if (isAdmin) {
                     juguetesView.style.display = 'block';
                     loadUbicacionesForSelect();
+                    // Configurar autocompletado cuando se muestra la vista
+                    setTimeout(() => {
+                        configurarAutocompletadoJuguete();
+                    }, 100);
                 }
                 break;
             case 'inventario':
@@ -775,7 +779,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         currentBodegaId = bodegaId;
         const modal = document.getElementById('agregarJuguetesModal');
         if (modal) {
-            modal.style.display = 'flex';
+        modal.style.display = 'flex';
             const form = document.getElementById('agregarJuguetesForm');
             if (form) form.reset();
             const errorMsg = document.getElementById('jugueteErrorMessage');
@@ -791,19 +795,19 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Formulario para agregar juguetes (desde modal de bodega - obsoleto, usar formulario principal)
     const agregarJuguetesForm = document.getElementById('agregarJuguetesForm');
     if (agregarJuguetesForm) {
-        agregarJuguetesForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
+    agregarJuguetesForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
             const nombre = capitalizarPrimeraLetra(document.getElementById('jugueteNombre')?.value.trim());
             const codigo = document.getElementById('jugueteCodigo')?.value.trim();
             const cantidad = parseInt(document.getElementById('jugueteCantidad')?.value || 0);
 
             if (!nombre || !codigo || isNaN(cantidad) || cantidad < 0) {
-                showJugueteMessage('Por favor, completa todos los campos correctamente', 'error');
-                return;
-            }
+            showJugueteMessage('Por favor, completa todos los campos correctamente', 'error');
+            return;
+        }
 
-            try {
+        try {
                 // Primero verificar si existe un juguete con el mismo código pero diferente nombre
                 const { data: jugueteConMismoCodigo } = await window.supabaseClient
                     .from('juguetes')
@@ -843,29 +847,29 @@ document.addEventListener('DOMContentLoaded', async function() {
                     showJugueteMessage(`Juguete actualizado: se agregaron ${cantidad} unidades (Total: ${nuevaCantidad})`, 'success');
                 } else {
                     // Si no existe, crear un nuevo registro
-                    const { error } = await window.supabaseClient
-                        .from('juguetes')
-                        .insert({
-                            nombre: nombre,
-                            codigo: codigo,
-                            cantidad: cantidad,
+            const { error } = await window.supabaseClient
+                .from('juguetes')
+                .insert({
+                    nombre: nombre,
+                    codigo: codigo,
+                    cantidad: cantidad,
                             bodega_id: currentBodegaId,
                             empresa_id: user.empresa_id
-                        });
+                });
 
-                    if (error) throw error;
-                    
-                    showJugueteMessage('Juguete agregado correctamente', 'success');
+            if (error) throw error;
+
+            showJugueteMessage('Juguete agregado correctamente', 'success');
                 }
 
-                setTimeout(() => {
-                    closeAgregarJuguetesModal();
-                }, 1500);
-            } catch (error) {
-                console.error('Error al agregar juguete:', error);
-                showJugueteMessage('Error al agregar el juguete: ' + error.message, 'error');
-            }
-        });
+            setTimeout(() => {
+                closeAgregarJuguetesModal();
+            }, 1500);
+        } catch (error) {
+            console.error('Error al agregar juguete:', error);
+            showJugueteMessage('Error al agregar el juguete: ' + error.message, 'error');
+        }
+    });
     }
 
     // Funciones para mostrar mensajes en modal de juguetes
@@ -889,14 +893,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     function closeAgregarJuguetesModal() {
         const modal = document.getElementById('agregarJuguetesModal');
         if (modal) {
-            modal.style.display = 'none';
+        modal.style.display = 'none';
             const form = document.getElementById('agregarJuguetesForm');
             if (form) form.reset();
             const errorMsg = document.getElementById('jugueteErrorMessage');
             const successMsg = document.getElementById('jugueteSuccessMessage');
             if (errorMsg) errorMsg.style.display = 'none';
             if (successMsg) successMsg.style.display = 'none';
-            currentBodegaId = null;
+        currentBodegaId = null;
         }
     }
 
@@ -913,16 +917,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
     if (modal) {
         modal.addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeAgregarJuguetesModal();
-            }
-        });
+        if (e.target === this) {
+            closeAgregarJuguetesModal();
+        }
+    });
     }
 
     // ============================================
     // FUNCIONALIDAD DE JUGUETES
     // ============================================
-    
+
     // Cargar ubicaciones (bodegas y tiendas) para el select
     let ubicacionListenerAdded = false;
     async function loadUbicacionesForSelect() {
@@ -934,62 +938,148 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         // Solo agregar el listener una vez
         if (!ubicacionListenerAdded) {
-            tipoSelect.addEventListener('change', async function() {
-                const tipo = this.value;
-                ubicacionSelect.innerHTML = '<option value="">Selecciona una ubicación</option>';
-                
-                if (!tipo) {
-                    container.style.display = 'none';
-                    return;
-                }
+        tipoSelect.addEventListener('change', async function() {
+            const tipo = this.value;
+            ubicacionSelect.innerHTML = '<option value="">Selecciona una ubicación</option>';
+            
+            if (!tipo) {
+                container.style.display = 'none';
+                return;
+            }
 
-                container.style.display = 'block';
+            container.style.display = 'block';
 
-                try {
-                    if (tipo === 'bodega') {
-                        const { data: bodegas, error } = await window.supabaseClient
-                            .from('bodegas')
-                            .select('*')
-                            .eq('empresa_id', user.empresa_id)
-                            .order('nombre');
+            try {
+                if (tipo === 'bodega') {
+                    const { data: bodegas, error } = await window.supabaseClient
+                        .from('bodegas')
+                        .select('*')
+                        .eq('empresa_id', user.empresa_id)
+                        .order('nombre');
 
-                        if (error) throw error;
+                    if (error) throw error;
                         if (bodegas && bodegas.length > 0) {
-                            bodegas.forEach(bodega => {
-                                const option = document.createElement('option');
-                                option.value = bodega.id;
-                                option.textContent = bodega.nombre;
-                                ubicacionSelect.appendChild(option);
-                            });
-                        }
-                    } else if (tipo === 'tienda') {
-                        const { data: tiendas, error } = await window.supabaseClient
-                            .from('tiendas')
-                            .select('*')
-                            .eq('empresa_id', user.empresa_id)
-                            .order('nombre');
-
-                        if (error) throw error;
-                        if (tiendas && tiendas.length > 0) {
-                            tiendas.forEach(tienda => {
-                                const option = document.createElement('option');
-                                option.value = tienda.id;
-                                option.textContent = tienda.nombre;
-                                ubicacionSelect.appendChild(option);
-                            });
-                        }
+                        bodegas.forEach(bodega => {
+                            const option = document.createElement('option');
+                            option.value = bodega.id;
+                            option.textContent = bodega.nombre;
+                            ubicacionSelect.appendChild(option);
+                        });
                     }
-                } catch (error) {
-                    console.error('Error al cargar ubicaciones:', error);
+                } else if (tipo === 'tienda') {
+                    const { data: tiendas, error } = await window.supabaseClient
+                        .from('tiendas')
+                        .select('*')
+                        .eq('empresa_id', user.empresa_id)
+                        .order('nombre');
+
+                    if (error) throw error;
+                        if (tiendas && tiendas.length > 0) {
+                        tiendas.forEach(tienda => {
+                            const option = document.createElement('option');
+                            option.value = tienda.id;
+                            option.textContent = tienda.nombre;
+                            ubicacionSelect.appendChild(option);
+                        });
+                    }
                 }
+            } catch (error) {
+                console.error('Error al cargar ubicaciones:', error);
+            }
             });
             ubicacionListenerAdded = true;
         }
     }
 
+    // Configurar autocompletado para formulario de agregar juguete
+    function configurarAutocompletadoJuguete() {
+        const nombreInput = document.getElementById('jugueteNombreInput');
+        const codigoInput = document.getElementById('jugueteCodigoInput');
+        
+        if (!nombreInput || !codigoInput) return;
+        
+        let timeoutNombre = null;
+        let timeoutCodigo = null;
+        
+        // Autocompletar código cuando se ingresa nombre
+        nombreInput.addEventListener('input', async function() {
+            clearTimeout(timeoutNombre);
+            const nombre = this.value.trim();
+            
+            if (nombre.length < 1) {
+                codigoInput.value = '';
+                return;
+            }
+            
+            timeoutNombre = setTimeout(async () => {
+                try {
+                    const user = JSON.parse(sessionStorage.getItem('user'));
+                    const { data: juguetes, error } = await window.supabaseClient
+                        .from('juguetes')
+                        .select('codigo, nombre')
+                        .eq('empresa_id', user.empresa_id)
+                        .ilike('nombre', nombre)
+                        .limit(1);
+                    
+                    if (error) throw error;
+                    
+                    // Si hay un resultado, autocompletar el código
+                    if (juguetes && juguetes.length > 0) {
+                        const juguete = juguetes[0];
+                        // Solo autocompletar si el nombre coincide exactamente (ignorando mayúsculas)
+                        if (juguete.nombre.toLowerCase().trim() === nombre.toLowerCase().trim()) {
+                            codigoInput.value = juguete.codigo;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error en autocompletado por nombre:', error);
+                }
+            }, 300);
+        });
+        
+        // Autocompletar nombre cuando se ingresa código
+        codigoInput.addEventListener('input', async function() {
+            clearTimeout(timeoutCodigo);
+            const codigo = this.value.trim();
+            
+            if (codigo.length < 1) {
+                nombreInput.value = '';
+                return;
+            }
+            
+            timeoutCodigo = setTimeout(async () => {
+                try {
+                    const user = JSON.parse(sessionStorage.getItem('user'));
+                    const { data: juguetes, error } = await window.supabaseClient
+                        .from('juguetes')
+                        .select('codigo, nombre')
+                        .eq('empresa_id', user.empresa_id)
+                        .ilike('codigo', codigo)
+                        .limit(1);
+                    
+                    if (error) throw error;
+                    
+                    // Si hay un resultado, autocompletar el nombre
+                    if (juguetes && juguetes.length > 0) {
+                        const juguete = juguetes[0];
+                        // Solo autocompletar si el código coincide exactamente (ignorando mayúsculas)
+                        if (juguete.codigo.toLowerCase().trim() === codigo.toLowerCase().trim()) {
+                            nombreInput.value = juguete.nombre;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error en autocompletado por código:', error);
+                }
+            }, 300);
+        });
+    }
+
     // Formulario para agregar juguete
     const agregarJugueteForm = document.getElementById('agregarJugueteForm');
     if (agregarJugueteForm) {
+        // Configurar autocompletado
+        configurarAutocompletadoJuguete();
+        
         agregarJugueteForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -1035,6 +1125,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 if (jugueteExistenteData && jugueteExistenteData.length > 0) {
                     // Si existe, sumar la cantidad al registro existente
                     const jugueteExistente = jugueteExistenteData[0];
+                    const cantidadOriginal = jugueteExistente.cantidad;
                     const nuevaCantidad = jugueteExistente.cantidad + cantidad;
                     
                     const updateData = { cantidad: nuevaCantidad };
@@ -1051,33 +1142,55 @@ document.addEventListener('DOMContentLoaded', async function() {
 
                     if (updateError) throw updateError;
                     
+                    // Guardar información para deshacer
+                    ultimoJugueteAgregado = {
+                        id: jugueteExistente.id,
+                        tipo: 'update',
+                        cantidadOriginal: cantidadOriginal,
+                        cantidadAgregada: cantidad
+                    };
+                    
+                    // Habilitar botón deshacer
+                    actualizarEstadoBotonDeshacer(true);
+                    
                     showJugueteFormMessage(`Juguete actualizado: se agregaron ${cantidad} unidades (Total: ${nuevaCantidad})`, 'success');
                 } else {
                     // Si no existe, crear un nuevo registro
-                    const jugueteData = {
-                        nombre: nombre,
-                        codigo: codigo,
-                        cantidad: cantidad,
-                        empresa_id: user.empresa_id
-                    };
+                const jugueteData = {
+                    nombre: nombre,
+                    codigo: codigo,
+                    cantidad: cantidad,
+                    empresa_id: user.empresa_id
+                };
 
                     if (fotoUrl) {
                         jugueteData.foto_url = fotoUrl;
                     }
 
-                    if (ubicacionTipo === 'bodega') {
-                        jugueteData.bodega_id = ubicacionId;
-                    } else if (ubicacionTipo === 'tienda') {
-                        jugueteData.tienda_id = ubicacionId;
-                    }
+                if (ubicacionTipo === 'bodega') {
+                    jugueteData.bodega_id = ubicacionId;
+                } else if (ubicacionTipo === 'tienda') {
+                    jugueteData.tienda_id = ubicacionId;
+                }
 
-                    const { error: jugueteError } = await window.supabaseClient
-                        .from('juguetes')
-                        .insert(jugueteData);
+                    const { data: nuevoJuguete, error: jugueteError } = await window.supabaseClient
+                    .from('juguetes')
+                    .insert(jugueteData)
+                    .select()
+                    .single();
 
-                    if (jugueteError) throw jugueteError;
+                if (jugueteError) throw jugueteError;
+
+                    // Guardar información para deshacer
+                    ultimoJugueteAgregado = {
+                        id: nuevoJuguete.id,
+                        tipo: 'insert'
+                    };
                     
-                    showJugueteFormMessage('Juguete agregado correctamente', 'success');
+                    // Habilitar botón deshacer
+                    actualizarEstadoBotonDeshacer(true);
+
+                showJugueteFormMessage('Juguete agregado correctamente', 'success');
                 }
 
                 agregarJugueteForm.reset();
@@ -1088,6 +1201,176 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         });
     }
+
+    // Función para deshacer el último juguete agregado
+    window.deshacerUltimoJuguete = async function() {
+        const deshacerBtn = document.getElementById('deshacerUltimoJugueteBtn');
+        
+        // Verificar que el botón existe y está habilitado
+        if (!deshacerBtn) {
+            console.log('Botón deshacer no encontrado');
+            return;
+        }
+        
+        if (deshacerBtn.disabled) {
+            console.log('Botón deshacer está deshabilitado');
+            return;
+        }
+        
+        // Verificar que hay un juguete para deshacer
+        if (!ultimoJugueteAgregado) {
+            console.log('No hay juguete para deshacer');
+            showJugueteFormMessage('No hay ningún juguete reciente para deshacer', 'error');
+            actualizarEstadoBotonDeshacer(false);
+            return;
+        }
+
+        // Confirmar acción
+        if (!confirm('¿Estás seguro de que deseas deshacer el último juguete agregado?\n\nEsta acción eliminará el último registro que agregaste.')) {
+            return;
+        }
+
+        // Deshabilitar el botón inmediatamente para prevenir múltiples clics
+        actualizarEstadoBotonDeshacer(false);
+        
+        // Mostrar mensaje de procesamiento
+        showJugueteFormMessage('Procesando deshacer...', 'success');
+
+        try {
+            let operacionExitosa = false;
+            
+            if (ultimoJugueteAgregado.tipo === 'insert') {
+                // Eliminar el registro completo
+                console.log('Eliminando juguete con ID:', ultimoJugueteAgregado.id);
+                
+                const { data: jugueteEliminado, error } = await window.supabaseClient
+                    .from('juguetes')
+                    .delete()
+                    .eq('id', ultimoJugueteAgregado.id)
+                    .select();
+
+                if (error) {
+                    console.error('Error al eliminar:', error);
+                    throw error;
+                }
+                
+                if (jugueteEliminado && jugueteEliminado.length > 0) {
+                    operacionExitosa = true;
+                    console.log('Juguete eliminado exitosamente:', jugueteEliminado[0]);
+                    showJugueteFormMessage('Juguete eliminado correctamente. Actualizando inventario...', 'success');
+                } else {
+                    console.warn('No se encontró el juguete para eliminar');
+                    showJugueteFormMessage('El juguete ya no existe en la base de datos', 'error');
+                }
+            } else if (ultimoJugueteAgregado.tipo === 'update') {
+                // Restaurar la cantidad original
+                console.log('Restaurando cantidad del juguete con ID:', ultimoJugueteAgregado.id);
+                
+                const { data: jugueteActualizado, error } = await window.supabaseClient
+                    .from('juguetes')
+                    .update({ cantidad: ultimoJugueteAgregado.cantidadOriginal })
+                    .eq('id', ultimoJugueteAgregado.id)
+                    .select();
+
+                if (error) {
+                    console.error('Error al actualizar:', error);
+                    throw error;
+                }
+                
+                if (jugueteActualizado && jugueteActualizado.length > 0) {
+                    operacionExitosa = true;
+                    console.log('Cantidad restaurada exitosamente');
+                    showJugueteFormMessage(`Cantidad restaurada a ${ultimoJugueteAgregado.cantidadOriginal}. Actualizando inventario...`, 'success');
+                } else {
+                    console.warn('No se pudo actualizar el juguete');
+                    showJugueteFormMessage('No se pudo restaurar la cantidad del juguete', 'error');
+                }
+            }
+
+            // Limpiar variable después de procesar
+            ultimoJugueteAgregado = null;
+
+            // Actualizar inventario y totales si la operación fue exitosa
+            if (operacionExitosa) {
+                console.log('Actualizando inventario y totales...');
+                
+                // Recargar inventario
+                await loadInventario();
+                
+                // Recargar dashboard summary
+                if (typeof loadDashboardSummary === 'function') {
+                    await loadDashboardSummary();
+                }
+                
+                // Recargar tiendas
+                if (typeof loadTiendas === 'function') {
+                    await loadTiendas();
+                }
+                
+                // Recargar bodegas
+                if (typeof loadBodegas === 'function') {
+                    await loadBodegas();
+                }
+                
+                console.log('Inventario actualizado correctamente');
+            }
+        } catch (error) {
+            console.error('Error al deshacer:', error);
+            showJugueteFormMessage('Error al deshacer: ' + (error.message || 'Error desconocido'), 'error');
+            // Limpiar variable incluso si hay error
+            ultimoJugueteAgregado = null;
+            // Mantener el botón deshabilitado
+        }
+    };
+
+    // Función para toggle de ubicaciones
+    window.toggleUbicaciones = function(id) {
+        const ubicacionesDiv = document.getElementById(id);
+        const icon = document.getElementById('icon-' + id);
+        
+        if (ubicacionesDiv && icon) {
+            if (ubicacionesDiv.style.display === 'none' || !ubicacionesDiv.style.display) {
+                // Cerrar otros desplegables abiertos
+                document.querySelectorAll('[id^="ubicaciones-"]').forEach(div => {
+                    if (div.id !== id) {
+                        div.style.display = 'none';
+                        const otherIcon = document.getElementById('icon-' + div.id);
+                        if (otherIcon) {
+                            otherIcon.classList.remove('fa-chevron-up');
+                            otherIcon.classList.add('fa-chevron-down');
+                        }
+                    }
+                });
+                
+                ubicacionesDiv.style.display = 'block';
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-up');
+            } else {
+                ubicacionesDiv.style.display = 'none';
+                icon.classList.remove('fa-chevron-up');
+                icon.classList.add('fa-chevron-down');
+            }
+        }
+    };
+
+    // Cerrar desplegables al hacer click fuera
+    document.addEventListener('click', function(event) {
+        if (!event.target.closest('[onclick*="toggleUbicaciones"]') && 
+            !event.target.closest('[id^="ubicaciones-"]') &&
+            !event.target.closest('[id^="icon-ubicaciones-"]')) {
+            document.querySelectorAll('[id^="ubicaciones-"]').forEach(div => {
+                div.style.display = 'none';
+                const iconId = 'icon-' + div.id;
+                const icon = document.getElementById(iconId);
+                if (icon) {
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                }
+            });
+        }
+    });
+
+    // Configurar botón deshacer - se inicializa más abajo con setTimeout
 
     function showJugueteFormMessage(message, type) {
         const errorMsg = document.getElementById('jugueteFormErrorMessage');
@@ -1120,49 +1403,167 @@ document.addEventListener('DOMContentLoaded', async function() {
     let todosLosJuguetes = [];
     let paginaActualInventario = 1;
     const productosPorPagina = 10;
+    
+    // Variable para guardar el último juguete agregado (para deshacer)
+    let ultimoJugueteAgregado = null;
+    
+    // Función para habilitar/deshabilitar el botón deshacer
+    function actualizarEstadoBotonDeshacer(habilitado) {
+        const deshacerBtn = document.getElementById('deshacerUltimoJugueteBtn');
+        if (deshacerBtn) {
+            if (habilitado && ultimoJugueteAgregado) {
+                // Habilitar botón - color rojo
+                deshacerBtn.disabled = false;
+                deshacerBtn.style.opacity = '1';
+                deshacerBtn.style.cursor = 'pointer';
+                deshacerBtn.style.background = '#ef4444';
+                deshacerBtn.style.color = 'white';
+                deshacerBtn.style.border = 'none';
+            } else {
+                // Deshabilitar botón - color gris
+                deshacerBtn.disabled = true;
+                deshacerBtn.style.opacity = '0.5';
+                deshacerBtn.style.cursor = 'not-allowed';
+                deshacerBtn.style.background = '#94a3b8';
+                deshacerBtn.style.color = 'white';
+                deshacerBtn.style.border = 'none';
+            }
+        }
+    }
+    
+    // Inicializar el botón como deshabilitado al cargar
+    document.addEventListener('DOMContentLoaded', function() {
+        const deshacerBtn = document.getElementById('deshacerUltimoJugueteBtn');
+        if (deshacerBtn) {
+            actualizarEstadoBotonDeshacer(false);
+            // Agregar event listener
+            deshacerBtn.addEventListener('click', window.deshacerUltimoJuguete);
+        }
+    });
 
     // Función para capitalizar la primera letra
     function capitalizarPrimeraLetra(texto) {
         if (!texto || typeof texto !== 'string') return texto;
         return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
     }
-
+    
     async function loadInventario() {
         const tbody = document.getElementById('inventarioTableBody');
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">Cargando inventario...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #64748b;">Cargando inventario...</td></tr>';
         
         try {
-            const { data: juguetes, error } = await window.supabaseClient
+            const user = JSON.parse(sessionStorage.getItem('user'));
+            
+            // Cargar juguetes, tiendas y bodegas en paralelo
+            const [juguetesResult, tiendasResult, bodegasResult] = await Promise.all([
+                window.supabaseClient
                 .from('juguetes')
                 .select(`
                     *,
                     bodegas(nombre, direccion),
-                    tiendas(nombre, direccion)
+                        tiendas(nombre, direccion)
                 `)
                 .eq('empresa_id', user.empresa_id)
-                .order('nombre');
+                    .order('nombre'),
+                window.supabaseClient
+                    .from('tiendas')
+                    .select('id, nombre')
+                    .eq('empresa_id', user.empresa_id)
+                    .order('nombre'),
+                window.supabaseClient
+                    .from('bodegas')
+                    .select('id, nombre')
+                    .eq('empresa_id', user.empresa_id)
+                    .order('nombre')
+            ]);
 
-            if (error) throw error;
+            if (juguetesResult.error) throw juguetesResult.error;
+            if (tiendasResult.error) throw tiendasResult.error;
+            if (bodegasResult.error) throw bodegasResult.error;
 
-            if (!juguetes || juguetes.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes en el inventario</td></tr>';
+            const juguetes = juguetesResult.data || [];
+            const todasLasTiendas = tiendasResult.data || [];
+            const todasLasBodegas = bodegasResult.data || [];
+
+            if (juguetes.length === 0 && todasLasTiendas.length === 0 && todasLasBodegas.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes en el inventario</td></tr>';
                 document.getElementById('inventarioPagination').innerHTML = '';
                 return;
             }
 
-            // Filtrar juguetes únicos por código (evitar duplicados)
-            const juguetesUnicos = new Map();
+            // Agrupar juguetes por código y nombre
+            const juguetesAgrupados = new Map();
             juguetes.forEach(juguete => {
-                const key = juguete.codigo;
-                if (!juguetesUnicos.has(key) || juguetesUnicos.get(key).cantidad < juguete.cantidad) {
-                    juguetesUnicos.set(key, juguete);
+                const key = `${juguete.codigo}-${juguete.nombre}`;
+                if (!juguetesAgrupados.has(key)) {
+                    juguetesAgrupados.set(key, {
+                        codigo: juguete.codigo,
+                        nombre: juguete.nombre,
+                        foto_url: juguete.foto_url,
+                        ubicaciones: []
+                    });
                 }
+                
+                const ubicacion = {
+                    tipo: juguete.bodega_id ? 'bodega' : 'tienda',
+                    id: juguete.bodega_id || juguete.tienda_id,
+                    nombre: juguete.bodega_id 
+                        ? (juguete.bodegas?.nombre || 'N/A')
+                        : (juguete.tiendas?.nombre || 'N/A'),
+                    cantidad: juguete.cantidad
+                };
+                
+                juguetesAgrupados.get(key).ubicaciones.push(ubicacion);
             });
 
-            todosLosJuguetes = Array.from(juguetesUnicos.values());
+            // Convertir a array y agregar todas las ubicaciones (incluso las que no tienen cantidad)
+            todosLosJuguetes = Array.from(juguetesAgrupados.values()).map(j => {
+                // Crear mapa de ubicaciones existentes
+                const ubicacionesMap = new Map();
+                j.ubicaciones.forEach(u => {
+                    const key = `${u.tipo}-${u.id}`;
+                    ubicacionesMap.set(key, u);
+                });
+
+                // Agregar todas las tiendas (con cantidad 0 si no existe)
+                todasLasTiendas.forEach(tienda => {
+                    const key = `tienda-${tienda.id}`;
+                    if (!ubicacionesMap.has(key)) {
+                        j.ubicaciones.push({
+                            tipo: 'tienda',
+                            id: tienda.id,
+                            nombre: tienda.nombre,
+                            cantidad: 0
+                        });
+                    }
+                });
+
+                // Agregar todas las bodegas (con cantidad 0 si no existe)
+                todasLasBodegas.forEach(bodega => {
+                    const key = `bodega-${bodega.id}`;
+                    if (!ubicacionesMap.has(key)) {
+                        j.ubicaciones.push({
+                            tipo: 'bodega',
+                            id: bodega.id,
+                            nombre: bodega.nombre,
+                            cantidad: 0
+                        });
+                    }
+                });
+
+                // Ordenar ubicaciones: primero las que tienen cantidad, luego las que no
+                j.ubicaciones.sort((a, b) => {
+                    if (b.cantidad > 0 && a.cantidad === 0) return 1;
+                    if (a.cantidad > 0 && b.cantidad === 0) return -1;
+                    return a.nombre.localeCompare(b.nombre);
+                });
+
+                j.cantidadTotal = j.ubicaciones.reduce((sum, u) => sum + u.cantidad, 0);
+                return j;
+            });
             
             // Calcular totales
-            const totalJuguetes = todosLosJuguetes.reduce((sum, j) => sum + j.cantidad, 0);
+            const totalJuguetes = todosLosJuguetes.reduce((sum, j) => sum + j.cantidadTotal, 0);
             
             // Actualizar resumen
             document.getElementById('totalJuguetesInventario').textContent = totalJuguetes;
@@ -1177,7 +1578,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             configurarBusquedaInventario();
         } catch (error) {
             console.error('Error al cargar inventario:', error);
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #ef4444;">Error al cargar el inventario</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #ef4444;">Error al cargar el inventario</td></tr>';
             document.getElementById('inventarioPagination').innerHTML = '';
         }
     }
@@ -1187,7 +1588,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         const productos = juguetesFiltrados || todosLosJuguetes;
         
         if (!productos || productos.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes para mostrar</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes para mostrar</td></tr>';
             document.getElementById('inventarioPagination').innerHTML = '';
             return;
         }
@@ -1203,36 +1604,63 @@ document.addEventListener('DOMContentLoaded', async function() {
         productosPagina.forEach(juguete => {
             const row = document.createElement('tr');
             const nombreCapitalizado = capitalizarPrimeraLetra(juguete.nombre);
-            const ubicacionNombre = juguete.bodega_id 
-                ? (juguete.bodegas?.nombre || 'N/A')
-                : juguete.tienda_id 
-                ? (juguete.tiendas?.nombre || 'N/A')
-                : 'Sin ubicación';
-            const ubicacion = juguete.bodega_id 
-                ? `Bodega: ${capitalizarPrimeraLetra(ubicacionNombre)}`
-                : juguete.tienda_id 
-                ? `Tienda: ${capitalizarPrimeraLetra(ubicacionNombre)}`
-                : 'Sin ubicación';
-            const tipo = juguete.bodega_id ? 'Bodega' : juguete.tienda_id ? 'Tienda' : 'N/A';
             const foto = juguete.foto_url 
                 ? `<img src="${juguete.foto_url}" alt="${nombreCapitalizado}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">`
                 : '<span style="color: #64748b;">Sin foto</span>';
+            
+            // Construir desplegable de ubicaciones
+            const ubicacionesConCantidad = juguete.ubicaciones.filter(u => u.cantidad > 0).length;
+            const totalUbicaciones = juguete.ubicaciones.length;
+            
+            let ubicacionesHTML = '';
+            if (juguete.ubicaciones && juguete.ubicaciones.length > 0) {
+                const ubicacionesList = juguete.ubicaciones.map(u => {
+                    const tipoTexto = u.tipo === 'bodega' ? 'Bodega' : 'Tienda';
+                    const nombreUbicacion = capitalizarPrimeraLetra(u.nombre);
+                    const cantidadTexto = u.cantidad > 0 ? `<strong style="color: #10b981;">${u.cantidad}</strong>` : `<span style="color: #94a3b8;">0</span>`;
+                    const bgColor = u.cantidad > 0 ? (u.tipo === 'bodega' ? '#e0e7ff' : '#fef3c7') : '#f1f5f9';
+                    const textColor = u.cantidad > 0 ? (u.tipo === 'bodega' ? '#3b82f6' : '#f59e0b') : '#64748b';
+                    
+                    return `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: ${bgColor}; border-radius: 4px; margin-bottom: 4px;">
+                            <span style="color: ${textColor}; font-size: 13px;">
+                                <strong>${tipoTexto}:</strong> ${nombreUbicacion}
+                            </span>
+                            <span style="font-size: 13px;">
+                                Cantidad: ${cantidadTexto}
+                            </span>
+            </div>
+                    `;
+                }).join('');
+                
+                ubicacionesHTML = `
+                    <div style="position: relative;">
+                        <button 
+                            type="button"
+                            onclick="toggleUbicaciones('ubicaciones-${juguete.codigo}')"
+                            style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span>Ver Ubicaciones (${ubicacionesConCantidad}/${totalUbicaciones})</span>
+                            <i class="fas fa-chevron-down" id="icon-ubicaciones-${juguete.codigo}"></i>
+                </button>
+                        <div 
+                            id="ubicaciones-${juguete.codigo}"
+                            style="display: none; position: absolute; top: 100%; left: 0; margin-top: 8px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); padding: 12px; min-width: 300px; max-width: 400px; z-index: 1000; max-height: 400px; overflow-y: auto;">
+                            <div style="font-weight: bold; margin-bottom: 8px; color: #1e293b; font-size: 14px;">Ubicaciones:</div>
+                            ${ubicacionesList}
+                </div>
+            </div>
+        `;
+            } else {
+                ubicacionesHTML = '<span style="color: #94a3b8; font-style: italic;">Sin ubicación</span>';
+            }
             
             row.innerHTML = `
                 <td>${nombreCapitalizado}</td>
                 <td>${juguete.codigo}</td>
                 <td>${foto}</td>
-                <td>${juguete.cantidad}</td>
-                <td>${ubicacion}</td>
-                <td>${tipo}</td>
-                <td>
-                    <div style="position: relative;">
-                        <button onclick="abrirMenuEditarJuguete(${juguete.id}, event)" 
-                                style="background: none; border: none; cursor: pointer; padding: 5px; color: #64748b; font-size: 18px;">
-                            <i class="fas fa-ellipsis-v"></i>
-                        </button>
-                    </div>
-                </td>
+                <td>${juguete.cantidadTotal || 0}</td>
+                <td>${ubicacionesHTML}</td>
             `;
             tbody.appendChild(row);
         });
@@ -1364,19 +1792,21 @@ document.addEventListener('DOMContentLoaded', async function() {
             const juguetesFiltrados = todosLosJuguetes.filter(juguete => {
                 const nombre = juguete.nombre?.toLowerCase() || '';
                 const codigo = juguete.codigo?.toLowerCase() || '';
-                const cantidad = juguete.cantidad?.toString() || '';
-                const ubicacionNombre = juguete.bodega_id 
-                    ? (juguete.bodegas?.nombre?.toLowerCase() || '')
-                    : juguete.tienda_id 
-                    ? (juguete.tiendas?.nombre?.toLowerCase() || '')
+                const cantidad = juguete.cantidadTotal?.toString() || '';
+                
+                // Buscar en todas las ubicaciones
+                const ubicacionesTexto = juguete.ubicaciones 
+                    ? juguete.ubicaciones.map(u => {
+                        const nombreUbicacion = u.nombre?.toLowerCase() || '';
+                        const tipoUbicacion = u.tipo?.toLowerCase() || '';
+                        return `${nombreUbicacion} ${tipoUbicacion}`;
+                    }).join(' ')
                     : '';
-                const ubicacionTipo = juguete.bodega_id ? 'bodega' : juguete.tienda_id ? 'tienda' : '';
                 
                 return nombre.includes(searchTerm) || 
                        codigo.includes(searchTerm) || 
                        cantidad.includes(searchTerm) ||
-                       ubicacionNombre.includes(searchTerm) ||
-                       ubicacionTipo.includes(searchTerm);
+                       ubicacionesTexto.includes(searchTerm);
             });
 
             // Resetear a página 1 cuando se filtra
@@ -1403,8 +1833,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                         tiendas(nombre, direccion)
                     `)
                     .eq('id', jugueteId)
-                    .single();
-                
+                .single();
+
                 if (error || !data) {
                     alert('Error al cargar el juguete');
                     return;
@@ -1448,8 +1878,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         const editarJugueteForm = document.getElementById('editarJugueteForm');
         if (editarJugueteForm) {
             editarJugueteForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                
+        e.preventDefault();
+        
                 const jugueteId = document.getElementById('editarJugueteId').value;
                 const nombre = capitalizarPrimeraLetra(document.getElementById('editarJugueteNombre').value.trim());
                 const codigo = document.getElementById('editarJugueteCodigo').value.trim();
@@ -1464,10 +1894,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                 if (!nombre || !codigo || cantidad < 0) {
                     errorMsg.textContent = 'Por favor, completa todos los campos correctamente';
                     errorMsg.style.display = 'block';
-                    return;
-                }
-                
-                try {
+            return;
+        }
+
+        try {
                     const user = JSON.parse(sessionStorage.getItem('user'));
                     
                     // Verificar si el código ya existe en otro juguete
@@ -1487,33 +1917,71 @@ document.addEventListener('DOMContentLoaded', async function() {
                         return;
                     }
                     
-                    // Actualizar juguete
-                    const { error: updateError } = await window.supabaseClient
+                    // Obtener el juguete original para comparar
+                    const { data: jugueteOriginal, error: fetchError } = await window.supabaseClient
                         .from('juguetes')
-                        .update({
-                            nombre: nombre,
-                            codigo: codigo,
-                            cantidad: cantidad
-                        })
-                        .eq('id', jugueteId);
+                        .select('codigo, nombre')
+                        .eq('id', jugueteId)
+                        .single();
                     
-                    if (updateError) throw updateError;
+                    if (fetchError) throw fetchError;
                     
-                    successMsg.textContent = 'Juguete actualizado correctamente';
+                    const codigoCambio = jugueteOriginal.codigo !== codigo;
+                    const nombreCambio = jugueteOriginal.nombre !== nombre;
+                    
+                    // Si cambió el código o nombre, actualizar todos los registros relacionados
+                    if (codigoCambio || nombreCambio) {
+                        // Actualizar todos los registros con el mismo código y nombre original
+                        const { error: updateAllError } = await window.supabaseClient
+                            .from('juguetes')
+                            .update({
+                                nombre: nombre,
+                                codigo: codigo
+                            })
+                            .eq('codigo', jugueteOriginal.codigo)
+                            .eq('nombre', jugueteOriginal.nombre)
+                            .eq('empresa_id', user.empresa_id);
+                        
+                        if (updateAllError) throw updateAllError;
+                        
+                        // Luego actualizar la cantidad solo del registro específico
+                        const { error: updateCantidadError } = await window.supabaseClient
+                            .from('juguetes')
+                            .update({ cantidad: cantidad })
+                            .eq('id', jugueteId);
+                        
+                        if (updateCantidadError) throw updateCantidadError;
+                    } else {
+                        // Si solo cambió la cantidad, actualizar solo ese registro
+                        const { error: updateError } = await window.supabaseClient
+                            .from('juguetes')
+                            .update({
+                                nombre: nombre,
+                                codigo: codigo,
+                                cantidad: cantidad
+                            })
+                            .eq('id', jugueteId);
+                        
+                        if (updateError) throw updateError;
+                    }
+                    
+                    successMsg.textContent = 'Juguete actualizado correctamente. Recargando...';
                     successMsg.style.display = 'block';
                     
-                    // Recargar inventario después de 1 segundo
-                    setTimeout(async () => {
-                        await loadInventario();
+                    // Recargar inventario completo desde la base de datos
+                    await loadInventario();
+                    
+                    // Cerrar modal después de un breve delay para que el usuario vea el mensaje
+                    setTimeout(() => {
                         cerrarModalEditarJuguete();
-                    }, 1000);
-                } catch (error) {
+                    }, 500);
+        } catch (error) {
                     console.error('Error al actualizar juguete:', error);
                     errorMsg.textContent = 'Error al actualizar el juguete: ' + error.message;
                     errorMsg.style.display = 'block';
-                }
-            });
         }
+            });
+    }
     });
 
     // ============================================

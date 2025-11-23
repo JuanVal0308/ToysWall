@@ -6,6 +6,7 @@
     <title>Inventario - Dashboard</title>
     <link rel="stylesheet" href="css/dashboard.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -126,6 +127,11 @@
                             </div>
                         </div>
                         <div class="summary-charts">
+                            <div class="chart-card">
+                                <h3>Ventas del Mes Actual</h3>
+                                <p class="chart-subtitle-small">Resumen de ventas diarias</p>
+                                <canvas id="dashboardVentasChart"></canvas>
+                            </div>
                             <div class="chart-card">
                                 <h3>Ventas Recientes</h3>
                                 <div id="ventasRecientes" class="ventas-list">
@@ -405,9 +411,14 @@
                         </div>
                         <div id="jugueteFormErrorMessage" class="error-message" style="display: none;"></div>
                         <div id="jugueteFormSuccessMessage" class="success-message" style="display: none;"></div>
-                        <button type="submit" class="btn-primary">
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button type="submit" class="btn-primary" style="flex: 1;">
                             <i class="fas fa-plus"></i> Agregar Juguete
                         </button>
+                            <button type="button" id="deshacerUltimoJugueteBtn" class="btn-secondary" style="padding: 12px 24px; border-radius: 8px; font-size: 14px;">
+                                <i class="fas fa-undo"></i> Deshacer
+                            </button>
+                        </div>
                     </form>
                 </div>
 
@@ -436,13 +447,11 @@
                                     <th>Foto</th>
                                     <th>Cantidad</th>
                                     <th>Ubicación</th>
-                                    <th>Tipo</th>
-                                    <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody id="inventarioTableBody">
                                 <tr>
-                                    <td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">
+                                    <td colspan="5" style="text-align: center; padding: 40px; color: #64748b;">
                                         Cargando inventario...
                                     </td>
                                 </tr>
@@ -717,7 +726,8 @@
                                                 type="password" 
                                                 id="usuarioPassword" 
                                                 name="password" 
-                                                placeholder="Mínimo 6 caracteres"
+                                                placeholder="Mínimo 3 caracteres"
+                                                minlength="3"
                                                 required
                                             >
                                         </div>
@@ -732,6 +742,7 @@
                                                 class="form-select"
                                             >
                                                 <option value="">Selecciona un tipo</option>
+                                                <option value="1">Super Administrador</option>
                                                 <option value="2">Administrador</option>
                                                 <option value="3">Empleado</option>
                                             </select>
@@ -839,10 +850,10 @@
                             <label>Filtro de Ventas:</label>
                             <select id="filtroVentas" class="form-select">
                                 <option value="todos">Todos los juguetes</option>
-                                    <option value="nombre">Por nombre</option>
-                                    <option value="dia">Por día</option>
-                                    <option value="semana">Por semana</option>
-                                    <option value="codigo">Por código</option>
+                                <option value="nombre">Por nombre</option>
+                                <option value="dia">Por día</option>
+                                <option value="semana">Por semana</option>
+                                <option value="codigo">Por código</option>
                             </select>
                         </div>
                         <div class="filter-group">
@@ -898,6 +909,53 @@
                             <button class="btn-export" data-export="movimientos">
                                 <i class="fas fa-file-excel"></i> Exportar Movimientos
                             </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Gráficos de Análisis -->
+                    <div class="analisis-charts">
+                        <div class="chart-container">
+                            <h3>Ventas por Día del Mes Actual</h3>
+                            <p class="chart-subtitle">Análisis detallado de ventas diarias</p>
+                            <canvas id="ventasPorDiaChart"></canvas>
+                            <div class="chart-info" id="ventasPorDiaInfo">
+                                <p><strong>Día con más ventas:</strong> <span id="diaMaxVentas">-</span></p>
+                                <p><strong>Día con menos ventas:</strong> <span id="diaMinVentas">-</span></p>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <h3>Ventas por Hora del Día</h3>
+                            <p class="chart-subtitle">Análisis de horas con mayor actividad de ventas</p>
+                            <canvas id="ventasPorHoraChart"></canvas>
+                            <div class="chart-info" id="ventasPorHoraInfo">
+                                <p><strong>Hora con más ventas:</strong> <span id="horaMaxVentas">-</span></p>
+                                <p><strong>Hora con menos ventas:</strong> <span id="horaMinVentas">-</span></p>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <h3>Ventas por Día por Tienda</h3>
+                            <p class="chart-subtitle">Análisis de ventas diarias por tienda</p>
+                            <canvas id="ventasPorDiaTiendaChart"></canvas>
+                            <div class="chart-info" id="ventasPorDiaTiendaInfo">
+                                <p><strong>Tienda con más ventas:</strong> <span id="tiendaMaxVentas">-</span></p>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <h3>Ventas por Hora por Tienda</h3>
+                            <p class="chart-subtitle">Análisis de ventas por hora por tienda</p>
+                            <canvas id="ventasPorHoraTiendaChart"></canvas>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <h3>Ventas por Empleado</h3>
+                            <p class="chart-subtitle">Análisis de ventas realizadas por cada empleado</p>
+                            <canvas id="ventasPorEmpleadoChart"></canvas>
+                            <div class="chart-info" id="ventasPorEmpleadoInfo">
+                                <p><strong>Empleado con más ventas:</strong> <span id="empleadoMaxVentas">-</span></p>
+                            </div>
                         </div>
                     </div>
                     
@@ -1256,6 +1314,7 @@
                             required
                             class="form-select"
                         >
+                            <option value="1">Super Administrador</option>
                             <option value="2">Administrador</option>
                             <option value="3">Empleado</option>
                         </select>
@@ -1322,6 +1381,7 @@
     <script src="js/email-config.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/dashboard-funcionalidades.js"></script>
+    <script src="js/analisis-tiendas-empleados.js"></script>
 </body>
 </html>
 

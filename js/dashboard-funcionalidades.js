@@ -6,6 +6,12 @@
 let ventaItems = []; // Array para almacenar items de la venta actual
 let currentFacturaData = null; // Datos de la factura actual
 
+// Función para capitalizar la primera letra
+function capitalizarPrimeraLetra(texto) {
+    if (!texto || typeof texto !== 'string') return texto;
+    return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
+}
+
 // ============================================
 // DASHBOARD - RESUMEN
 // ============================================
@@ -55,6 +61,9 @@ async function loadDashboardSummary() {
         } else {
             ventasList.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No hay ventas recientes</p>';
         }
+
+        // Cargar gráfico de ventas del mes en el dashboard
+        await cargarGraficoVentasDashboard();
     } catch (error) {
         console.error('Error al cargar resumen del dashboard:', error);
     }
@@ -336,7 +345,7 @@ function initRegistrarVenta() {
             });
 
             // Actualizar lista de items (esto también removerá los atributos required)
-            updateVentaItemsList();
+                updateVentaItemsList();
             
             // Asegurarse de que el formulario tenga novalidate cuando hay items
             const form = document.getElementById('registrarVentaForm');
@@ -415,10 +424,10 @@ function initRegistrarVenta() {
                 if (error) throw error;
 
                 // Reducir cantidad del juguete
-                await window.supabaseClient
-                    .from('juguetes')
+                    await window.supabaseClient
+                        .from('juguetes')
                     .update({ cantidad: juguete[0].cantidad - cantidad })
-                    .eq('id', item.juguete_id);
+                        .eq('id', item.juguete_id);
             }
 
             showVentaMessage('Venta registrada correctamente', 'success');
@@ -1232,9 +1241,9 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, facturaData, 
 
     if (!window.EMAILJS_CONFIG) {
         throw new Error('EmailJS no está configurado. Verifica js/email-config.js');
-    }
+        }
 
-    try {
+        try {
         const config = window.EMAILJS_CONFIG;
         
         // Verificar que la configuración esté completa
@@ -1632,6 +1641,11 @@ async function loadAnalisis() {
         const ganancias = ventas.data?.reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0) || 0;
         document.getElementById('gananciasTotales').textContent = '$' + ganancias.toLocaleString('es-CO', { minimumFractionDigits: 2 });
 
+        // Cargar y mostrar gráficos
+        await cargarGraficosAnalisis();
+        await cargarGraficosPorTienda();
+        await cargarGraficoVentasPorEmpleado();
+
         // Configurar filtros
         setupAnalisisFilters();
         
@@ -1687,55 +1701,173 @@ async function exportarAExcel(tipo) {
 
         switch(tipo) {
             case 'usuarios':
-                const { data: usuarios } = await window.supabaseClient
+                const { data: usuarios, error: errorUsuarios } = await window.supabaseClient
                     .from('usuarios')
-                    .select('nombre, email, tipo_usuario_id, activo, created_at')
+                    .select(`
+                        nombre, 
+                        email, 
+                        tipo_usuario_id, 
+                        activo, 
+                        created_at,
+                        tipo_usuarios(nombre)
+                    `)
                     .eq('empresa_id', user.empresa_id);
-                data = usuarios.data || [];
+                
+                if (errorUsuarios) throw errorUsuarios;
+                
+                // Formatear datos para Excel
+                data = (usuarios || []).map(u => ({
+                    'Nombre': u.nombre || '',
+                    'Email': u.email || '',
+                    'Tipo de Usuario': u.tipo_usuarios?.nombre || u.tipo_usuario_id || '',
+                    'Activo': u.activo ? 'Sí' : 'No',
+                    'Fecha de Creación': u.created_at ? new Date(u.created_at).toLocaleString('es-CO') : ''
+                }));
                 filename = 'usuarios.xlsx';
                 break;
             case 'juguetes':
-                const { data: juguetes } = await window.supabaseClient
+                const { data: juguetes, error: errorJuguetes } = await window.supabaseClient
                     .from('juguetes')
-                    .select('nombre, codigo, cantidad, created_at')
+                    .select(`
+                        nombre, 
+                        codigo, 
+                        cantidad, 
+                        created_at,
+                        tiendas(nombre),
+                        bodegas(nombre)
+                    `)
                     .eq('empresa_id', user.empresa_id);
-                data = juguetes.data || [];
+                
+                if (errorJuguetes) throw errorJuguetes;
+                
+                // Formatear datos para Excel
+                data = (juguetes || []).map(j => ({
+                    'Nombre': j.nombre || '',
+                    'Código': j.codigo || '',
+                    'Cantidad': j.cantidad || 0,
+                    'Ubicación': j.tiendas?.nombre || j.bodegas?.nombre || 'Sin ubicación',
+                    'Tipo Ubicación': j.tiendas ? 'Tienda' : (j.bodegas ? 'Bodega' : 'N/A'),
+                    'Fecha de Creación': j.created_at ? new Date(j.created_at).toLocaleString('es-CO') : ''
+                }));
                 filename = 'juguetes.xlsx';
                 break;
             case 'facturas':
-                const { data: facturas } = await window.supabaseClient
+                const { data: facturas, error: errorFacturas } = await window.supabaseClient
                     .from('facturas')
                     .select('codigo_factura, cliente_nombre, cliente_documento, cliente_email, total, created_at')
                     .eq('empresa_id', user.empresa_id);
-                data = facturas.data || [];
+                
+                if (errorFacturas) throw errorFacturas;
+                
+                // Formatear datos para Excel
+                data = (facturas || []).map(f => ({
+                    'Código Factura': f.codigo_factura || '',
+                    'Cliente': f.cliente_nombre || '',
+                    'Documento': f.cliente_documento || '',
+                    'Email': f.cliente_email || '',
+                    'Total': f.total ? parseFloat(f.total).toLocaleString('es-CO', { minimumFractionDigits: 2 }) : '0.00',
+                    'Fecha': f.created_at ? new Date(f.created_at).toLocaleString('es-CO') : ''
+                }));
                 filename = 'facturas.xlsx';
                 break;
             case 'ventas':
-                const { data: ventas } = await window.supabaseClient
+                const { data: ventas, error: errorVentas } = await window.supabaseClient
                     .from('ventas')
-                    .select('codigo_venta, precio_venta, metodo_pago, created_at')
+                    .select(`
+                        codigo_venta, 
+                        precio_venta, 
+                        cantidad,
+                        metodo_pago, 
+                        created_at,
+                        juguetes(nombre, codigo),
+                        empleados(nombre, codigo)
+                    `)
                     .eq('empresa_id', user.empresa_id);
-                data = ventas.data || [];
+                
+                if (errorVentas) throw errorVentas;
+                
+                // Formatear datos para Excel
+                data = (ventas || []).map(v => ({
+                    'Código Venta': v.codigo_venta || '',
+                    'Juguete': v.juguetes?.nombre || '',
+                    'Código Juguete': v.juguetes?.codigo || '',
+                    'Cantidad': v.cantidad || 1,
+                    'Precio Unitario': v.precio_venta ? parseFloat(v.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2 }) : '0.00',
+                    'Total': v.precio_venta ? parseFloat(v.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2 }) : '0.00',
+                    'Método de Pago': v.metodo_pago || '',
+                    'Empleado': v.empleados?.nombre || v.empleados?.codigo || '',
+                    'Fecha': v.created_at ? new Date(v.created_at).toLocaleString('es-CO') : ''
+                }));
                 filename = 'ventas.xlsx';
                 break;
             case 'movimientos':
-                const { data: movimientos } = await window.supabaseClient
+                const { data: movimientos, error: errorMovimientos } = await window.supabaseClient
                     .from('movimientos')
-                    .select('tipo_origen, origen_id, tipo_destino, destino_id, cantidad, created_at')
+                    .select(`
+                        tipo_origen, 
+                        origen_id, 
+                        tipo_destino, 
+                        destino_id, 
+                        cantidad, 
+                        created_at,
+                        juguetes(nombre, codigo)
+                    `)
                     .eq('empresa_id', user.empresa_id);
-                data = movimientos.data || [];
+                
+                if (errorMovimientos) throw errorMovimientos;
+                
+                // Formatear datos para Excel
+                data = (movimientos || []).map(m => ({
+                    'Juguete': m.juguetes?.nombre || '',
+                    'Código Juguete': m.juguetes?.codigo || '',
+                    'Tipo Origen': m.tipo_origen === 'bodega' ? 'Bodega' : 'Tienda',
+                    'ID Origen': m.origen_id || '',
+                    'Tipo Destino': m.tipo_destino === 'bodega' ? 'Bodega' : 'Tienda',
+                    'ID Destino': m.destino_id || '',
+                    'Cantidad': m.cantidad || 0,
+                    'Fecha': m.created_at ? new Date(m.created_at).toLocaleString('es-CO') : ''
+                }));
                 filename = 'movimientos.xlsx';
                 break;
+            default:
+                alert('Tipo de exportación no válido');
+                return;
         }
 
-        if (typeof XLSX !== 'undefined') {
+        // Verificar que hay datos para exportar
+        if (!data || data.length === 0) {
+            alert('No hay datos para exportar');
+            return;
+        }
+
+        // Verificar que XLSX está disponible
+        if (typeof XLSX === 'undefined') {
+            alert('La librería de Excel no está cargada. Por favor, recarga la página.');
+            console.error('XLSX no está definido');
+            return;
+        }
+
+        try {
+            // Crear hoja de cálculo
             const ws = XLSX.utils.json_to_sheet(data);
+            
+            // Ajustar ancho de columnas
+            const colWidths = Object.keys(data[0]).map(key => ({
+                wch: Math.max(key.length, 15)
+            }));
+            ws['!cols'] = colWidths;
+            
+            // Crear libro de trabajo
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Datos');
+            
+            // Exportar archivo
             XLSX.writeFile(wb, filename);
-            alert('Archivo exportado correctamente');
-        } else {
-            alert('La librería de Excel no está cargada');
+            
+            alert(`Archivo "${filename}" exportado correctamente con ${data.length} registros`);
+        } catch (excelError) {
+            console.error('Error al crear archivo Excel:', excelError);
+            alert('Error al crear el archivo Excel: ' + excelError.message);
         }
     } catch (error) {
         console.error('Error al exportar:', error);
@@ -1769,13 +1901,19 @@ function setupUsuarioForm() {
         nuevoUsuarioForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const nombre = document.getElementById('usuarioNombre').value.trim();
+            const nombre = capitalizarPrimeraLetra(document.getElementById('usuarioNombre').value.trim());
             const email = document.getElementById('usuarioEmail').value.trim();
             const password = document.getElementById('usuarioPassword').value;
             const tipoUsuarioId = parseInt(document.getElementById('usuarioTipo').value);
             
             if (!nombre || !email || !password || !tipoUsuarioId) {
                 showUsuarioMessage('Por favor, completa todos los campos', 'error');
+                return;
+            }
+            
+            // Validar que la contraseña tenga al menos 3 caracteres
+            if (password.length < 3) {
+                showUsuarioMessage('La contraseña debe tener al menos 3 caracteres', 'error');
                 return;
             }
 
@@ -1890,11 +2028,13 @@ async function loadUsuarios() {
 function createUsuarioCard(usuario) {
     const card = document.createElement('div');
     card.className = 'bodega-card';
+    const nombreCapitalizado = capitalizarPrimeraLetra(usuario.nombre);
+    const tipoUsuarioNombre = usuario.tipo_usuarios?.nombre || 'N/A';
     card.innerHTML = `
         <div class="bodega-info">
-            <h3>${usuario.nombre}</h3>
+            <h3>${nombreCapitalizado}</h3>
             <p><i class="fas fa-envelope"></i> ${usuario.email || 'Sin email'}</p>
-            <p><i class="fas fa-user-tag"></i> ${usuario.tipo_usuarios?.nombre || 'N/A'}</p>
+            <p><i class="fas fa-user-tag"></i> ${capitalizarPrimeraLetra(tipoUsuarioNombre)}</p>
             <p><i class="fas fa-circle" style="color: ${usuario.activo ? '#10b981' : '#ef4444'}; font-size: 8px;"></i> ${usuario.activo ? 'Activo' : 'Inactivo'}</p>
         </div>
         <div class="bodega-actions">
@@ -1983,7 +2123,7 @@ async function openEditUsuarioModal(usuarioId) {
 
         if (error) throw error;
 
-        document.getElementById('editUsuarioNombre').value = usuario.nombre;
+        document.getElementById('editUsuarioNombre').value = capitalizarPrimeraLetra(usuario.nombre);
         document.getElementById('editUsuarioEmail').value = usuario.email || '';
         document.getElementById('editUsuarioTipo').value = usuario.tipo_usuario_id;
         window.currentUsuarioId = usuarioId;
@@ -2002,7 +2142,7 @@ if (editUsuarioForm) {
     editUsuarioForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        const nombre = document.getElementById('editUsuarioNombre').value.trim();
+        const nombre = capitalizarPrimeraLetra(document.getElementById('editUsuarioNombre').value.trim());
         const email = document.getElementById('editUsuarioEmail').value.trim();
         const password = document.getElementById('editUsuarioPassword').value;
         const tipoUsuarioId = parseInt(document.getElementById('editUsuarioTipo').value);
@@ -2126,6 +2266,21 @@ if (agregarTiendaHeader && agregarTiendaContent) {
         const icon = agregarTiendaHeader.querySelector('.accordion-icon');
         icon.classList.toggle('fa-chevron-down');
         icon.classList.toggle('fa-chevron-up');
+    });
+}
+
+// Toggle del acordeón "Agregar Usuario"
+const agregarUsuarioHeader = document.getElementById('agregarUsuarioHeader');
+const agregarUsuarioContent = document.getElementById('agregarUsuarioContent');
+
+if (agregarUsuarioHeader && agregarUsuarioContent) {
+    agregarUsuarioHeader.addEventListener('click', function() {
+        agregarUsuarioContent.classList.toggle('active');
+        const icon = agregarUsuarioHeader.querySelector('.accordion-icon');
+        if (icon) {
+            icon.classList.toggle('fa-chevron-down');
+            icon.classList.toggle('fa-chevron-up');
+        }
     });
 }
 
@@ -2379,7 +2534,7 @@ function initAbastecer() {
             const user = JSON.parse(sessionStorage.getItem('user'));
             
             for (const juguete of juguetesSeleccionados) {
-                // Obtener juguete actual
+                // Obtener juguete actual del origen
                 const { data: jugueteActualData } = await window.supabaseClient
                     .from('juguetes')
                     .select('*')
@@ -2409,19 +2564,24 @@ function initAbastecer() {
                     .eq(campoDestino, destinoId)
                     .limit(1);
 
-                // Crear movimiento
-                await window.supabaseClient
-                    .from('movimientos')
-                    .insert({
-                        tipo_origen: origenTipoVal,
-                        origen_id: origenId,
-                        tipo_destino: destinoTipoVal,
-                        destino_id: destinoId,
-                        juguete_id: juguete.id,
-                        cantidad: juguete.cantidad,
-                        empresa_id: user.empresa_id
-                    });
+                // PRIMERO: Reducir cantidad en origen (o eliminar si llega a 0)
+                const nuevaCantidadOrigen = jugueteActual.cantidad - juguete.cantidad;
+                
+                if (nuevaCantidadOrigen <= 0) {
+                    // Si la cantidad llega a 0 o menos, eliminar el registro del origen
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .delete()
+                        .eq('id', juguete.id);
+                } else {
+                    // Actualizar cantidad en origen
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .update({ cantidad: nuevaCantidadOrigen })
+                        .eq('id', juguete.id);
+                }
 
+                // SEGUNDO: Aumentar cantidad en destino (o crear nuevo registro si no existe)
                 if (jugueteExistenteData && jugueteExistenteData.length > 0) {
                     // Si ya existe un juguete con el mismo código en el destino, sumar la cantidad
                     const jugueteExistente = jugueteExistenteData[0];
@@ -2454,27 +2614,37 @@ function initAbastecer() {
                         .insert(nuevoJugueteData);
                 }
 
-                // Reducir cantidad en origen
-                const nuevaCantidadOrigen = jugueteActual.cantidad - juguete.cantidad;
-                
-                if (nuevaCantidadOrigen <= 0) {
-                    // Si la cantidad llega a 0 o menos, eliminar el registro del origen
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .delete()
-                        .eq('id', juguete.id);
-                } else {
-                    // Actualizar cantidad en origen
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .update({ cantidad: nuevaCantidadOrigen })
-                        .eq('id', juguete.id);
-                }
+                // TERCERO: Crear registro de movimiento (solo para auditoría)
+                await window.supabaseClient
+                    .from('movimientos')
+                    .insert({
+                        tipo_origen: origenTipoVal,
+                        origen_id: origenId,
+                        tipo_destino: destinoTipoVal,
+                        destino_id: destinoId,
+                        juguete_id: juguete.id,
+                        cantidad: juguete.cantidad,
+                        empresa_id: user.empresa_id
+                    });
             }
 
             showAbastecerMessage('Movimiento realizado correctamente', 'success');
             form.reset();
             document.getElementById('juguetesDisponiblesList').innerHTML = '';
+            
+            // Recargar datos para reflejar los cambios en el inventario
+            if (typeof loadTiendas === 'function') {
+                await loadTiendas();
+            }
+            if (typeof loadBodegas === 'function') {
+                await loadBodegas();
+            }
+            if (typeof loadInventario === 'function') {
+                await loadInventario();
+            }
+            if (typeof loadDashboardSummary === 'function') {
+                await loadDashboardSummary();
+            }
         } catch (error) {
             console.error('Error al realizar movimiento:', error);
             showAbastecerMessage('Error al realizar el movimiento: ' + error.message, 'error');
@@ -2971,4 +3141,457 @@ function showAjustesMessage(message, type) {
 
 // Exportar función
 window.initAjustes = initAjustes;
+
+// ============================================
+// GRÁFICOS DE ANÁLISIS
+// ============================================
+
+let ventasPorDiaChart = null;
+let ventasPorHoraChart = null;
+let dashboardVentasChart = null;
+
+// Función para obtener ventas del mes actual
+async function obtenerVentasDelMes() {
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        const ahora = new Date();
+        const primerDiaMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+        const ultimoDiaMes = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59);
+        
+        const { data: ventas, error } = await window.supabaseClient
+            .from('ventas')
+            .select('created_at, precio_venta, cantidad')
+            .eq('empresa_id', user.empresa_id)
+            .gte('created_at', primerDiaMes.toISOString())
+            .lte('created_at', ultimoDiaMes.toISOString())
+            .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        
+        return ventas || [];
+    } catch (error) {
+        console.error('Error al obtener ventas del mes:', error);
+        return [];
+    }
+}
+
+// Función para procesar ventas por día
+function procesarVentasPorDia(ventas) {
+    const ventasPorDia = {};
+    const diasDelMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    
+    // Inicializar todos los días del mes con 0
+    for (let i = 1; i <= diasDelMes; i++) {
+        ventasPorDia[i] = { cantidad: 0, total: 0 };
+    }
+    
+    // Procesar ventas
+    ventas.forEach(venta => {
+        const fecha = new Date(venta.created_at);
+        const dia = fecha.getDate();
+        const cantidad = parseFloat(venta.cantidad || 1);
+        const precio = parseFloat(venta.precio_venta || 0);
+        
+        if (ventasPorDia[dia]) {
+            ventasPorDia[dia].cantidad += cantidad;
+            ventasPorDia[dia].total += precio;
+        }
+    });
+    
+    return ventasPorDia;
+}
+
+// Función para procesar ventas por hora
+function procesarVentasPorHora(ventas) {
+    const ventasPorHora = {};
+    
+    // Inicializar todas las horas del día con 0
+    for (let i = 0; i < 24; i++) {
+        ventasPorHora[i] = { cantidad: 0, total: 0 };
+    }
+    
+    // Procesar ventas
+    ventas.forEach(venta => {
+        const fecha = new Date(venta.created_at);
+        const hora = fecha.getHours();
+        const cantidad = parseFloat(venta.cantidad || 1);
+        const precio = parseFloat(venta.precio_venta || 0);
+        
+        if (ventasPorHora[hora] !== undefined) {
+            ventasPorHora[hora].cantidad += cantidad;
+            ventasPorHora[hora].total += precio;
+        }
+    });
+    
+    return ventasPorHora;
+}
+
+// Función para cargar gráficos en la sección de análisis
+async function cargarGraficosAnalisis() {
+    const ventas = await obtenerVentasDelMes();
+    
+    if (ventas.length === 0) {
+        const diaInfo = document.getElementById('ventasPorDiaInfo');
+        const horaInfo = document.getElementById('ventasPorHoraInfo');
+        if (diaInfo) diaInfo.innerHTML = '<p style="color: #64748b;">No hay ventas en el mes actual</p>';
+        if (horaInfo) horaInfo.innerHTML = '<p style="color: #64748b;">No hay ventas en el mes actual</p>';
+        return;
+    }
+    
+    // Procesar datos
+    const ventasPorDia = procesarVentasPorDia(ventas);
+    const ventasPorHora = procesarVentasPorHora(ventas);
+    
+    // Crear gráfico de ventas por día
+    crearGraficoVentasPorDia(ventasPorDia);
+    
+    // Crear gráfico de ventas por hora
+    crearGraficoVentasPorHora(ventasPorHora);
+    
+    // Actualizar información de días máximo y mínimo
+    actualizarInfoVentasPorDia(ventasPorDia);
+    
+    // Actualizar información de horas máximo y mínimo
+    actualizarInfoVentasPorHora(ventasPorHora);
+}
+
+// Función para crear gráfico de ventas por día
+function crearGraficoVentasPorDia(ventasPorDia) {
+    const ctx = document.getElementById('ventasPorDiaChart');
+    if (!ctx) return;
+    
+    // Destruir gráfico anterior si existe
+    if (ventasPorDiaChart) {
+        ventasPorDiaChart.destroy();
+    }
+    
+    const dias = Object.keys(ventasPorDia).map(d => parseInt(d));
+    const cantidades = dias.map(d => ventasPorDia[d].cantidad);
+    const totales = dias.map(d => ventasPorDia[d].total);
+    
+    ventasPorDiaChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: dias.map(d => `Día ${d}`),
+            datasets: [
+                {
+                    label: 'Cantidad de Juguetes Vendidos',
+                    data: cantidades,
+                    backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    borderWidth: 2,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Total en Pesos ($)',
+                    data: totales,
+                    backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                    borderColor: 'rgba(16, 185, 129, 1)',
+                    borderWidth: 2,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Ventas Diarias del Mes Actual',
+                    font: { size: 16, weight: 'bold' }
+                },
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            if (context.datasetIndex === 0) {
+                                return `Cantidad: ${context.parsed.y} juguetes`;
+                            } else {
+                                return `Total: $${context.parsed.y.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`;
+                            }
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Cantidad de Juguetes'
+                    },
+                    beginAtZero: true
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Total en Pesos ($)'
+                    },
+                    beginAtZero: true,
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Días del Mes'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Función para crear gráfico de ventas por hora
+function crearGraficoVentasPorHora(ventasPorHora) {
+    const ctx = document.getElementById('ventasPorHoraChart');
+    if (!ctx) return;
+    
+    // Destruir gráfico anterior si existe
+    if (ventasPorHoraChart) {
+        ventasPorHoraChart.destroy();
+    }
+    
+    const horas = Object.keys(ventasPorHora).map(h => parseInt(h));
+    const cantidades = horas.map(h => ventasPorHora[h].cantidad);
+    const totales = horas.map(h => ventasPorHora[h].total);
+    
+    ventasPorHoraChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: horas.map(h => `${h}:00 - ${h + 1}:00`),
+            datasets: [
+                {
+                    label: 'Cantidad de Juguetes Vendidos',
+                    data: cantidades,
+                    backgroundColor: 'rgba(245, 158, 11, 0.6)',
+                    borderColor: 'rgba(245, 158, 11, 1)',
+                    borderWidth: 2,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Total en Pesos ($)',
+                    data: totales,
+                    backgroundColor: 'rgba(139, 92, 246, 0.6)',
+                    borderColor: 'rgba(139, 92, 246, 1)',
+                    borderWidth: 2,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Ventas por Hora del Día (Mes Actual)',
+                    font: { size: 16, weight: 'bold' }
+                },
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            if (context.datasetIndex === 0) {
+                                return `Cantidad: ${context.parsed.y} juguetes`;
+                            } else {
+                                return `Total: $${context.parsed.y.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`;
+                            }
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Cantidad de Juguetes'
+                    },
+                    beginAtZero: true
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Total en Pesos ($)'
+                    },
+                    beginAtZero: true,
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Horas del Día'
+                    },
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Función para actualizar información de días máximo y mínimo
+function actualizarInfoVentasPorDia(ventasPorDia) {
+    let diaMax = null;
+    let diaMin = null;
+    let cantidadMax = -1;
+    let cantidadMin = Infinity;
+    
+    Object.keys(ventasPorDia).forEach(dia => {
+        const cantidad = ventasPorDia[dia].cantidad;
+        if (cantidad > cantidadMax) {
+            cantidadMax = cantidad;
+            diaMax = dia;
+        }
+        if (cantidad < cantidadMin) {
+            cantidadMin = cantidad;
+            diaMin = dia;
+        }
+    });
+    
+    const infoDiv = document.getElementById('ventasPorDiaInfo');
+    if (infoDiv) {
+        if (diaMax !== null) {
+            infoDiv.innerHTML = `
+                <p><strong>Día con más ventas:</strong> <span style="color: #10b981;">Día ${diaMax}</span> (${cantidadMax} juguetes - $${ventasPorDia[diaMax].total.toLocaleString('es-CO', { minimumFractionDigits: 2 })})</p>
+                <p><strong>Día con menos ventas:</strong> <span style="color: ${cantidadMin === 0 ? '#ef4444' : '#f59e0b'};">Día ${diaMin}</span> (${cantidadMin} juguetes - $${ventasPorDia[diaMin].total.toLocaleString('es-CO', { minimumFractionDigits: 2 })})</p>
+            `;
+        } else {
+            infoDiv.innerHTML = '<p style="color: #64748b;">No hay datos disponibles</p>';
+        }
+    }
+}
+
+// Función para actualizar información de horas máximo y mínimo
+function actualizarInfoVentasPorHora(ventasPorHora) {
+    let horaMax = null;
+    let horaMin = null;
+    let cantidadMax = -1;
+    let cantidadMin = Infinity;
+    
+    Object.keys(ventasPorHora).forEach(hora => {
+        const cantidad = ventasPorHora[hora].cantidad;
+        if (cantidad > cantidadMax) {
+            cantidadMax = cantidad;
+            horaMax = hora;
+        }
+        if (cantidad < cantidadMin) {
+            cantidadMin = cantidad;
+            horaMin = hora;
+        }
+    });
+    
+    const infoDiv = document.getElementById('ventasPorHoraInfo');
+    if (infoDiv) {
+        if (horaMax !== null) {
+            infoDiv.innerHTML = `
+                <p><strong>Hora con más ventas:</strong> <span style="color: #10b981;">${horaMax}:00 - ${parseInt(horaMax) + 1}:00</span> (${cantidadMax} juguetes - $${ventasPorHora[horaMax].total.toLocaleString('es-CO', { minimumFractionDigits: 2 })})</p>
+                <p><strong>Hora con menos ventas:</strong> <span style="color: ${cantidadMin === 0 ? '#ef4444' : '#f59e0b'};">${horaMin}:00 - ${parseInt(horaMin) + 1}:00</span> (${cantidadMin} juguetes - $${ventasPorHora[horaMin].total.toLocaleString('es-CO', { minimumFractionDigits: 2 })})</p>
+            `;
+        } else {
+            infoDiv.innerHTML = '<p style="color: #64748b;">No hay datos disponibles</p>';
+        }
+    }
+}
+
+// Función para cargar gráfico de ventas en el dashboard
+async function cargarGraficoVentasDashboard() {
+    const ventas = await obtenerVentasDelMes();
+    
+    if (ventas.length === 0) {
+        const ctx = document.getElementById('dashboardVentasChart');
+        if (ctx && ctx.parentElement) {
+            ctx.parentElement.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No hay ventas en el mes actual</p>';
+        }
+        return;
+    }
+    
+    const ventasPorDia = procesarVentasPorDia(ventas);
+    crearGraficoDashboardVentas(ventasPorDia);
+}
+
+// Función para crear gráfico de ventas en el dashboard
+function crearGraficoDashboardVentas(ventasPorDia) {
+    const ctx = document.getElementById('dashboardVentasChart');
+    if (!ctx) return;
+    
+    // Destruir gráfico anterior si existe
+    if (dashboardVentasChart) {
+        dashboardVentasChart.destroy();
+    }
+    
+    const dias = Object.keys(ventasPorDia).map(d => parseInt(d));
+    const cantidades = dias.map(d => ventasPorDia[d].cantidad);
+    
+    dashboardVentasChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: dias.map(d => `Día ${d}`),
+            datasets: [{
+                label: 'Juguetes Vendidos',
+                data: cantidades,
+                backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                borderColor: 'rgba(59, 130, 246, 1)',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: false
+                },
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.parsed.y} juguetes vendidos`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Cantidad de Juguetes'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Días del Mes'
+                    }
+                }
+            }
+        }
+    });
+}
 

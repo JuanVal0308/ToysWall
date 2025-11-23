@@ -1340,3 +1340,73 @@ body {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
+/* Estilos para gráficos de análisis */
+.analisis-charts {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.chart-container {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.chart-container h3 {
+    margin: 0 0 8px 0;
+    color: #1e293b;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.chart-subtitle {
+    margin: 0 0 20px 0;
+    color: #64748b;
+    font-size: 14px;
+}
+
+.chart-subtitle-small {
+    margin: 0 0 16px 0;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.chart-container canvas {
+    max-height: 400px;
+    margin-bottom: 16px;
+}
+
+.chart-info {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.chart-info p {
+    margin: 8px 0;
+    color: #1e293b;
+    font-size: 14px;
+}
+
+.chart-info strong {
+    color: #475569;
+}
+
+/* Responsive para gráficos */
+@media (max-width: 768px) {
+    .analisis-charts {
+        grid-template-columns: 1fr;
+    }
+    
+    .chart-container {
+        padding: 16px;
+    }
+    
+    .chart-container canvas {
+        max-height: 300px;
+    }
+}
+

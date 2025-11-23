@@ -344,7 +344,9 @@ ALTER TABLE movimientos ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "tipo_usuarios_select_policy" ON tipo_usuarios;
 DROP POLICY IF EXISTS "empresas_select_policy" ON empresas;
 DROP POLICY IF EXISTS "usuarios_select_policy" ON usuarios;
+DROP POLICY IF EXISTS "usuarios_insert_policy" ON usuarios;
 DROP POLICY IF EXISTS "usuarios_update_policy" ON usuarios;
+DROP POLICY IF EXISTS "usuarios_delete_policy" ON usuarios;
 DROP POLICY IF EXISTS "bodegas_select_policy" ON bodegas;
 DROP POLICY IF EXISTS "bodegas_insert_policy" ON bodegas;
 DROP POLICY IF EXISTS "bodegas_update_policy" ON bodegas;
@@ -385,10 +387,18 @@ CREATE POLICY "usuarios_select_policy"
     ON usuarios FOR SELECT
     USING (true);
 
+CREATE POLICY "usuarios_insert_policy"
+    ON usuarios FOR INSERT
+    WITH CHECK (true);
+
 CREATE POLICY "usuarios_update_policy"
     ON usuarios FOR UPDATE
     USING (true)
     WITH CHECK (true);
+
+CREATE POLICY "usuarios_delete_policy"
+    ON usuarios FOR DELETE
+    USING (true);
 
 -- Crear políticas RLS para bodegas
 CREATE POLICY "bodegas_select_policy"
