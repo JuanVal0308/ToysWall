@@ -492,6 +492,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
 
     // Cargar bodegas desde Supabase
+    // Variables de paginación para bodegas
+    let paginaActualBodegas = 1;
+    const itemsPorPaginaBodegas = 10;
+    let todasLasBodegas = [];
+
     async function loadBodegas() {
         const bodegasList = document.getElementById('bodegasList');
         bodegasList.innerHTML = '<p style="text-align: center; color: #64748b;">Cargando bodegas...</p>';
@@ -505,21 +510,123 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             if (error) throw error;
 
-            if (!bodegas || bodegas.length === 0) {
-                bodegasList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay bodegas registradas. Agrega una nueva bodega.</p>';
-                return;
-            }
-
-            bodegasList.innerHTML = '';
-            bodegas.forEach(bodega => {
-                const bodegaCard = createBodegaCard(bodega);
-                bodegasList.appendChild(bodegaCard);
-            });
+            todasLasBodegas = bodegas || [];
+            paginaActualBodegas = 1;
+            renderizarPaginaBodegas();
         } catch (error) {
             console.error('Error al cargar bodegas:', error);
             bodegasList.innerHTML = '<p style="text-align: center; color: #ef4444;">Error al cargar las bodegas. Por favor, recarga la página.</p>';
         }
     }
+
+    function renderizarPaginaBodegas() {
+        const bodegasList = document.getElementById('bodegasList');
+        
+        if (!todasLasBodegas || todasLasBodegas.length === 0) {
+            bodegasList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay bodegas registradas. Agrega una nueva bodega.</p>';
+            document.getElementById('bodegasPagination').innerHTML = '';
+            return;
+        }
+
+        // Calcular paginación
+        const totalPaginas = Math.ceil(todasLasBodegas.length / itemsPorPaginaBodegas);
+        const inicio = (paginaActualBodegas - 1) * itemsPorPaginaBodegas;
+        const fin = inicio + itemsPorPaginaBodegas;
+        const bodegasPagina = todasLasBodegas.slice(inicio, fin);
+
+        // Renderizar bodegas de la página actual
+        bodegasList.innerHTML = '';
+        bodegasPagina.forEach(bodega => {
+            const bodegaCard = createBodegaCard(bodega);
+            bodegasList.appendChild(bodegaCard);
+        });
+
+        renderizarPaginacionBodegas(totalPaginas, todasLasBodegas.length);
+    }
+
+    function renderizarPaginacionBodegas(totalPaginas, totalBodegas) {
+        const paginationContainer = document.getElementById('bodegasPagination');
+        
+        if (totalPaginas <= 1) {
+            paginationContainer.innerHTML = '';
+            return;
+        }
+
+        let paginacionHTML = '<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">';
+        
+        // Botón Anterior
+        if (paginaActualBodegas > 1) {
+            paginacionHTML += `
+                <button onclick="cambiarPaginaBodegas(${paginaActualBodegas - 1})" 
+                        style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    <i class="fas fa-chevron-left"></i> Anterior
+                </button>
+            `;
+        }
+
+        // Pestañas de páginas (mostrar máximo 7 pestañas)
+        const maxPestañas = 7;
+        let inicioPestañas = Math.max(1, paginaActualBodegas - Math.floor(maxPestañas / 2));
+        let finPestañas = Math.min(totalPaginas, inicioPestañas + maxPestañas - 1);
+        
+        if (finPestañas - inicioPestañas < maxPestañas - 1) {
+            inicioPestañas = Math.max(1, finPestañas - maxPestañas + 1);
+        }
+
+        // Primera página si no está visible
+        if (inicioPestañas > 1) {
+            paginacionHTML += `
+                <button onclick="cambiarPaginaBodegas(1)" 
+                        style="padding: 8px 12px; background: ${paginaActualBodegas === 1 ? '#3b82f6' : 'white'}; color: ${paginaActualBodegas === 1 ? 'white' : '#3b82f6'}; border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    1
+                </button>
+            `;
+            if (inicioPestañas > 2) {
+                paginacionHTML += `<span style="padding: 8px 4px; color: #64748b;">...</span>`;
+            }
+        }
+
+        // Pestañas visibles
+        for (let i = inicioPestañas; i <= finPestañas; i++) {
+            paginacionHTML += `
+                <button onclick="cambiarPaginaBodegas(${i})" 
+                        style="padding: 8px 12px; background: ${paginaActualBodegas === i ? '#3b82f6' : 'white'}; color: ${paginaActualBodegas === i ? 'white' : '#3b82f6'}; border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    ${i}
+                </button>
+            `;
+        }
+
+        // Última página si no está visible
+        if (finPestañas < totalPaginas) {
+            if (finPestañas < totalPaginas - 1) {
+                paginacionHTML += `<span style="padding: 8px 4px; color: #64748b;">...</span>`;
+            }
+            paginacionHTML += `
+                <button onclick="cambiarPaginaBodegas(${totalPaginas})" 
+                        style="padding: 8px 12px; background: ${paginaActualBodegas === totalPaginas ? '#3b82f6' : 'white'}; color: ${paginaActualBodegas === totalPaginas ? 'white' : '#3b82f6'}; border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    ${totalPaginas}
+                </button>
+            `;
+        }
+
+        // Botón Siguiente
+        if (paginaActualBodegas < totalPaginas) {
+            paginacionHTML += `
+                <button onclick="cambiarPaginaBodegas(${paginaActualBodegas + 1})" 
+                        style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    Siguiente <i class="fas fa-chevron-right"></i>
+                </button>
+            `;
+        }
+
+        paginacionHTML += '</div>';
+        paginationContainer.innerHTML = paginacionHTML;
+    }
+
+    window.cambiarPaginaBodegas = function(nuevaPagina) {
+        paginaActualBodegas = nuevaPagina;
+        renderizarPaginaBodegas();
+    };
 
     // Crear tarjeta de bodega
     function createBodegaCard(bodega) {
@@ -626,7 +733,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             showBodegaMessage('Bodega agregada correctamente', 'success');
             nuevaBodegaForm.reset();
-            loadBodegas();
+            await loadBodegas();
         } catch (error) {
             console.error('Error al agregar bodega:', error);
             showBodegaMessage('Error al agregar la bodega: ' + error.message, 'error');
@@ -1076,6 +1183,163 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Configurar autocompletado
         configurarAutocompletadoJuguete();
         
+        // Configurar botón de subir foto a Imgur
+        const subirFotoBtn = document.getElementById('subirFotoBtn');
+        const jugueteFotoInput = document.getElementById('jugueteFotoInput');
+        const jugueteFotoUrl = document.getElementById('jugueteFotoUrl');
+        const jugueteFotoUrlInput = document.getElementById('jugueteFotoUrlInput');
+        const fotoPreview = document.getElementById('fotoPreview');
+        const fotoPreviewImg = document.getElementById('fotoPreviewImg');
+        const fotoUrlText = document.getElementById('fotoUrlText');
+        
+        // Función para actualizar la URL y vista previa
+        function actualizarFotoUrl(url) {
+            jugueteFotoUrl.value = url;
+            if (jugueteFotoUrlInput) {
+                jugueteFotoUrlInput.value = url;
+            }
+            fotoPreviewImg.src = url;
+            fotoUrlText.textContent = url;
+            fotoPreview.style.display = 'block';
+        }
+        
+        // Manejar input de URL manual
+        if (jugueteFotoUrlInput) {
+            jugueteFotoUrlInput.addEventListener('input', function() {
+                const url = this.value.trim();
+                if (url) {
+                    jugueteFotoUrl.value = url;
+                    fotoPreviewImg.src = url;
+                    fotoUrlText.textContent = url;
+                    fotoPreview.style.display = 'block';
+                } else {
+                    jugueteFotoUrl.value = '';
+                    fotoPreview.style.display = 'none';
+                }
+            });
+        }
+        
+        if (subirFotoBtn && jugueteFotoInput) {
+            subirFotoBtn.addEventListener('click', async function() {
+                const archivo = jugueteFotoInput.files[0];
+                
+                if (!archivo) {
+                    showJugueteFormMessage('Por favor, selecciona una foto primero', 'error');
+                    return;
+                }
+                
+                // Validar que sea una imagen (incluyendo HEIC/HEIF)
+                const esImagen = archivo.type.startsWith('image/') || 
+                                archivo.name.toLowerCase().endsWith('.heic') || 
+                                archivo.name.toLowerCase().endsWith('.heif');
+                
+                if (!esImagen) {
+                    showJugueteFormMessage('Por favor, selecciona un archivo de imagen válido (JPEG, PNG, GIF, WEBP, HEIC, etc.)', 'error');
+                    return;
+                }
+                
+                // Validar tamaño (máximo 10MB)
+                if (archivo.size > 10 * 1024 * 1024) {
+                    showJugueteFormMessage('La imagen es demasiado grande. El tamaño máximo es 10MB', 'error');
+                    return;
+                }
+                
+                // Verificar si Imgur está configurado
+                if (!window.IMGUR_CONFIG || !window.IMGUR_CONFIG.CLIENT_ID || window.IMGUR_CONFIG.CLIENT_ID === 'YOUR_IMGUR_CLIENT_ID') {
+                    showJugueteFormMessage('Imgur no está configurado. Puedes ingresar la URL de la foto manualmente en el campo de abajo. Si necesitas subir una imagen, puedes hacerlo manualmente a Imgur.com y copiar la URL.', 'info');
+                    // Mostrar vista previa local aunque no se pueda subir
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        fotoPreviewImg.src = e.target.result;
+                        fotoPreview.style.display = 'block';
+                        fotoUrlText.textContent = 'Imgur no configurado. Usa el campo de URL manual para ingresar la URL de la imagen.';
+                    };
+                    reader.readAsDataURL(archivo);
+                    return;
+                }
+                
+                try {
+                    subirFotoBtn.disabled = true;
+                    subirFotoBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Subiendo...';
+                    
+                    // Subir a Imgur
+                    const url = await window.subirImagenAImgur(archivo);
+                    
+                    // Actualizar URL y vista previa
+                    actualizarFotoUrl(url);
+                    
+                    showJugueteFormMessage('Foto subida exitosamente a Imgur', 'success');
+                    
+                    subirFotoBtn.disabled = false;
+                    subirFotoBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Subir a Imgur';
+                } catch (error) {
+                    console.error('Error al subir foto:', error);
+                    showJugueteFormMessage('Error al subir la foto: ' + error.message + '. Puedes ingresar la URL manualmente en el campo de abajo.', 'error');
+                    subirFotoBtn.disabled = false;
+                    subirFotoBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Subir a Imgur';
+                    
+                    // Mostrar vista previa local aunque falle la subida
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        fotoPreviewImg.src = e.target.result;
+                        fotoPreview.style.display = 'block';
+                        fotoUrlText.textContent = 'Error al subir. Usa el campo de URL manual para ingresar la URL de la imagen.';
+                    };
+                    reader.readAsDataURL(archivo);
+                }
+            });
+            
+            // Mostrar vista previa cuando se selecciona un archivo
+            jugueteFotoInput.addEventListener('change', async function(e) {
+                const archivo = e.target.files[0];
+                if (!archivo) {
+                    fotoPreview.style.display = 'none';
+                    jugueteFotoUrl.value = '';
+                    return;
+                }
+
+                // Verificar si es una imagen (incluyendo HEIC)
+                const esImagen = archivo.type.startsWith('image/') || 
+                                archivo.name.toLowerCase().endsWith('.heic') || 
+                                archivo.name.toLowerCase().endsWith('.heif');
+                
+                if (esImagen) {
+                    try {
+                        let archivoParaVistaPrevia = archivo;
+                        
+                        // Si es HEIC, convertirlo para la vista previa
+                        if (window.esHeic && window.esHeic(archivo)) {
+                            try {
+                                archivoParaVistaPrevia = await window.convertirHeicAJpeg(archivo);
+                                fotoUrlText.textContent = 'Archivo HEIC detectado. Se convertirá a JPEG al subir. Selecciona "Subir a Imgur" para subir la foto.';
+                            } catch (error) {
+                                console.warn('No se pudo convertir HEIC para vista previa:', error);
+                                fotoUrlText.textContent = 'Archivo HEIC detectado. Selecciona "Subir a Imgur" para convertir y subir la foto.';
+                                // Continuar con el archivo original
+                            }
+                        } else {
+                            fotoUrlText.textContent = 'Selecciona "Subir a Imgur" para subir la foto';
+                        }
+                        
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            fotoPreviewImg.src = e.target.result;
+                            fotoPreview.style.display = 'block';
+                        };
+                        reader.readAsDataURL(archivoParaVistaPrevia);
+                    } catch (error) {
+                        console.error('Error al mostrar vista previa:', error);
+                        fotoPreview.style.display = 'none';
+                        jugueteFotoUrl.value = '';
+                    }
+                } else {
+                    fotoPreview.style.display = 'none';
+                    jugueteFotoUrl.value = '';
+                    showJugueteFormMessage('Por favor, selecciona un archivo de imagen válido', 'error');
+                }
+            });
+        }
+        
         agregarJugueteForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -1084,7 +1348,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             const cantidad = parseInt(document.getElementById('jugueteCantidadInput').value);
             const ubicacionTipo = document.getElementById('jugueteUbicacionTipo').value;
             const ubicacionId = document.getElementById('jugueteUbicacionSelect').value;
-            const fotoUrl = document.getElementById('jugueteFotoInput').value.trim();
+            // Obtener URL de foto (del campo oculto o del input manual)
+            const jugueteFotoUrlInput = document.getElementById('jugueteFotoUrlInput');
+            const fotoUrl = jugueteFotoUrlInput && jugueteFotoUrlInput.value.trim() 
+                ? jugueteFotoUrlInput.value.trim() 
+                : document.getElementById('jugueteFotoUrl').value.trim();
 
             if (!nombre || !codigo || isNaN(cantidad) || cantidad < 0 || !ubicacionTipo || !ubicacionId) {
                 showJugueteFormMessage('Por favor, completa todos los campos obligatorios', 'error');
@@ -1197,6 +1465,13 @@ document.addEventListener('DOMContentLoaded', async function() {
 
                 agregarJugueteForm.reset();
                 document.getElementById('jugueteUbicacionContainer').style.display = 'none';
+                // Limpiar vista previa de foto
+                const fotoPreview = document.getElementById('fotoPreview');
+                const jugueteFotoUrl = document.getElementById('jugueteFotoUrl');
+                const jugueteFotoUrlInput = document.getElementById('jugueteFotoUrlInput');
+                if (fotoPreview) fotoPreview.style.display = 'none';
+                if (jugueteFotoUrl) jugueteFotoUrl.value = '';
+                if (jugueteFotoUrlInput) jugueteFotoUrlInput.value = '';
             } catch (error) {
                 console.error('Error al agregar juguete:', error);
                 showJugueteFormMessage('Error al agregar el juguete: ' + error.message, 'error');
@@ -2096,6 +2371,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
 
     // Cargar empleados
+    // Variables de paginación para empleados
+    let paginaActualEmpleados = 1;
+    const itemsPorPaginaEmpleados = 10;
+    let todosLosEmpleados = [];
+
     async function loadEmpleados() {
         const empleadosList = document.getElementById('empleadosList');
         empleadosList.innerHTML = '<p style="text-align: center; color: #64748b;">Cargando empleados...</p>';
@@ -2109,21 +2389,124 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             if (error) throw error;
 
-            if (!empleados || empleados.length === 0) {
-                empleadosList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay empleados registrados. Agrega un nuevo empleado.</p>';
-                return;
-            }
-
-            empleadosList.innerHTML = '';
-            empleados.forEach(empleado => {
-                const empleadoCard = createEmpleadoCard(empleado);
-                empleadosList.appendChild(empleadoCard);
-            });
+            todosLosEmpleados = empleados || [];
+            paginaActualEmpleados = 1;
+            renderizarPaginaEmpleados();
         } catch (error) {
             console.error('Error al cargar empleados:', error);
             empleadosList.innerHTML = '<p style="text-align: center; color: #ef4444;">Error al cargar los empleados</p>';
         }
     }
+
+    function renderizarPaginaEmpleados() {
+        const empleadosList = document.getElementById('empleadosList');
+        
+        if (!todosLosEmpleados || todosLosEmpleados.length === 0) {
+            empleadosList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay empleados registrados. Agrega un nuevo empleado.</p>';
+            document.getElementById('empleadosPagination').innerHTML = '';
+            return;
+        }
+
+        // Calcular paginación
+        const totalPaginas = Math.ceil(todosLosEmpleados.length / itemsPorPaginaEmpleados);
+        const inicio = (paginaActualEmpleados - 1) * itemsPorPaginaEmpleados;
+        const fin = inicio + itemsPorPaginaEmpleados;
+        const empleadosPagina = todosLosEmpleados.slice(inicio, fin);
+
+        // Renderizar empleados de la página actual
+        empleadosList.innerHTML = '';
+        empleadosPagina.forEach(empleado => {
+            const empleadoCard = createEmpleadoCard(empleado);
+            empleadosList.appendChild(empleadoCard);
+        });
+
+        renderizarPaginacionEmpleados(totalPaginas, todosLosEmpleados.length);
+    }
+
+    function renderizarPaginacionEmpleados(totalPaginas, totalEmpleados) {
+        const paginationContainer = document.getElementById('empleadosPagination');
+        if (!paginationContainer) return;
+        
+        if (totalPaginas <= 1) {
+            paginationContainer.innerHTML = '';
+            return;
+        }
+
+        let paginacionHTML = '<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">';
+        
+        // Botón Anterior
+        if (paginaActualEmpleados > 1) {
+            paginacionHTML += `
+                <button onclick="cambiarPaginaEmpleados(${paginaActualEmpleados - 1})" 
+                        style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    <i class="fas fa-chevron-left"></i> Anterior
+                </button>
+            `;
+        }
+
+        // Pestañas de páginas (mostrar máximo 7 pestañas)
+        const maxPestañas = 7;
+        let inicioPestañas = Math.max(1, paginaActualEmpleados - Math.floor(maxPestañas / 2));
+        let finPestañas = Math.min(totalPaginas, inicioPestañas + maxPestañas - 1);
+        
+        if (finPestañas - inicioPestañas < maxPestañas - 1) {
+            inicioPestañas = Math.max(1, finPestañas - maxPestañas + 1);
+        }
+
+        // Primera página si no está visible
+        if (inicioPestañas > 1) {
+            paginacionHTML += `
+                <button onclick="cambiarPaginaEmpleados(1)" 
+                        style="padding: 8px 12px; background: ${paginaActualEmpleados === 1 ? '#3b82f6' : 'white'}; color: ${paginaActualEmpleados === 1 ? 'white' : '#3b82f6'}; border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    1
+                </button>
+            `;
+            if (inicioPestañas > 2) {
+                paginacionHTML += `<span style="padding: 8px 4px; color: #64748b;">...</span>`;
+            }
+        }
+
+        // Pestañas visibles
+        for (let i = inicioPestañas; i <= finPestañas; i++) {
+            paginacionHTML += `
+                <button onclick="cambiarPaginaEmpleados(${i})" 
+                        style="padding: 8px 12px; background: ${paginaActualEmpleados === i ? '#3b82f6' : 'white'}; color: ${paginaActualEmpleados === i ? 'white' : '#3b82f6'}; border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    ${i}
+                </button>
+            `;
+        }
+
+        // Última página si no está visible
+        if (finPestañas < totalPaginas) {
+            if (finPestañas < totalPaginas - 1) {
+                paginacionHTML += `<span style="padding: 8px 4px; color: #64748b;">...</span>`;
+            }
+            paginacionHTML += `
+                <button onclick="cambiarPaginaEmpleados(${totalPaginas})" 
+                        style="padding: 8px 12px; background: ${paginaActualEmpleados === totalPaginas ? '#3b82f6' : 'white'}; color: ${paginaActualEmpleados === totalPaginas ? 'white' : '#3b82f6'}; border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    ${totalPaginas}
+                </button>
+            `;
+        }
+
+        // Botón Siguiente
+        if (paginaActualEmpleados < totalPaginas) {
+            paginacionHTML += `
+                <button onclick="cambiarPaginaEmpleados(${paginaActualEmpleados + 1})" 
+                        style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    Siguiente <i class="fas fa-chevron-right"></i>
+                </button>
+            `;
+        }
+
+        paginacionHTML += '</div>';
+        paginationContainer.innerHTML = paginacionHTML;
+    }
+
+    window.cambiarPaginaEmpleados = function(nuevaPagina) {
+        paginaActualEmpleados = nuevaPagina;
+        renderizarPaginaEmpleados();
+    };
     
     // Cargar tiendas para el select de empleados
     async function loadTiendasForSelect(selectId) {
@@ -2439,6 +2822,41 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Cargar resumen del dashboard al inicio
     if (typeof loadDashboardSummary === 'function') {
         loadDashboardSummary();
+    }
+
+    // Hacer las cards del dashboard clicables
+    const cardTiendas = document.getElementById('cardTiendas');
+    const cardBodegas = document.getElementById('cardBodegas');
+    const cardUsuarios = document.getElementById('cardUsuarios');
+
+    if (cardTiendas) {
+        cardTiendas.addEventListener('click', function() {
+            // Simular click en el botón de tiendas del sidebar
+            const tiendasBtn = document.querySelector('.sidebar-btn[data-page="tiendas"]');
+            if (tiendasBtn) {
+                tiendasBtn.click();
+            }
+        });
+    }
+
+    if (cardBodegas) {
+        cardBodegas.addEventListener('click', function() {
+            // Simular click en el botón de bodegas del sidebar
+            const bodegasBtn = document.querySelector('.sidebar-btn[data-page="bodegas"]');
+            if (bodegasBtn) {
+                bodegasBtn.click();
+            }
+        });
+    }
+
+    if (cardUsuarios) {
+        cardUsuarios.addEventListener('click', function() {
+            // Simular click en el botón de usuarios del sidebar
+            const usuariosBtn = document.querySelector('.sidebar-btn[data-page="usuarios"]');
+            if (usuariosBtn) {
+                usuariosBtn.click();
+            }
+        });
     }
 
     console.log('✅ Dashboard cargado correctamente');

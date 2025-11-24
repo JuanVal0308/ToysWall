@@ -17,7 +17,8 @@ ToysWall/
 │   ├── dashboard.js       # Lógica del dashboard
 │   ├── dashboard-funcionalidades.js  # Funcionalidades del dashboard
 │   ├── analisis-tiendas-empleados.js # Análisis de tiendas y empleados
-│   └── email-config.js    # Configuración de EmailJS
+│   ├── email-config.js    # Configuración de EmailJS
+│   └── imgur-config.js    # Configuración de Imgur para subida de fotos
 ├── setup_completo.sql     # Script completo de configuración de base de datos
 └── migrations/            # Scripts de migración para bases de datos existentes
     ├── fix_foreign_keys_delete.sql
@@ -46,7 +47,29 @@ ToysWall/
 
 **Para bases de datos existentes:** Si ya tienes una base de datos, ejecuta los scripts en la carpeta `migrations/` según sea necesario.
 
-### 3. Configurar EmailJS (Opcional - para envío de facturas)
+### 3. Configurar Imgur (Opcional - para subida de fotos de juguetes)
+
+Para que las fotos de los juguetes se suban automáticamente a Imgur:
+
+1. Crea una cuenta en [Imgur](https://imgur.com/) (si no tienes una)
+2. Ve a https://api.imgur.com/oauth2/addclient
+3. Registra una nueva aplicación:
+   - **Application name:** ToysWalls
+   - **Authorization type:** Anonymous usage without user authorization
+   - Haz clic en "Submit"
+4. Copia el **Client ID** que se genera
+5. Edita `js/imgur-config.js` y reemplaza `YOUR_IMGUR_CLIENT_ID` con tu Client ID:
+   ```javascript
+   const IMGUR_CONFIG = {
+       CLIENT_ID: 'tu_client_id_aqui'
+   };
+   ```
+
+**Nota:** 
+- El servicio gratuito de Imgur permite subir imágenes sin límite de cantidad, pero con un límite de ancho de banda.
+- La aplicación soporta todos los formatos de imagen comunes, incluyendo HEIC/HEIF (formato usado por iPhone/iPad), que se convierten automáticamente a JPEG antes de subir.
+
+### 4. Configurar EmailJS (Opcional - para envío de facturas)
 
 Para que las facturas se envíen automáticamente por correo:
 
@@ -75,6 +98,27 @@ Para que las facturas se envíen automáticamente por correo:
 - Usa **TRIPLE LLAVE** `{{{message_html}}}` en el campo Content de EmailJS
 - `{{variable}}` → EmailJS escapa el HTML (lo muestra como texto)
 - `{{{variable}}}` → EmailJS NO escapa el HTML (lo renderiza correctamente)
+
+### 5. Configurar Supabase Storage para Facturas XML (Opcional - para adjuntar XML en correos)
+
+Para que los archivos XML de las facturas se adjunten automáticamente en los correos:
+
+1. En tu proyecto de Supabase, ve a **Storage** en el menú lateral
+2. Crea un nuevo bucket llamado **`facturas`** (debe ser exactamente este nombre, en minúsculas)
+3. **Marca el bucket como público** (esto permite descargas directas)
+4. Configura una política de seguridad para permitir lectura pública:
+   - Ve a **Policies** en el bucket
+   - Crea una nueva política con este SQL:
+   ```sql
+   CREATE POLICY "Permitir lectura pública de facturas"
+   ON storage.objects
+   FOR SELECT
+   USING (bucket_id = 'facturas');
+   ```
+
+**Nota:** Si no configuras el Storage, el sistema usará un método alternativo que incluye el XML como texto plano en el correo.
+
+Para instrucciones detalladas, consulta `INSTRUCCIONES_STORAGE_FACTURAS.md`.
 - El HTML completo ya viene procesado desde la aplicación, solo necesitas renderizarlo
 
 ## 🔐 Autenticación
@@ -105,6 +149,9 @@ El script `setup_completo.sql` crea usuarios de ejemplo:
 - ✅ Exportación de datos a Excel
 - ✅ Diseño responsive y moderno
 - ✅ Prevención de facturación duplicada
+- ✅ Subida automática de fotos a Imgur (sin ocupar espacio en la base de datos)
+  - Soporta todos los formatos de imagen: JPEG, PNG, GIF, WEBP, HEIC, HEIF, etc.
+  - Conversión automática de HEIC/HEIF a JPEG antes de subir
 
 ## 📱 Páginas
 

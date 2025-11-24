@@ -19,8 +19,12 @@ function capitalizarPrimeraLetra(texto) {
 async function loadDashboardSummary() {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
+        if (!user || !user.empresa_id) {
+            console.error('Usuario no válido');
+            return;
+        }
         
-        // Cargar totales
+        // Cargar totales (optimizado: solo counts)
         const [tiendas, bodegas, usuarios, ventas] = await Promise.all([
             window.supabaseClient.from('tiendas').select('id', { count: 'exact' }).eq('empresa_id', user.empresa_id),
             window.supabaseClient.from('bodegas').select('id', { count: 'exact' }).eq('empresa_id', user.empresa_id),
@@ -28,12 +32,40 @@ async function loadDashboardSummary() {
             window.supabaseClient.from('ventas').select('precio_venta').eq('empresa_id', user.empresa_id)
         ]);
 
-        document.getElementById('totalTiendas').textContent = tiendas.count || 0;
-        document.getElementById('totalBodegas').textContent = bodegas.count || 0;
-        document.getElementById('totalUsuarios').textContent = usuarios.count || 0;
+        // Verificar errores
+        if (tiendas.error) {
+            console.error('Error al cargar tiendas:', tiendas.error);
+        }
+        if (bodegas.error) {
+            console.error('Error al cargar bodegas:', bodegas.error);
+        }
+        if (usuarios.error) {
+            console.error('Error al cargar usuarios:', usuarios.error);
+        }
+        if (ventas.error) {
+            console.error('Error al cargar ventas:', ventas.error);
+        }
+
+        const totalTiendasEl = document.getElementById('totalTiendas');
+        const totalBodegasEl = document.getElementById('totalBodegas');
+        const totalUsuariosEl = document.getElementById('totalUsuarios');
+        const totalGananciasEl = document.getElementById('totalGanancias');
+
+        if (totalTiendasEl) {
+            totalTiendasEl.textContent = tiendas.count || 0;
+        }
+        if (totalBodegasEl) {
+            totalBodegasEl.textContent = bodegas.count || 0;
+        }
+        if (totalUsuariosEl) {
+            totalUsuariosEl.textContent = usuarios.count || 0;
+        }
         
-        const totalGanancias = ventas.data?.reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0) || 0;
-        document.getElementById('totalGanancias').textContent = '$' + totalGanancias.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+        // Calcular ganancias
+        const totalGanancias = (ventas.data || []).reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0);
+        if (totalGananciasEl) {
+            totalGananciasEl.textContent = '$' + totalGanancias.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+        }
 
         // Cargar ventas recientes
         const { data: ventasRecientes } = await window.supabaseClient
@@ -55,7 +87,7 @@ async function loadDashboardSummary() {
                         <strong>${v.juguetes?.nombre || 'N/A'}</strong>
                         <span>${v.codigo_venta}</span>
                     </div>
-                    <div class="venta-precio">$${parseFloat(v.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</div>
+                    <div class="venta-precio">$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</div>
                 </div>
             `).join('');
         } else {
@@ -391,9 +423,11 @@ function initRegistrarVenta() {
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
             
-            // Registrar cada item como venta
+            // Generar un solo código de venta para todos los items
+            const codigoVenta = await generarCodigoVenta();
+            
+            // Registrar cada item como parte de la misma venta
             for (const item of ventaItems) {
-                const codigoVenta = await generarCodigoVenta();
                 const cantidad = item.cantidad || 1;
                 
                 // Obtener juguete actual para verificar cantidad
@@ -485,20 +519,34 @@ window.updateVentaItemsList = function() {
         return;
     }
 
-    itemsList.innerHTML = ventaItems.map((item, index) => `
+    // Calcular total de la venta
+    const totalVenta = ventaItems.reduce((sum, item) => sum + (item.precio * (item.cantidad || 1)), 0);
+    
+    itemsList.innerHTML = ventaItems.map((item, index) => {
+        const cantidad = item.cantidad || 1;
+        const subtotal = item.precio * cantidad;
+        return `
         <div class="venta-item-card">
             <div class="item-info">
                 <strong>${item.juguete_nombre}</strong> (${item.juguete_codigo})<br>
-                <small>Cantidad: ${item.cantidad || 1} | Empleado: ${item.empleado_nombre} | Método: ${item.metodo_pago}</small>
+                <small>Precio Unitario: $${item.precio.toLocaleString('es-CO', { minimumFractionDigits: 2 })} | Cantidad: ${cantidad} | Empleado: ${item.empleado_nombre} | Método: ${item.metodo_pago}</small>
             </div>
             <div class="item-actions">
-                <span class="item-precio">$${(item.precio * (item.cantidad || 1)).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span>
+                <span class="item-precio">$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span>
                 <button type="button" class="btn-remove" onclick="removeVentaItem(${index})">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('') + `
+        <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-top: 2px solid #8b5cf6;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong style="color: #1e293b; font-size: 16px;">Total de la Venta:</strong>
+                <strong style="color: #10b981; font-size: 20px;">$${totalVenta.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</strong>
+            </div>
+        </div>
+    `;
 
     // Si hay items, remover atributos required y agregar novalidate
     if (form) {
@@ -688,7 +736,7 @@ async function facturarVentaRegistrada(codigoVenta) {
             subtotal: parseFloat(venta.precio_venta)
         }));
 
-        // Calcular total
+        // Calcular total (con IVA incluido - precio original)
         const total = itemsParaFacturar.reduce((sum, item) => sum + item.subtotal, 0);
 
         // Generar código de factura
@@ -708,25 +756,46 @@ async function facturarVentaRegistrada(codigoVenta) {
         document.getElementById('facturaCodigo').textContent = codigoFactura;
         document.getElementById('facturaFecha').textContent = new Date().toLocaleString('es-CO');
         
-        // Llenar items
+        // Calcular IVA
+        const totalConIva = total; // Total con IVA (precio original)
+        const totalBase = itemsParaFacturar.reduce((sum, item) => {
+            const precioConIva = item.precio;
+            const precioBase = precioConIva / 1.19;
+            return sum + (precioBase * item.cantidad);
+        }, 0);
+        const ivaTotal = totalConIva - totalBase;
+        
+        // Llenar items (sin código)
         const itemsBody = document.getElementById('facturaItemsBody');
-        itemsBody.innerHTML = itemsParaFacturar.map(item => `
+        itemsBody.innerHTML = itemsParaFacturar.map(item => {
+            const precioConIva = item.precio;
+            const precioBase = precioConIva / 1.19;
+            const subtotal = precioBase * item.cantidad; // Subtotal = precio sin IVA × cantidad
+            return `
             <tr>
                 <td>${item.juguete_nombre}</td>
-                <td>${item.juguete_codigo}</td>
-                <td>$${item.precio.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                <td>$${precioBase.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
                 <td>${item.cantidad}</td>
-                <td>$${item.subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                <td>$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
         
-        document.getElementById('facturaTotal').textContent = '$' + total.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+        // Actualizar totales con IVA
+        const facturaIvaElement = document.getElementById('facturaIva');
+        const facturaTotalElement = document.getElementById('facturaTotal');
+        if (facturaIvaElement) {
+            facturaIvaElement.textContent = '$' + ivaTotal.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+        }
+        if (facturaTotalElement) {
+            facturaTotalElement.textContent = '$' + totalConIva.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+        }
         
-        // Guardar datos para enviar
+        // Guardar datos para enviar (total con IVA incluido)
         currentFacturaData = {
             codigo_factura: codigoFactura,
             items: itemsParaFacturar,
-            total: total,
+            total: totalConIva, // Total con IVA (precio original)
             codigo_venta: codigoVenta, // Guardar para referencia
             ventas_ids: ventas.map(v => v.id) // Guardar IDs de las ventas para marcarlas como facturadas
         };
@@ -762,27 +831,50 @@ function showFacturarView() {
     document.getElementById('facturaCodigo').textContent = codigoFactura;
     document.getElementById('facturaFecha').textContent = new Date().toLocaleString('es-CO');
     
-    // Llenar items
+    // Calcular IVA
+    const totalConIva = total; // Total con IVA (precio original)
+    const totalBase = ventaItems.reduce((sum, item) => {
+        const cantidad = item.cantidad || 1;
+        const precioConIva = item.precio;
+        const precioBase = precioConIva / 1.19;
+        return sum + (precioBase * cantidad);
+    }, 0);
+    const ivaTotal = totalConIva - totalBase;
+    
+    // Llenar items (sin código)
     const itemsBody = document.getElementById('facturaItemsBody');
-    itemsBody.innerHTML = ventaItems.map(item => `
+    itemsBody.innerHTML = ventaItems.map(item => {
+        const cantidad = item.cantidad || 1;
+        const precioConIva = item.precio;
+        const precioBase = precioConIva / 1.19;
+        const subtotal = precioBase * cantidad; // Subtotal = precio sin IVA × cantidad
+        return `
         <tr>
             <td>${item.juguete_nombre}</td>
-            <td>${item.juguete_codigo}</td>
-            <td>$${item.precio.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
-            <td>${item.cantidad || 1}</td>
-            <td>$${(item.precio * (item.cantidad || 1)).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+            <td>$${precioBase.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+            <td>${cantidad}</td>
+            <td>$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
     
-    document.getElementById('facturaTotal').textContent = '$' + total.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+    // Actualizar totales con IVA
+    const facturaIvaElement = document.getElementById('facturaIva');
+    const facturaTotalElement = document.getElementById('facturaTotal');
+    if (facturaIvaElement) {
+        facturaIvaElement.textContent = '$' + ivaTotal.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+    }
+    if (facturaTotalElement) {
+        facturaTotalElement.textContent = '$' + totalConIva.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+    }
     
-    // Guardar datos para enviar
+    // Guardar datos para enviar (total con IVA incluido)
     // Nota: Cuando se factura desde items nuevos (no desde ventas registradas),
     // no hay codigo_venta, así que no se marca nada como facturado
     currentFacturaData = {
         codigo_factura: codigoFactura,
         items: ventaItems,
-        total: total,
+        total: totalConIva, // Total con IVA (precio original)
         codigo_venta: null // No hay código de venta porque son items nuevos
     };
 }
@@ -872,7 +964,7 @@ function initFacturar() {
             
             // Enviar correo electrónico con la factura
             try {
-                await enviarFacturaPorCorreo(clienteEmail, clienteNombre, currentFacturaData, factura.id);
+                await enviarFacturaPorCorreo(clienteEmail, clienteNombre, clienteDocumento, currentFacturaData, factura.id);
                 showFacturaMessage('Factura creada y enviada por correo correctamente.', 'success');
             } catch (emailError) {
                 console.error('Error al enviar correo:', emailError);
@@ -910,8 +1002,75 @@ function showFacturaMessage(message, type) {
     }
 }
 
+// Función para generar XML de factura
+function generarXMLFactura(facturaData, clienteNombre, clienteDocumento, clienteEmail, fechaISO, totalConIva, totalBase, ivaTotal) {
+    const fecha = new Date(fechaISO);
+    const fechaFormateada = fecha.toISOString().split('T')[0];
+    const horaFormateada = fecha.toISOString().split('T')[1].split('.')[0];
+    
+    let itemsXML = '';
+    facturaData.items.forEach((item, index) => {
+        const cantidad = item.cantidad || 1;
+        const precioConIva = item.precio || 0;
+        const precioBase = precioConIva / 1.19;
+        const subtotal = precioBase * cantidad;
+        const ivaItem = (precioConIva * cantidad) - subtotal;
+        
+        itemsXML += `
+        <Item>
+            <Numero>${index + 1}</Numero>
+            <Nombre>${escapeXML(item.juguete_nombre)}</Nombre>
+            <Codigo>${escapeXML(item.juguete_codigo || 'N/A')}</Codigo>
+            <Cantidad>${cantidad}</Cantidad>
+            <PrecioUnitario>${precioBase.toFixed(2)}</PrecioUnitario>
+            <Subtotal>${subtotal.toFixed(2)}</Subtotal>
+            <IVA>${ivaItem.toFixed(2)}</IVA>
+            <TotalItem>${(precioConIva * cantidad).toFixed(2)}</TotalItem>
+        </Item>`;
+    });
+    
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<FacturaElectronica>
+    <InformacionGeneral>
+        <CodigoFactura>${escapeXML(facturaData.codigo_factura)}</CodigoFactura>
+        <Fecha>${fechaFormateada}</Fecha>
+        <Hora>${horaFormateada}</Hora>
+        <TipoFactura>01</TipoFactura>
+    </InformacionGeneral>
+    <Emisor>
+        <Nombre>ToysWalls - Sistema de Inventario</Nombre>
+    </Emisor>
+    <Receptor>
+        <Nombre>${escapeXML(clienteNombre)}</Nombre>
+        <Documento>${escapeXML(clienteDocumento || 'N/A')}</Documento>
+        <Email>${escapeXML(clienteEmail)}</Email>
+    </Receptor>
+    <Items>
+        ${itemsXML}
+    </Items>
+    <Totales>
+        <Subtotal currencyID="COP">${totalBase.toFixed(2)}</Subtotal>
+        <IVA currencyID="COP">${ivaTotal.toFixed(2)}</IVA>
+        <Total currencyID="COP">${totalConIva.toFixed(2)}</Total>
+    </Totales>
+</FacturaElectronica>`;
+    
+    return xml;
+}
+
+// Función auxiliar para escapar caracteres XML
+function escapeXML(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
 // Función para enviar factura por correo
-async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, facturaData, facturaId) {
+async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, clienteDocumento, facturaData, facturaId) {
     // Validar que el correo del cliente no esté vacío
     if (!clienteEmail || clienteEmail.trim() === '') {
         throw new Error('El correo del cliente no puede estar vacío');
@@ -925,30 +1084,83 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, facturaData, 
 
     console.log('Enviando factura a:', clienteEmail);
     
-    // Generar HTML detallado de los items
+    // Calcular IVA: precio ingresado - 19% = precio base
+    // El precio que se ingresa es el precio con IVA incluido
+    // Precio base = precio / 1.19
+    // IVA = precio - precio base
+    // Total = precio original (el que se ingresó)
+    
+    // Generar HTML detallado de los items (sin columna código)
     const itemsHTML = facturaData.items.map((item, index) => {
         const cantidad = item.cantidad || 1;
-        const precio = item.precio || 0;
-        const subtotal = item.subtotal || (precio * cantidad);
+        const precioConIva = item.precio || 0; // Precio ingresado (con IVA incluido)
+        const precioBase = precioConIva / 1.19; // Precio sin IVA
+        const subtotal = precioBase * cantidad; // Subtotal = precio sin IVA × cantidad
         return `
             <tr style="border-bottom: 1px solid #e2e8f0;">
                 <td style="padding: 10px 8px; text-align: center; color: #64748b; font-size: 13px;">${index + 1}</td>
                 <td style="padding: 10px 8px; font-weight: 600; color: #1e293b; font-size: 13px; word-wrap: break-word;">${item.juguete_nombre}</td>
-                <td style="padding: 10px 8px; color: #64748b; font-size: 13px; word-wrap: break-word;">${item.juguete_codigo}</td>
-                <td style="padding: 10px 8px; text-align: right; color: #1e293b; font-size: 13px;">$${precio.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 10px 8px; text-align: right; color: #1e293b; font-size: 13px;">$${precioBase.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
                 <td style="padding: 10px 8px; text-align: center; color: #1e293b; font-weight: 600; font-size: 13px;">${cantidad}</td>
                 <td style="padding: 10px 8px; text-align: right; color: #10b981; font-weight: 700; font-size: 14px;">$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
             </tr>
         `;
     }).join('');
+    
+    // Calcular totales
+    const totalConIva = facturaData.total; // Total con IVA (precio original ingresado)
+    const totalBase = facturaData.items.reduce((sum, item) => {
+        const cantidad = item.cantidad || 1;
+        const precioConIva = item.precio || 0;
+        const precioBase = precioConIva / 1.19;
+        return sum + (precioBase * cantidad);
+    }, 0);
+    const ivaTotal = totalConIva - totalBase;
 
     const fecha = new Date().toLocaleString('es-CO');
+    const fechaISO = new Date().toISOString();
     // URL del logo - debe ser accesible públicamente
     const logoUrl = 'https://i.imgur.com/RBbjVnp.jpeg';
     
     // Verificar que el logo URL sea válida
     if (!logoUrl || logoUrl.trim() === '') {
         console.warn('Logo URL no definida, usando placeholder');
+    }
+    
+    // Generar XML de la factura
+    const facturaXML = generarXMLFactura(facturaData, clienteNombre, clienteDocumento, clienteEmail, fechaISO, totalConIva, totalBase, ivaTotal);
+    const xmlBase64 = btoa(unescape(encodeURIComponent(facturaXML)));
+    
+    // Subir XML a Supabase Storage para crear un enlace de descarga directa
+    let xmlDownloadUrl = null;
+    try {
+        const fileName = `facturas/factura_${facturaData.codigo_factura}_${Date.now()}.xml`;
+        const xmlBlob = new Blob([facturaXML], { type: 'application/xml;charset=utf-8' });
+        
+        // Subir a Supabase Storage
+        const { data: uploadData, error: uploadError } = await window.supabaseClient.storage
+            .from('facturas') // Bucket para facturas
+            .upload(fileName, xmlBlob, {
+                contentType: 'application/xml',
+                upsert: false
+            });
+        
+        if (!uploadError && uploadData) {
+            // Obtener URL pública del archivo
+            const { data: urlData } = window.supabaseClient.storage
+                .from('facturas')
+                .getPublicUrl(fileName);
+            
+            if (urlData) {
+                xmlDownloadUrl = urlData.publicUrl;
+                console.log('XML subido exitosamente a Supabase Storage:', xmlDownloadUrl);
+            }
+        } else {
+            console.warn('No se pudo subir XML a Supabase Storage, usando método alternativo:', uploadError);
+        }
+    } catch (storageError) {
+        console.warn('Error al subir XML a Supabase Storage, usando método alternativo:', storageError);
+        // Continuar sin el enlace de descarga directa
     }
     
     // Generar HTML solo con el contenido del body (sin DOCTYPE, html, head)
@@ -968,6 +1180,7 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, facturaData, 
                     <p style="margin: 6px 0; color: #495057; font-size: 14px; word-break: break-word;"><strong style="color: #1e293b; font-weight: 600;">Código de Factura:</strong> ${facturaData.codigo_factura}</p>
                     <p style="margin: 6px 0; color: #495057; font-size: 14px; word-break: break-word;"><strong style="color: #1e293b; font-weight: 600;">Fecha y Hora:</strong> ${fecha}</p>
                     <p style="margin: 6px 0; color: #495057; font-size: 14px; word-break: break-word;"><strong style="color: #1e293b; font-weight: 600;">Cliente:</strong> ${clienteNombre}</p>
+                    <p style="margin: 6px 0; color: #495057; font-size: 14px; word-break: break-word;"><strong style="color: #1e293b; font-weight: 600;">Documento:</strong> ${clienteDocumento || 'N/A'}</p>
                     <p style="margin: 6px 0; color: #495057; font-size: 14px; word-break: break-word;"><strong style="color: #1e293b; font-weight: 600;">Correo:</strong> ${clienteEmail}</p>
                 </div>
                 
@@ -978,11 +1191,10 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, facturaData, 
                             <thead>
                                 <tr style="background: linear-gradient(135deg, #8b5cf6 0%, #667eea 100%);">
                                     <th style="color: white; padding: 10px 8px; text-align: center; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 8%;">#</th>
-                                    <th style="color: white; padding: 10px 8px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 25%;">Juguete</th>
-                                    <th style="color: white; padding: 10px 8px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 15%;">Código</th>
-                                    <th style="color: white; padding: 10px 8px; text-align: right; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 18%;">Precio Unit.</th>
-                                    <th style="color: white; padding: 10px 8px; text-align: center; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 12%;">Cant.</th>
-                                    <th style="color: white; padding: 10px 8px; text-align: right; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 22%;">Subtotal</th>
+                                    <th style="color: white; padding: 10px 8px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 40%;">Juguete</th>
+                                    <th style="color: white; padding: 10px 8px; text-align: right; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 22%;">Precio Unit.</th>
+                                    <th style="color: white; padding: 10px 8px; text-align: center; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 15%;">Cant.</th>
+                                    <th style="color: white; padding: 10px 8px; text-align: right; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; width: 15%;">Subtotal</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -990,8 +1202,12 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, facturaData, 
                             </tbody>
                             <tfoot style="background: #f8f9fa; border-top: 3px solid #8b5cf6;">
                                 <tr>
-                                    <td colspan="5" style="text-align: right; padding: 15px 10px; color: #1e293b; font-size: 16px; font-weight: 700;">TOTAL A PAGAR:</td>
-                                    <td style="text-align: right; padding: 15px 10px; color: #10b981; font-size: 20px; font-weight: 700;">$${facturaData.total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                                    <td colspan="4" style="text-align: right; padding: 12px 10px; color: #1e293b; font-size: 15px; font-weight: 600;">IVA (19%):</td>
+                                    <td style="text-align: right; padding: 12px 10px; color: #64748b; font-size: 15px; font-weight: 600;">$${ivaTotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="4" style="text-align: right; padding: 15px 10px; color: #1e293b; font-size: 16px; font-weight: 700;">TOTAL A PAGAR:</td>
+                                    <td style="text-align: right; padding: 15px 10px; color: #10b981; font-size: 20px; font-weight: 700;">$${totalConIva.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -1045,20 +1261,107 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, facturaData, 
 
         // Preparar parámetros para EmailJS
         // IMPORTANTE: El nombre de las variables debe coincidir con las de tu plantilla en EmailJS
+        
+        // Crear un ID único para el XML que se pueda usar en JavaScript
+        const xmlId = `xml_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // HTML mejorado con enlace de descarga directa del XML
+        const xmlSectionHTML = xmlDownloadUrl ? `
+            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <h4 style="color: #1e293b; margin: 0 0 15px 0; font-size: 18px;">
+                    <i class="fas fa-file-code"></i> Archivo XML de Factura Adjunto
+                </h4>
+                <p style="color: #64748b; font-size: 14px; margin: 0 0 20px 0; line-height: 1.6;">
+                    El archivo XML de tu factura está disponible para descarga. Haz clic en el botón de abajo para descargarlo directamente:
+                </p>
+                
+                <!-- Enlace de descarga directa -->
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <a href="${xmlDownloadUrl}" 
+                       download="factura_${facturaData.codigo_factura}.xml"
+                       style="display: inline-block; padding: 15px 30px; background: #10b981; color: white; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); transition: all 0.3s;">
+                        <i class="fas fa-download" style="margin-right: 8px;"></i> Descargar Archivo XML de Factura
+                    </a>
+                </div>
+                
+                <div style="background: #e0f2fe; padding: 12px; border-radius: 6px; border-left: 4px solid #3b82f6; margin-top: 15px;">
+                    <p style="color: #1e40af; font-size: 13px; margin: 0; line-height: 1.6;">
+                        <i class="fas fa-info-circle" style="margin-right: 6px;"></i>
+                        <strong>Nota importante:</strong> Este archivo XML contiene toda la información de tu factura en formato digital. 
+                        Puedes descargarlo haciendo clic en el botón de arriba. El archivo se descargará automáticamente cuando hagas clic.
+                    </p>
+                </div>
+                
+                <!-- XML también como texto plano para respaldo -->
+                <details style="margin-top: 20px;">
+                    <summary style="color: #64748b; font-size: 13px; cursor: pointer; padding: 10px; background: white; border-radius: 6px; border: 1px solid #e2e8f0;">
+                        <i class="fas fa-code"></i> Ver contenido XML (texto plano)
+                    </summary>
+                    <div style="background: #1e293b; padding: 15px; border-radius: 6px; overflow-x: auto; margin-top: 10px;">
+                        <pre style="color: #10b981; font-size: 11px; font-family: 'Courier New', monospace; margin: 0; white-space: pre-wrap; word-wrap: break-word; line-height: 1.5;">${facturaXML.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                    </div>
+                </details>
+            </div>
+        ` : `
+            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <h4 style="color: #1e293b; margin: 0 0 15px 0; font-size: 18px;">
+                    <i class="fas fa-file-code"></i> Archivo XML de Factura
+                </h4>
+                <p style="color: #64748b; font-size: 14px; margin: 0 0 20px 0; line-height: 1.6;">
+                    El archivo XML de tu factura está incluido a continuación. Puedes descargarlo usando el botón de abajo:
+                </p>
+                
+                <!-- Botón de descarga con JavaScript (funciona en navegadores) -->
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <a href="javascript:void(0);" onclick="
+                        (function() {
+                            var xmlContent = ${JSON.stringify(facturaXML)};
+                            var blob = new Blob([xmlContent], { type: 'application/xml;charset=utf-8' });
+                            var url = URL.createObjectURL(blob);
+                            var a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'factura_${facturaData.codigo_factura}.xml';
+                            document.body.appendChild(a);
+                            a.click();
+                            setTimeout(function() {
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                            }, 100);
+                        })();
+                        return false;
+                    " 
+                    style="display: inline-block; padding: 15px 30px; background: #10b981; color: white; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                        <i class="fas fa-download" style="margin-right: 8px;"></i> Descargar Archivo XML de Factura
+                    </a>
+                </div>
+                
+                <!-- XML como texto plano -->
+                <details style="margin-top: 20px;">
+                    <summary style="color: #64748b; font-size: 13px; cursor: pointer; padding: 10px; background: white; border-radius: 6px; border: 1px solid #e2e8f0;">
+                        <i class="fas fa-code"></i> Ver contenido XML (texto plano)
+                    </summary>
+                    <div style="background: #1e293b; padding: 15px; border-radius: 6px; overflow-x: auto; margin-top: 10px;">
+                        <pre style="color: #10b981; font-size: 11px; font-family: 'Courier New', monospace; margin: 0; white-space: pre-wrap; word-wrap: break-word; line-height: 1.5;">${facturaXML.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                    </div>
+                </details>
+            </div>
+        `;
+        
         const templateParams = {
             to_email: clienteEmail.trim(), // Campo principal del destinatario
             to_name: clienteNombre || 'Cliente',
             reply_to: config.FROM_EMAIL, // Email de respuesta
             from_name: config.FROM_NAME,
             subject: `Factura ${facturaData.codigo_factura} - ToysWalls`,
-            message_html: facturaHTML,
-            message: facturaHTML, // Algunas plantillas usan 'message' en lugar de 'message_html'
+            message_html: facturaHTML + xmlSectionHTML,
+            message: facturaHTML + `\n\nARCHIVO XML DE FACTURA:\n\n${facturaXML}\n\nPara guardar el XML, copia el texto de arriba y guárdalo en un archivo con extensión .xml`, // Versión texto plano
             factura_codigo: facturaData.codigo_factura,
             factura_total: `$${facturaData.total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`,
             factura_fecha: new Date().toLocaleString('es-CO'),
             items_detalle: itemsTexto,
             cliente_nombre: clienteNombre || 'Cliente',
-            cliente_email: clienteEmail.trim() // Duplicado por si la plantilla lo requiere
+            cliente_email: clienteEmail.trim(), // Duplicado por si la plantilla lo requiere
+            factura_xml: facturaXML // XML como texto plano
         };
 
         console.log('Enviando correo con parámetros:', {
@@ -1092,6 +1395,11 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, facturaData, 
 // TIENDAS - CON EMPLEADOS Y JUGUETES
 // ============================================
 
+// Variables de paginación para tiendas
+let paginaActualTiendas = 1;
+const itemsPorPaginaTiendas = 10;
+let todasLasTiendas = [];
+
 async function loadTiendas() {
     const tiendasList = document.getElementById('tiendasList');
     if (!tiendasList) return;
@@ -1108,32 +1416,162 @@ async function loadTiendas() {
 
         if (error) throw error;
 
-        if (!tiendas || tiendas.length === 0) {
-            tiendasList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay tiendas registradas.</p>';
-            return;
+        // Optimización: Cargar todos los empleados y juguetes de una vez
+        const tiendaIds = (tiendas || []).map(t => t.id);
+        if (tiendaIds && tiendaIds.length > 0) {
+            try {
+                const [empleadosResult, juguetesResult] = await Promise.all([
+                    window.supabaseClient.from('empleados').select('*').in('tienda_id', tiendaIds),
+                    window.supabaseClient.from('juguetes').select('*').in('tienda_id', tiendaIds)
+                ]);
+                
+                const todosEmpleados = empleadosResult.data || [];
+                const todosJuguetes = juguetesResult.data || [];
+                
+                // Agrupar por tienda_id
+                tiendas.forEach(tienda => {
+                    tienda.empleados = todosEmpleados.filter(e => e.tienda_id === tienda.id);
+                    tienda.juguetes = todosJuguetes.filter(j => j.tienda_id === tienda.id);
+                });
+            } catch (error) {
+                console.error('Error al cargar empleados/juguetes de tiendas:', error);
+                // Fallback: cargar individualmente si falla la consulta optimizada
+                for (const tienda of tiendas) {
+                    const [empleados, juguetes] = await Promise.all([
+                        window.supabaseClient.from('empleados').select('*').eq('tienda_id', tienda.id),
+                        window.supabaseClient.from('juguetes').select('*').eq('tienda_id', tienda.id)
+                    ]);
+                    tienda.empleados = empleados.data || [];
+                    tienda.juguetes = juguetes.data || [];
+                }
+            }
+        } else {
+            tiendas.forEach(tienda => {
+                tienda.empleados = [];
+                tienda.juguetes = [];
+            });
         }
 
-        // Cargar empleados y juguetes para cada tienda
-        for (const tienda of tiendas) {
-            const [empleados, juguetes] = await Promise.all([
-                window.supabaseClient.from('empleados').select('*').eq('tienda_id', tienda.id),
-                window.supabaseClient.from('juguetes').select('*').eq('tienda_id', tienda.id)
-            ]);
-            
-            tienda.empleados = empleados.data || [];
-            tienda.juguetes = juguetes.data || [];
-        }
-
-        tiendasList.innerHTML = '';
-        tiendas.forEach(tienda => {
-            const tiendaCard = createTiendaCard(tienda);
-            tiendasList.appendChild(tiendaCard);
-        });
+        todasLasTiendas = tiendas || [];
+        paginaActualTiendas = 1;
+        renderizarPaginaTiendas();
     } catch (error) {
         console.error('Error al cargar tiendas:', error);
         tiendasList.innerHTML = '<p style="text-align: center; color: #ef4444;">Error al cargar las tiendas</p>';
     }
 }
+
+function renderizarPaginaTiendas() {
+    const tiendasList = document.getElementById('tiendasList');
+    if (!tiendasList) return;
+    
+    if (!todasLasTiendas || todasLasTiendas.length === 0) {
+        tiendasList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay tiendas registradas.</p>';
+        const paginationContainer = document.getElementById('tiendasPagination');
+        if (paginationContainer) paginationContainer.innerHTML = '';
+        return;
+    }
+
+    // Calcular paginación
+    const totalPaginas = Math.ceil(todasLasTiendas.length / itemsPorPaginaTiendas);
+    const inicio = (paginaActualTiendas - 1) * itemsPorPaginaTiendas;
+    const fin = inicio + itemsPorPaginaTiendas;
+    const tiendasPagina = todasLasTiendas.slice(inicio, fin);
+
+    // Renderizar tiendas de la página actual
+    tiendasList.innerHTML = '';
+    tiendasPagina.forEach(tienda => {
+        const tiendaCard = createTiendaCard(tienda);
+        tiendasList.appendChild(tiendaCard);
+    });
+
+    renderizarPaginacionTiendas(totalPaginas, todasLasTiendas.length);
+}
+
+function renderizarPaginacionTiendas(totalPaginas, totalTiendas) {
+    const paginationContainer = document.getElementById('tiendasPagination');
+    if (!paginationContainer) return;
+    
+    if (totalPaginas <= 1) {
+        paginationContainer.innerHTML = '';
+        return;
+    }
+
+    let paginacionHTML = '<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">';
+    
+    // Botón Anterior
+    if (paginaActualTiendas > 1) {
+        paginacionHTML += `
+            <button onclick="cambiarPaginaTiendas(${paginaActualTiendas - 1})" 
+                    style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                <i class="fas fa-chevron-left"></i> Anterior
+            </button>
+        `;
+    }
+
+    // Pestañas de páginas (mostrar máximo 7 pestañas)
+    const maxPestañas = 7;
+    let inicioPestañas = Math.max(1, paginaActualTiendas - Math.floor(maxPestañas / 2));
+    let finPestañas = Math.min(totalPaginas, inicioPestañas + maxPestañas - 1);
+    
+    if (finPestañas - inicioPestañas < maxPestañas - 1) {
+        inicioPestañas = Math.max(1, finPestañas - maxPestañas + 1);
+    }
+
+    // Primera página si no está visible
+    if (inicioPestañas > 1) {
+        paginacionHTML += `
+            <button onclick="cambiarPaginaTiendas(1)" 
+                    style="padding: 8px 12px; background: ${paginaActualTiendas === 1 ? '#3b82f6' : 'white'}; color: ${paginaActualTiendas === 1 ? 'white' : '#3b82f6'}; border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                1
+            </button>
+        `;
+        if (inicioPestañas > 2) {
+            paginacionHTML += `<span style="padding: 8px 4px; color: #64748b;">...</span>`;
+        }
+    }
+
+    // Pestañas visibles
+    for (let i = inicioPestañas; i <= finPestañas; i++) {
+        paginacionHTML += `
+            <button onclick="cambiarPaginaTiendas(${i})" 
+                    style="padding: 8px 12px; background: ${paginaActualTiendas === i ? '#3b82f6' : 'white'}; color: ${paginaActualTiendas === i ? 'white' : '#3b82f6'}; border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                ${i}
+            </button>
+        `;
+    }
+
+    // Última página si no está visible
+    if (finPestañas < totalPaginas) {
+        if (finPestañas < totalPaginas - 1) {
+            paginacionHTML += `<span style="padding: 8px 4px; color: #64748b;">...</span>`;
+        }
+        paginacionHTML += `
+            <button onclick="cambiarPaginaTiendas(${totalPaginas})" 
+                    style="padding: 8px 12px; background: ${paginaActualTiendas === totalPaginas ? '#3b82f6' : 'white'}; color: ${paginaActualTiendas === totalPaginas ? 'white' : '#3b82f6'}; border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                ${totalPaginas}
+            </button>
+        `;
+    }
+
+    // Botón Siguiente
+    if (paginaActualTiendas < totalPaginas) {
+        paginacionHTML += `
+            <button onclick="cambiarPaginaTiendas(${paginaActualTiendas + 1})" 
+                    style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                Siguiente <i class="fas fa-chevron-right"></i>
+            </button>
+        `;
+    }
+
+    paginacionHTML += '</div>';
+    paginationContainer.innerHTML = paginacionHTML;
+}
+
+window.cambiarPaginaTiendas = function(nuevaPagina) {
+    paginaActualTiendas = nuevaPagina;
+    renderizarPaginaTiendas();
+};
 
 function createTiendaCard(tienda) {
     const card = document.createElement('div');
@@ -1212,9 +1650,15 @@ async function loadTiendasForEmpleados() {
     }
 }
 
+
 // ============================================
 // USUARIOS - CRUD COMPLETO
 // ============================================
+
+// Variables de paginación para usuarios
+let paginaActualUsuarios = 1;
+const itemsPorPaginaUsuarios = 10;
+let todosLosUsuarios = [];
 
 async function loadUsuarios() {
     const usuariosList = document.getElementById('usuariosList');
@@ -1236,30 +1680,138 @@ async function loadUsuarios() {
 
         if (error) throw error;
 
-        if (!usuarios || usuarios.length === 0) {
-            usuariosList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay usuarios registrados.</p>';
-            return;
-        }
-
-        usuariosList.innerHTML = '';
-        usuarios.forEach(usuario => {
-            const usuarioCard = createUsuarioCard(usuario);
-            usuariosList.appendChild(usuarioCard);
-        });
+        todosLosUsuarios = usuarios || [];
+        paginaActualUsuarios = 1;
+        renderizarPaginaUsuarios();
     } catch (error) {
         console.error('Error al cargar usuarios:', error);
         usuariosList.innerHTML = '<p style="text-align: center; color: #ef4444;">Error al cargar los usuarios</p>';
     }
 }
 
+function renderizarPaginaUsuarios() {
+    const usuariosList = document.getElementById('usuariosList');
+    if (!usuariosList) return;
+    
+    if (!todosLosUsuarios || todosLosUsuarios.length === 0) {
+        usuariosList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay usuarios registrados.</p>';
+        const paginationContainer = document.getElementById('usuariosPagination');
+        if (paginationContainer) paginationContainer.innerHTML = '';
+        return;
+    }
+
+    // Calcular paginación
+    const totalPaginas = Math.ceil(todosLosUsuarios.length / itemsPorPaginaUsuarios);
+    const inicio = (paginaActualUsuarios - 1) * itemsPorPaginaUsuarios;
+    const fin = inicio + itemsPorPaginaUsuarios;
+    const usuariosPagina = todosLosUsuarios.slice(inicio, fin);
+
+    // Renderizar usuarios de la página actual
+    usuariosList.innerHTML = '';
+    usuariosPagina.forEach(usuario => {
+        const usuarioCard = createUsuarioCard(usuario);
+        usuariosList.appendChild(usuarioCard);
+    });
+
+    renderizarPaginacionUsuarios(totalPaginas, todosLosUsuarios.length);
+}
+
+function renderizarPaginacionUsuarios(totalPaginas, totalUsuarios) {
+    const paginationContainer = document.getElementById('usuariosPagination');
+    if (!paginationContainer) return;
+    
+    if (totalPaginas <= 1) {
+        paginationContainer.innerHTML = '';
+        return;
+    }
+
+    let paginacionHTML = '<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">';
+    
+    // Botón Anterior
+    if (paginaActualUsuarios > 1) {
+        paginacionHTML += `
+            <button onclick="cambiarPaginaUsuarios(${paginaActualUsuarios - 1})" 
+                    style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                <i class="fas fa-chevron-left"></i> Anterior
+            </button>
+        `;
+    }
+
+    // Pestañas de páginas (mostrar máximo 7 pestañas)
+    const maxPestañas = 7;
+    let inicioPestañas = Math.max(1, paginaActualUsuarios - Math.floor(maxPestañas / 2));
+    let finPestañas = Math.min(totalPaginas, inicioPestañas + maxPestañas - 1);
+    
+    if (finPestañas - inicioPestañas < maxPestañas - 1) {
+        inicioPestañas = Math.max(1, finPestañas - maxPestañas + 1);
+    }
+
+    // Primera página si no está visible
+    if (inicioPestañas > 1) {
+        paginacionHTML += `
+            <button onclick="cambiarPaginaUsuarios(1)" 
+                    style="padding: 8px 12px; background: ${paginaActualUsuarios === 1 ? '#3b82f6' : 'white'}; color: ${paginaActualUsuarios === 1 ? 'white' : '#3b82f6'}; border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                1
+            </button>
+        `;
+        if (inicioPestañas > 2) {
+            paginacionHTML += `<span style="padding: 8px 4px; color: #64748b;">...</span>`;
+        }
+    }
+
+    // Pestañas visibles
+    for (let i = inicioPestañas; i <= finPestañas; i++) {
+        paginacionHTML += `
+            <button onclick="cambiarPaginaUsuarios(${i})" 
+                    style="padding: 8px 12px; background: ${paginaActualUsuarios === i ? '#3b82f6' : 'white'}; color: ${paginaActualUsuarios === i ? 'white' : '#3b82f6'}; border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                ${i}
+            </button>
+        `;
+    }
+
+    // Última página si no está visible
+    if (finPestañas < totalPaginas) {
+        if (finPestañas < totalPaginas - 1) {
+            paginacionHTML += `<span style="padding: 8px 4px; color: #64748b;">...</span>`;
+        }
+        paginacionHTML += `
+            <button onclick="cambiarPaginaUsuarios(${totalPaginas})" 
+                    style="padding: 8px 12px; background: ${paginaActualUsuarios === totalPaginas ? '#3b82f6' : 'white'}; color: ${paginaActualUsuarios === totalPaginas ? 'white' : '#3b82f6'}; border: 1px solid #3b82f6; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                ${totalPaginas}
+            </button>
+        `;
+    }
+
+    // Botón Siguiente
+    if (paginaActualUsuarios < totalPaginas) {
+        paginacionHTML += `
+            <button onclick="cambiarPaginaUsuarios(${paginaActualUsuarios + 1})" 
+                    style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                Siguiente <i class="fas fa-chevron-right"></i>
+            </button>
+        `;
+    }
+
+    paginacionHTML += '</div>';
+    paginationContainer.innerHTML = paginacionHTML;
+}
+
+window.cambiarPaginaUsuarios = function(nuevaPagina) {
+    paginaActualUsuarios = nuevaPagina;
+    renderizarPaginaUsuarios();
+};
+
 function createUsuarioCard(usuario) {
     const card = document.createElement('div');
     card.className = 'bodega-card';
+    const nombreCapitalizado = capitalizarPrimeraLetra(usuario.nombre);
+    const tipoUsuarioNombre = usuario.tipo_usuarios?.nombre || 'N/A';
     card.innerHTML = `
         <div class="bodega-info">
-            <h3>${usuario.nombre}</h3>
+            <h3>${nombreCapitalizado}</h3>
             <p><i class="fas fa-envelope"></i> ${usuario.email || 'Sin email'}</p>
-            <p><i class="fas fa-user-tag"></i> ${usuario.tipo_usuarios?.nombre || 'N/A'}</p>
+            <p><i class="fas fa-user-tag"></i> ${capitalizarPrimeraLetra(tipoUsuarioNombre)}</p>
+            <p><i class="fas fa-circle" style="color: ${usuario.activo ? '#10b981' : '#ef4444'}; font-size: 8px;"></i> ${usuario.activo ? 'Activo' : 'Inactivo'}</p>
         </div>
         <div class="bodega-actions">
             <button class="menu-toggle" data-usuario-id="${usuario.id}">
@@ -1277,6 +1829,39 @@ function createUsuarioCard(usuario) {
     `;
     return card;
 }
+
+// Manejar clicks en el menú de usuarios
+document.addEventListener('click', function(e) {
+    if (e.target.closest('.menu-toggle[data-usuario-id]')) {
+        const menuToggle = e.target.closest('.menu-toggle');
+        const usuarioId = menuToggle.getAttribute('data-usuario-id');
+        const menu = document.getElementById(`menu-usuario-${usuarioId}`);
+        
+        document.querySelectorAll('.dropdown-menu').forEach(m => {
+            if (m.id !== `menu-usuario-${usuarioId}`) {
+                m.style.display = 'none';
+            }
+        });
+        
+        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+    }
+    
+    if (e.target.closest('.dropdown-item[data-usuario-id]')) {
+        const item = e.target.closest('.dropdown-item');
+        const action = item.getAttribute('data-action');
+        const usuarioId = item.getAttribute('data-usuario-id');
+        
+        document.querySelectorAll('.dropdown-menu').forEach(m => {
+            m.style.display = 'none';
+        });
+        
+        if (action === 'edit') {
+            openEditUsuarioModal(usuarioId);
+        } else if (action === 'delete') {
+            deleteUsuario(usuarioId);
+        }
+    }
+});
 
 // ============================================
 // ABASTECER TIENDA
@@ -1758,133 +2343,6 @@ function setupTiendaForm() {
             }
         });
     }
-}
-
-// ============================================
-// USUARIOS - CRUD COMPLETO
-// ============================================
-
-async function loadUsuarios() {
-    const usuariosList = document.getElementById('usuariosList');
-    if (!usuariosList) return;
-    
-    usuariosList.innerHTML = '<p style="text-align: center; color: #64748b;">Cargando usuarios...</p>';
-    
-    try {
-        const user = JSON.parse(sessionStorage.getItem('user'));
-        const { data: usuarios, error } = await window.supabaseClient
-            .from('usuarios')
-            .select(`
-                *,
-                tipo_usuarios(nombre),
-                empresas(nombre)
-            `)
-            .eq('empresa_id', user.empresa_id)
-            .order('nombre');
-
-        if (error) throw error;
-
-        if (!usuarios || usuarios.length === 0) {
-            usuariosList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay usuarios registrados.</p>';
-            return;
-        }
-
-        usuariosList.innerHTML = '';
-        usuarios.forEach(usuario => {
-            const usuarioCard = createUsuarioCard(usuario);
-            usuariosList.appendChild(usuarioCard);
-        });
-    } catch (error) {
-        console.error('Error al cargar usuarios:', error);
-        usuariosList.innerHTML = '<p style="text-align: center; color: #ef4444;">Error al cargar los usuarios</p>';
-    }
-}
-
-function createUsuarioCard(usuario) {
-    const card = document.createElement('div');
-    card.className = 'bodega-card';
-    const nombreCapitalizado = capitalizarPrimeraLetra(usuario.nombre);
-    const tipoUsuarioNombre = usuario.tipo_usuarios?.nombre || 'N/A';
-    card.innerHTML = `
-        <div class="bodega-info">
-            <h3>${nombreCapitalizado}</h3>
-            <p><i class="fas fa-envelope"></i> ${usuario.email || 'Sin email'}</p>
-            <p><i class="fas fa-user-tag"></i> ${capitalizarPrimeraLetra(tipoUsuarioNombre)}</p>
-            <p><i class="fas fa-circle" style="color: ${usuario.activo ? '#10b981' : '#ef4444'}; font-size: 8px;"></i> ${usuario.activo ? 'Activo' : 'Inactivo'}</p>
-        </div>
-        <div class="bodega-actions">
-            <button class="menu-toggle" data-usuario-id="${usuario.id}">
-                <i class="fas fa-ellipsis-v"></i>
-            </button>
-            <div class="dropdown-menu" id="menu-usuario-${usuario.id}" style="display: none;">
-                <button class="dropdown-item" data-action="edit" data-usuario-id="${usuario.id}">
-                    <i class="fas fa-edit"></i> Actualizar
-                </button>
-                <button class="dropdown-item danger" data-action="delete" data-usuario-id="${usuario.id}">
-                    <i class="fas fa-trash"></i> Eliminar
-                </button>
-            </div>
-        </div>
-    `;
-    return card;
-}
-
-// Manejar clicks en el menú de usuarios
-document.addEventListener('click', function(e) {
-    if (e.target.closest('.menu-toggle[data-usuario-id]')) {
-        const menuToggle = e.target.closest('.menu-toggle');
-        const usuarioId = menuToggle.getAttribute('data-usuario-id');
-        const menu = document.getElementById(`menu-usuario-${usuarioId}`);
-        
-        document.querySelectorAll('.dropdown-menu').forEach(m => {
-            if (m.id !== `menu-usuario-${usuarioId}`) {
-                m.style.display = 'none';
-            }
-        });
-        
-        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-    }
-    
-    if (e.target.closest('.dropdown-item[data-usuario-id]')) {
-        const item = e.target.closest('.dropdown-item');
-        const action = item.getAttribute('data-action');
-        const usuarioId = item.getAttribute('data-usuario-id');
-        
-        document.querySelectorAll('.dropdown-menu').forEach(m => {
-            m.style.display = 'none';
-        });
-        
-        if (action === 'edit') {
-            openEditUsuarioModal(usuarioId);
-        } else if (action === 'delete') {
-            deleteUsuario(usuarioId);
-        }
-    }
-});
-
-// Formulario para agregar usuario (se configura en setupUsuarioForm)
-
-function showUsuarioMessage(message, type) {
-    const errorMsg = document.getElementById('usuarioErrorMessage');
-    const successMsg = document.getElementById('usuarioSuccessMessage');
-    
-    if (!errorMsg || !successMsg) return;
-    
-    errorMsg.style.display = 'none';
-    successMsg.style.display = 'none';
-    
-    if (type === 'error') {
-        errorMsg.textContent = message;
-        errorMsg.style.display = 'flex';
-    } else {
-        successMsg.textContent = message;
-        successMsg.style.display = 'flex';
-    }
-    
-    setTimeout(() => {
-        errorMsg.style.display = 'none';
-        successMsg.style.display = 'none';
-    }, 5000);
 }
 
 // Abrir modal para editar usuario

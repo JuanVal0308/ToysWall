@@ -89,7 +89,7 @@
                     <h1>Dashboard</h1>
                     <div class="dashboard-summary">
                         <div class="summary-cards">
-                            <div class="summary-card">
+                            <div class="summary-card" id="cardTiendas" style="cursor: pointer;" title="Haz clic para ver Tiendas">
                                 <div class="card-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                                     <i class="fas fa-store"></i>
                                 </div>
@@ -98,7 +98,7 @@
                                     <p>Tiendas</p>
                                 </div>
                             </div>
-                            <div class="summary-card">
+                            <div class="summary-card" id="cardBodegas" style="cursor: pointer;" title="Haz clic para ver Bodegas">
                                 <div class="card-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
                                     <i class="fas fa-warehouse"></i>
                                 </div>
@@ -107,7 +107,7 @@
                                     <p>Bodegas</p>
                                 </div>
                             </div>
-                            <div class="summary-card">
+                            <div class="summary-card" id="cardUsuarios" style="cursor: pointer;" title="Haz clic para ver Usuarios">
                                 <div class="card-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
                                     <i class="fas fa-users"></i>
                                 </div>
@@ -195,7 +195,7 @@
                             </div>
                             <div class="form-group">
                                 <label for="ventaPrecio">
-                                    <i class="fas fa-dollar-sign"></i> Precio de Venta *
+                                    <i class="fas fa-dollar-sign"></i> Precio Unitario del Juguete *
                                 </label>
                                 <input 
                                     type="number" 
@@ -262,7 +262,6 @@
                                     <thead>
                                         <tr>
                                             <th>Juguete</th>
-                                            <th>Código</th>
                                             <th>Precio</th>
                                             <th>Cantidad</th>
                                             <th>Subtotal</th>
@@ -272,7 +271,11 @@
                                     </tbody>
                                     <tfoot>
                                         <tr>
-                                            <td colspan="4" style="text-align: right; font-weight: bold; word-wrap: break-word;">TOTAL:</td>
+                                            <td colspan="3" style="text-align: right; font-weight: bold; word-wrap: break-word;">IVA (19%):</td>
+                                            <td style="font-weight: bold; font-size: 16px; word-wrap: break-word; color: #64748b;" id="facturaIva">$0.00</td>
+                                        </tr>
+                                        <tr>
+                                            <td colspan="3" style="text-align: right; font-weight: bold; word-wrap: break-word;">TOTAL:</td>
                                             <td style="font-weight: bold; font-size: 18px; word-wrap: break-word;" id="facturaTotal">$0.00</td>
                                         </tr>
                                     </tfoot>
@@ -363,15 +366,44 @@
                         </div>
                         <div class="form-group">
                             <label for="jugueteFotoInput">
-                                <i class="fas fa-image"></i> Foto del Juguete (URL)
+                                <i class="fas fa-image"></i> Foto del Juguete
                             </label>
                             <input 
-                                type="url" 
+                                type="file" 
                                 id="jugueteFotoInput" 
-                                name="foto_url" 
-                                placeholder="https://i.imgur.com/ejemplo.jpg"
+                                name="foto" 
+                                accept="image/*,.heic,.heif"
+                                style="width: 100%; margin-bottom: 10px;"
                             >
-                            <small class="form-help">Puedes subir la foto a Imgur y pegar la URL aquí</small>
+                            <button 
+                                type="button" 
+                                id="subirFotoBtn" 
+                                class="btn-secondary"
+                                style="width: 100%; margin-bottom: 10px;"
+                            >
+                                <i class="fas fa-cloud-upload-alt"></i> Subir a Imgur
+                            </button>
+                            <div style="margin-top: 10px; margin-bottom: 10px;">
+                                <label for="jugueteFotoUrlInput" style="display: block; margin-bottom: 5px; font-size: 14px; color: #64748b;">
+                                    O ingresa la URL de la foto manualmente:
+                                </label>
+                                <input 
+                                    type="url" 
+                                    id="jugueteFotoUrlInput" 
+                                    placeholder="https://i.imgur.com/ejemplo.jpg"
+                                    style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;"
+                                >
+                            </div>
+                            <input 
+                                type="hidden" 
+                                id="jugueteFotoUrl" 
+                                name="foto_url"
+                            >
+                            <div id="fotoPreview" style="margin-top: 10px; display: none;">
+                                <img id="fotoPreviewImg" src="" alt="Vista previa" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid #e2e8f0;">
+                                <p id="fotoUrlText" style="margin-top: 5px; font-size: 12px; color: #64748b; word-break: break-all;"></p>
+                            </div>
+                            <small class="form-help">Selecciona una foto y haz clic en "Subir a Imgur" o ingresa la URL manualmente</small>
                         </div>
                         <div class="form-group">
                             <label for="jugueteCantidadInput">
@@ -480,11 +512,6 @@
                             <i class="fas fa-chevron-down accordion-icon"></i>
                         </button>
                         <div class="accordion-content" id="agregarBodegaContent">
-                            <!-- Lista de bodegas existentes -->
-                            <div class="bodegas-list" id="bodegasList">
-                                <!-- Las bodegas se cargarán aquí dinámicamente -->
-                            </div>
-                            
                             <!-- Formulario para agregar nueva bodega -->
                             <div class="form-section">
                                 <h3>Nueva Bodega</h3>
@@ -520,6 +547,15 @@
                                     </button>
                                 </form>
                             </div>
+                            
+                            <!-- Lista de bodegas existentes -->
+                            <div class="bodegas-list" id="bodegasList" style="margin-top: 30px;">
+                                <!-- Las bodegas se cargarán aquí dinámicamente -->
+                            </div>
+                            <!-- Controles de paginación -->
+                            <div id="bodegasPagination" style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                <!-- Las pestañas se generarán dinámicamente -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -536,11 +572,6 @@
                             <i class="fas fa-chevron-down accordion-icon"></i>
                         </button>
                         <div class="accordion-content" id="agregarTiendaContent">
-                            <!-- Lista de tiendas existentes -->
-                            <div class="tiendas-list" id="tiendasList">
-                                <!-- Las tiendas se cargarán aquí dinámicamente -->
-                            </div>
-                            
                             <!-- Formulario para agregar nueva tienda -->
                             <div class="form-section">
                                 <h3>Nueva Tienda</h3>
@@ -576,6 +607,15 @@
                                     </button>
                                 </form>
                             </div>
+                            
+                            <!-- Lista de tiendas existentes -->
+                            <div class="tiendas-list" id="tiendasList" style="margin-top: 30px;">
+                                <!-- Las tiendas se cargarán aquí dinámicamente -->
+                            </div>
+                            <!-- Controles de paginación -->
+                            <div id="tiendasPagination" style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                <!-- Las pestañas se generarán dinámicamente -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -592,11 +632,6 @@
                             <i class="fas fa-chevron-down accordion-icon"></i>
                         </button>
                         <div class="accordion-content" id="agregarEmpleadoContent">
-                            <!-- Lista de empleados existentes -->
-                            <div class="empleados-list" id="empleadosList">
-                                <!-- Los empleados se cargarán aquí dinámicamente -->
-                            </div>
-                            
                             <!-- Formulario para agregar nuevo empleado -->
                             <div class="form-section">
                                 <h3>Nuevo Empleado</h3>
@@ -672,6 +707,15 @@
                                     </button>
                                 </form>
                             </div>
+                            
+                            <!-- Lista de empleados existentes -->
+                            <div class="empleados-list" id="empleadosList" style="margin-top: 30px;">
+                                <!-- Los empleados se cargarán aquí dinámicamente -->
+                            </div>
+                            <!-- Controles de paginación -->
+                            <div id="empleadosPagination" style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                <!-- Las pestañas se generarán dinámicamente -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -688,11 +732,6 @@
                             <i class="fas fa-chevron-down accordion-icon"></i>
                         </button>
                         <div class="accordion-content" id="agregarUsuarioContent">
-                            <!-- Lista de usuarios existentes -->
-                            <div class="usuarios-list" id="usuariosList">
-                                <!-- Los usuarios se cargarán aquí dinámicamente -->
-                            </div>
-                            
                             <!-- Formulario para agregar nuevo usuario -->
                             <div class="form-section">
                                 <h3>Nuevo Usuario</h3>
@@ -758,6 +797,15 @@
                                         <i class="fas fa-plus"></i> Agregar Usuario
                                     </button>
                                 </form>
+                            </div>
+                            
+                            <!-- Lista de usuarios existentes -->
+                            <div class="usuarios-list" id="usuariosList" style="margin-top: 30px;">
+                                <!-- Los usuarios se cargarán aquí dinámicamente -->
+                            </div>
+                            <!-- Controles de paginación -->
+                            <div id="usuariosPagination" style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                <!-- Las pestañas se generarán dinámicamente -->
                             </div>
                         </div>
                     </div>
@@ -1359,9 +1407,11 @@
     <!-- Scripts adicionales para funcionalidades -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/config.js"></script>
+    <script src="js/imgur-config.js"></script>
     <!-- Modal para editar juguete -->
     <div id="editarJugueteModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; align-items: center; justify-content: center;">
         <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
