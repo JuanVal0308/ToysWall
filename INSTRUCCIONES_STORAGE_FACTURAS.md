@@ -65,3 +65,7 @@ Si el bucket no está configurado o hay algún error al subir el archivo, el sis
 - Verifica que la URL pública esté funcionando
 - Asegúrate de que el bucket tenga permisos de lectura pública
 
+
+
+
+

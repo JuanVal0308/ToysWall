@@ -100,13 +100,15 @@ CREATE TABLE IF NOT EXISTS empleados (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Tabla: juguetes (sin categorías, con foto_url)
+-- Tabla: juguetes (sin categorías, con foto_url y rango de precios)
 CREATE TABLE IF NOT EXISTS juguetes (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     codigo VARCHAR(50) NOT NULL,
     cantidad INTEGER NOT NULL DEFAULT 0,
     foto_url TEXT,
+    precio_min DECIMAL(10, 2),
+    precio_max DECIMAL(10, 2),
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
     bodega_id INTEGER REFERENCES bodegas(id) ON DELETE SET NULL,
     tienda_id INTEGER REFERENCES tiendas(id) ON DELETE SET NULL,
@@ -170,6 +172,28 @@ CREATE TABLE IF NOT EXISTS movimientos (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Tabla: planes_movimiento
+CREATE TABLE IF NOT EXISTS planes_movimiento (
+    id SERIAL PRIMARY KEY,
+    codigo_plan VARCHAR(50) NOT NULL UNIQUE,
+    tipo_origen VARCHAR(20) NOT NULL CHECK (tipo_origen IN ('bodega', 'tienda')),
+    origen_id INTEGER NOT NULL,
+    origen_nombre VARCHAR(100) NOT NULL,
+    tipo_destino VARCHAR(20) NOT NULL CHECK (tipo_destino IN ('bodega', 'tienda')),
+    destino_id INTEGER NOT NULL,
+    destino_nombre VARCHAR(100) NOT NULL,
+    items JSONB NOT NULL,
+    estado VARCHAR(20) NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'ejecutado', 'cancelado')),
+    total_items INTEGER NOT NULL DEFAULT 0,
+    total_unidades INTEGER NOT NULL DEFAULT 0,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    creado_por VARCHAR(100),
+    ejecutado_por VARCHAR(100),
+    ejecutado_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- ============================================
 -- 2. CREAR ÍNDICES
 -- ============================================
@@ -187,12 +211,16 @@ CREATE INDEX IF NOT EXISTS idx_juguetes_bodega_id ON juguetes(bodega_id);
 CREATE INDEX IF NOT EXISTS idx_juguetes_tienda_id ON juguetes(tienda_id);
 CREATE INDEX IF NOT EXISTS idx_juguetes_codigo ON juguetes(codigo);
 CREATE INDEX IF NOT EXISTS idx_juguetes_empresa_id ON juguetes(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_juguetes_precio_rango ON juguetes(precio_min, precio_max) WHERE precio_min IS NOT NULL AND precio_max IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_ventas_empresa_id ON ventas(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_ventas_juguete_id ON ventas(juguete_id);
 CREATE INDEX IF NOT EXISTS idx_ventas_empleado_id ON ventas(empleado_id);
 CREATE INDEX IF NOT EXISTS idx_ventas_facturada ON ventas(facturada, codigo_venta);
 CREATE INDEX IF NOT EXISTS idx_facturas_empresa_id ON facturas(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_movimientos_empresa_id ON movimientos(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_planes_movimiento_empresa_id ON planes_movimiento(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_planes_movimiento_estado ON planes_movimiento(estado);
+CREATE INDEX IF NOT EXISTS idx_planes_movimiento_created_at ON planes_movimiento(created_at DESC);
 
 -- ============================================
 -- 3. INSERTAR TIPOS DE USUARIO
@@ -341,6 +369,7 @@ ALTER TABLE ventas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE facturas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE facturas_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE movimientos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE planes_movimiento ENABLE ROW LEVEL SECURITY;
 
 -- Eliminar políticas existentes si existen (para evitar conflictos)
 DROP POLICY IF EXISTS "tipo_usuarios_select_policy" ON tipo_usuarios;
@@ -513,6 +542,28 @@ CREATE POLICY "movimientos_select_policy"
 CREATE POLICY "movimientos_insert_policy"
     ON movimientos FOR INSERT
     WITH CHECK (true);
+
+-- Crear políticas RLS para planes_movimiento
+DROP POLICY IF EXISTS "planes_movimiento_select_policy" ON planes_movimiento;
+CREATE POLICY "planes_movimiento_select_policy"
+    ON planes_movimiento FOR SELECT
+    USING (true);
+
+DROP POLICY IF EXISTS "planes_movimiento_insert_policy" ON planes_movimiento;
+CREATE POLICY "planes_movimiento_insert_policy"
+    ON planes_movimiento FOR INSERT
+    WITH CHECK (true);
+
+DROP POLICY IF EXISTS "planes_movimiento_update_policy" ON planes_movimiento;
+CREATE POLICY "planes_movimiento_update_policy"
+    ON planes_movimiento FOR UPDATE
+    USING (true)
+    WITH CHECK (true);
+
+DROP POLICY IF EXISTS "planes_movimiento_delete_policy" ON planes_movimiento;
+CREATE POLICY "planes_movimiento_delete_policy"
+    ON planes_movimiento FOR DELETE
+    USING (true);
 
 -- ============================================
 -- 7. FUNCIONES AUXILIARES

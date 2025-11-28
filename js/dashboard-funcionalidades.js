@@ -149,7 +149,11 @@ function initRegistrarVenta() {
             const jugueteInfo = document.getElementById('jugueteInfo');
             if (juguetes && juguetes.length > 0) {
                 // Agrupar por nombre (deben tener el mismo nombre si tienen el mismo código)
-                const nombreJuguete = juguetes[0].nombre;
+                const juguetePrincipal = juguetes[0];
+                const nombreJuguete = juguetePrincipal.nombre;
+                const fotoUrl = juguetePrincipal.foto_url;
+                const precioMin = juguetePrincipal.precio_min;
+                const precioMax = juguetePrincipal.precio_max;
                 
                 // Calcular cantidad total sumando todas las ubicaciones
                 const cantidadTotal = juguetes.reduce((sum, j) => sum + (j.cantidad || 0), 0);
@@ -180,12 +184,31 @@ function initRegistrarVenta() {
                 } else {
                     ubicacionInfo = '<br><small style="color: #ef4444;">✗ Sin stock disponible</small>';
                 }
+
+                // Mostrar rango de precios
+                let precioInfo = '';
+                if (precioMin !== null && precioMin !== undefined && precioMax !== null && precioMax !== undefined) {
+                    precioInfo = `<br><small style="color: #64748b;">💰 Rango de precios: $${precioMin.toFixed(2)} - $${precioMax.toFixed(2)}</small>`;
+                }
+
+                // Mostrar imagen si existe
+                let imagenHTML = '';
+                if (fotoUrl) {
+                    imagenHTML = `<div style="margin-bottom: 10px;">
+                        <img src="${fotoUrl}" alt="${nombreJuguete}" 
+                             style="max-width: 100px; max-height: 100px; border-radius: 8px; border: 2px solid #e2e8f0; object-fit: cover;">
+                    </div>`;
+                }
                 
                 jugueteInfo.innerHTML = `
-                    <div class="info-box success">
-                        <strong>${nombreJuguete}</strong><br>
-                        <small>Cantidad total disponible: ${cantidadTotal}</small>
-                        ${ubicacionInfo}
+                    <div class="info-box success" style="display: flex; flex-direction: column; gap: 8px;">
+                        ${imagenHTML}
+                        <div>
+                            <strong>${nombreJuguete}</strong><br>
+                            <small>Cantidad total disponible: ${cantidadTotal}</small>
+                            ${precioInfo}
+                            ${ubicacionInfo}
+                        </div>
                     </div>
                 `;
                 jugueteInfo.style.display = 'block';
@@ -361,6 +384,18 @@ function initRegistrarVenta() {
             if (juguete.cantidad < cantidad) {
                 showVentaMessage(`No hay suficiente cantidad. Disponible: ${juguete.cantidad}`, 'error');
                 return;
+            }
+
+            // Validar que el precio esté dentro del rango permitido
+            if (juguete.precio_min !== null && juguete.precio_min !== undefined && 
+                juguete.precio_max !== null && juguete.precio_max !== undefined) {
+                if (precio < juguete.precio_min || precio > juguete.precio_max) {
+                    showVentaMessage(
+                        `El precio debe estar entre $${juguete.precio_min.toFixed(2)} y $${juguete.precio_max.toFixed(2)}. Precio ingresado: $${precio.toFixed(2)}`, 
+                        'error'
+                    );
+                    return;
+                }
             }
 
             // Agregar item
@@ -1901,12 +1936,22 @@ async function loadUbicacionesPorTipo(tipo, selectElement) {
     }
 }
 
+// Variable global para almacenar juguetes disponibles en abastecer
+let juguetesDisponiblesAbastecer = [];
+
 async function loadJuguetesDisponibles() {
     const origenTipo = document.getElementById('origenTipo').value;
     const origenId = document.getElementById('origenSelect').value;
     const container = document.getElementById('juguetesDisponiblesList');
+    const buscarInput = document.getElementById('buscarJugueteAbastecer');
+
+    // Limpiar búsqueda al cambiar origen
+    if (buscarInput) {
+        buscarInput.value = '';
+    }
 
     if (!origenTipo || !origenId) {
+        juguetesDisponiblesAbastecer = [];
         container.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">Selecciona origen y destino para ver juguetes disponibles</p>';
         return;
     }
@@ -1925,34 +1970,817 @@ async function loadJuguetesDisponibles() {
         if (error) throw error;
 
         if (!juguetes || juguetes.length === 0) {
+            juguetesDisponiblesAbastecer = [];
             container.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No hay juguetes disponibles en el origen seleccionado</p>';
             return;
         }
 
-        container.innerHTML = juguetes.map(juguete => `
-            <div class="juguete-movimiento-item">
-                <div class="juguete-info">
-                    <strong>${juguete.nombre}</strong> (${juguete.codigo})
-                    <br><small>Cantidad disponible: ${juguete.cantidad}</small>
-                </div>
-                <div class="juguete-cantidad">
-                    <input 
-                        type="number" 
-                        class="cantidad-input" 
-                        data-juguete-id="${juguete.id}"
-                        min="1" 
-                        max="${juguete.cantidad}" 
-                        value="1"
-                        placeholder="Cantidad"
-                    >
-                </div>
-            </div>
-        `).join('');
+        // Guardar juguetes en variable global para filtrado
+        juguetesDisponiblesAbastecer = juguetes;
+        
+        // Renderizar la lista
+        renderizarJuguetesAbastecer(juguetes);
     } catch (error) {
         console.error('Error al cargar juguetes:', error);
         container.innerHTML = '<p style="text-align: center; color: #ef4444; padding: 20px;">Error al cargar juguetes</p>';
     }
 }
+
+// Función para renderizar la lista de juguetes
+function renderizarJuguetesAbastecer(juguetes) {
+    const container = document.getElementById('juguetesDisponiblesList');
+    
+    if (!juguetes || juguetes.length === 0) {
+        container.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No se encontraron juguetes</p>';
+        return;
+    }
+    
+    container.innerHTML = juguetes.map(juguete => `
+        <div class="juguete-movimiento-item">
+            <div class="juguete-info">
+                <strong>${juguete.nombre}</strong> (${juguete.codigo})
+                <br><small>Cantidad disponible: ${juguete.cantidad}</small>
+            </div>
+            <div class="juguete-cantidad">
+                <input 
+                    type="number" 
+                    class="cantidad-input" 
+                    data-juguete-id="${juguete.id}"
+                    min="1" 
+                    max="${juguete.cantidad}" 
+                    value="1"
+                    placeholder="Cantidad"
+                >
+            </div>
+        </div>
+    `).join('');
+}
+
+// Función para filtrar juguetes por nombre o código
+window.filtrarJuguetesAbastecer = function() {
+    const buscarInput = document.getElementById('buscarJugueteAbastecer');
+    const termino = buscarInput ? buscarInput.value.toLowerCase().trim() : '';
+    
+    if (!termino) {
+        // Si no hay término de búsqueda, mostrar todos
+        renderizarJuguetesAbastecer(juguetesDisponiblesAbastecer);
+        return;
+    }
+    
+    // Filtrar por nombre o código
+    const juguetesFiltrados = juguetesDisponiblesAbastecer.filter(juguete => {
+        const nombre = (juguete.nombre || '').toLowerCase();
+        const codigo = (juguete.codigo || '').toLowerCase();
+        return nombre.includes(termino) || codigo.includes(termino);
+    });
+    
+    renderizarJuguetesAbastecer(juguetesFiltrados);
+}
+
+// Variable global para el plan actual
+let planActualData = null;
+
+// Función para generar el plan de movimiento
+window.generarPlanMovimiento = function() {
+    const origenTipo = document.getElementById('origenTipo');
+    const origenSelect = document.getElementById('origenSelect');
+    const destinoTipo = document.getElementById('destinoTipo');
+    const destinoSelect = document.getElementById('destinoSelect');
+    const planContainer = document.getElementById('planMovimientoContainer');
+    const planContent = document.getElementById('planMovimientoContent');
+    
+    // Validar que haya origen y destino seleccionados
+    if (!origenTipo?.value || !origenSelect?.value || !destinoTipo?.value || !destinoSelect?.value) {
+        showAbastecerMessage('Selecciona origen y destino para generar el plan', 'error');
+        return;
+    }
+    
+    // Obtener juguetes con cantidad > 0
+    const inputs = document.querySelectorAll('.cantidad-input');
+    const juguetesSeleccionados = [];
+    
+    inputs.forEach(input => {
+        const cantidad = parseInt(input.value) || 0;
+        if (cantidad > 0) {
+            const jugueteId = input.dataset.jugueteId;
+            const juguete = juguetesDisponiblesAbastecer.find(j => j.id == jugueteId);
+            if (juguete) {
+                juguetesSeleccionados.push({
+                    juguete_id: juguete.id,
+                    nombre: juguete.nombre,
+                    codigo: juguete.codigo,
+                    cantidad: cantidad
+                });
+            }
+        }
+    });
+    
+    if (juguetesSeleccionados.length === 0) {
+        showAbastecerMessage('Ingresa cantidad en al menos un juguete para generar el plan', 'error');
+        return;
+    }
+    
+    // Obtener nombres de origen y destino
+    const origenNombre = origenSelect.options[origenSelect.selectedIndex]?.text || 'N/A';
+    const destinoNombre = destinoSelect.options[destinoSelect.selectedIndex]?.text || 'N/A';
+    const origenTipoTexto = origenTipo.value === 'bodega' ? 'Bodega' : 'Tienda';
+    const destinoTipoTexto = destinoTipo.value === 'bodega' ? 'Bodega' : 'Tienda';
+    
+    // Guardar datos del plan actual
+    planActualData = {
+        tipo_origen: origenTipo.value,
+        origen_id: parseInt(origenSelect.value),
+        origen_nombre: origenNombre,
+        tipo_destino: destinoTipo.value,
+        destino_id: parseInt(destinoSelect.value),
+        destino_nombre: destinoNombre,
+        items: juguetesSeleccionados,
+        total_items: juguetesSeleccionados.length,
+        total_unidades: juguetesSeleccionados.reduce((sum, j) => sum + j.cantidad, 0)
+    };
+    
+    // Generar fecha actual
+    const fechaActual = new Date().toLocaleString('es-CO', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    
+    // Generar HTML del plan
+    const planHTML = `
+        <div id="planParaImprimir" style="background: white; padding: 20px; border-radius: 8px;">
+            <div style="text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #e2e8f0;">
+                <h2 style="margin: 0 0 5px 0; color: #1e293b;">📦 Plan de Movimiento de Inventario</h2>
+                <p style="margin: 0; color: #64748b; font-size: 14px;">${fechaActual}</p>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div style="background: #fef3c7; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                    <p style="margin: 0 0 5px 0; color: #92400e; font-weight: bold; font-size: 12px; text-transform: uppercase;">
+                        <i class="fas fa-arrow-right"></i> ORIGEN
+                    </p>
+                    <p style="margin: 0; color: #1e293b; font-size: 16px; font-weight: bold;">${origenNombre}</p>
+                    <p style="margin: 0; color: #64748b; font-size: 12px;">${origenTipoTexto}</p>
+                </div>
+                <div style="background: #d1fae5; padding: 15px; border-radius: 8px; border-left: 4px solid #10b981;">
+                    <p style="margin: 0 0 5px 0; color: #065f46; font-weight: bold; font-size: 12px; text-transform: uppercase;">
+                        <i class="fas fa-arrow-left"></i> DESTINO
+                    </p>
+                    <p style="margin: 0; color: #1e293b; font-size: 16px; font-weight: bold;">${destinoNombre}</p>
+                    <p style="margin: 0; color: #64748b; font-size: 12px;">${destinoTipoTexto}</p>
+                </div>
+            </div>
+            
+            <h4 style="margin: 0 0 10px 0; color: #1e293b;">
+                <i class="fas fa-list"></i> Juguetes a Mover (${juguetesSeleccionados.length})
+            </h4>
+            
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <thead>
+                    <tr style="background: #f1f5f9;">
+                        <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #475569;">✓</th>
+                        <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #475569;">Código</th>
+                        <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #475569;">Juguete</th>
+                        <th style="padding: 12px 8px; text-align: center; border-bottom: 2px solid #e2e8f0; color: #475569;">Cantidad</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${juguetesSeleccionados.map((j, index) => `
+                        <tr style="border-bottom: 1px solid #e2e8f0; ${index % 2 === 0 ? 'background: #fafafa;' : ''}">
+                            <td style="padding: 12px 8px;">
+                                <div style="width: 20px; height: 20px; border: 2px solid #cbd5e1; border-radius: 4px;"></div>
+                            </td>
+                            <td style="padding: 12px 8px; font-family: monospace; color: #6366f1; font-weight: bold;">${j.codigo}</td>
+                            <td style="padding: 12px 8px; color: #1e293b;">${j.nombre}</td>
+                            <td style="padding: 12px 8px; text-align: center; font-weight: bold; font-size: 16px; color: #059669;">${j.cantidad}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+                <tfoot>
+                    <tr style="background: #f1f5f9;">
+                        <td colspan="3" style="padding: 12px 8px; text-align: right; font-weight: bold; color: #1e293b;">Total de unidades:</td>
+                        <td style="padding: 12px 8px; text-align: center; font-weight: bold; font-size: 18px; color: #6366f1;">
+                            ${planActualData.total_unidades}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+            
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 2px dashed #e2e8f0;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                    <div>
+                        <p style="margin: 0 0 30px 0; color: #64748b; font-size: 12px;">Firma de quien entrega:</p>
+                        <div style="border-bottom: 1px solid #1e293b; margin-bottom: 5px;"></div>
+                        <p style="margin: 0; color: #64748b; font-size: 11px;">Nombre: _______________________</p>
+                    </div>
+                    <div>
+                        <p style="margin: 0 0 30px 0; color: #64748b; font-size: 12px;">Firma de quien recibe:</p>
+                        <div style="border-bottom: 1px solid #1e293b; margin-bottom: 5px;"></div>
+                        <p style="margin: 0; color: #64748b; font-size: 11px;">Nombre: _______________________</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Botones de acción -->
+        <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+            <button type="button" onclick="guardarPlanMovimiento()" class="btn-primary" style="background: #6366f1; flex: 1; min-width: 150px;">
+                <i class="fas fa-save"></i> Guardar Plan
+            </button>
+            <button type="button" onclick="imprimirPlanMovimiento()" class="btn-secondary" style="background: #10b981; color: white; flex: 1; min-width: 150px;">
+                <i class="fas fa-print"></i> Imprimir
+            </button>
+        </div>
+    `;
+    
+    planContent.innerHTML = planHTML;
+    planContainer.style.display = 'block';
+    
+    // Scroll al plan
+    planContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+// Función para guardar el plan de movimiento en la base de datos
+window.guardarPlanMovimiento = async function() {
+    if (!planActualData) {
+        showAbastecerMessage('No hay un plan para guardar', 'error');
+        return;
+    }
+    
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        
+        // Generar código único para el plan
+        const codigoPlan = 'PLAN-' + Date.now().toString(36).toUpperCase();
+        
+        const planData = {
+            codigo_plan: codigoPlan,
+            tipo_origen: planActualData.tipo_origen,
+            origen_id: planActualData.origen_id,
+            origen_nombre: planActualData.origen_nombre,
+            tipo_destino: planActualData.tipo_destino,
+            destino_id: planActualData.destino_id,
+            destino_nombre: planActualData.destino_nombre,
+            items: planActualData.items,
+            estado: 'pendiente',
+            total_items: planActualData.total_items,
+            total_unidades: planActualData.total_unidades,
+            empresa_id: user.empresa_id,
+            creado_por: user.nombre
+        };
+        
+        const { data, error } = await window.supabaseClient
+            .from('planes_movimiento')
+            .insert(planData)
+            .select()
+            .single();
+        
+        if (error) throw error;
+        
+        showAbastecerMessage(`Plan guardado correctamente con código: ${codigoPlan}`, 'success');
+        
+        // Actualizar badge de notificación
+        await actualizarBadgePlanesPendientes();
+        
+        // Limpiar plan actual
+        planActualData = null;
+        document.getElementById('planMovimientoContainer').style.display = 'none';
+        
+        // Limpiar formulario
+        document.getElementById('origenTipo').value = '';
+        document.getElementById('origenSelect').innerHTML = '<option value="">Primero selecciona el tipo</option>';
+        document.getElementById('destinoTipo').value = '';
+        document.getElementById('destinoSelect').innerHTML = '<option value="">Primero selecciona el tipo</option>';
+        document.getElementById('juguetesDisponiblesList').innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">Selecciona origen y destino para ver juguetes disponibles</p>';
+        
+    } catch (error) {
+        console.error('Error al guardar plan:', error);
+        showAbastecerMessage('Error al guardar el plan: ' + error.message, 'error');
+    }
+};
+
+// Función para actualizar el badge de planes pendientes
+async function actualizarBadgePlanesPendientes() {
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        if (!user) return;
+        
+        const { count, error } = await window.supabaseClient
+            .from('planes_movimiento')
+            .select('*', { count: 'exact', head: true })
+            .eq('empresa_id', user.empresa_id)
+            .eq('estado', 'pendiente');
+        
+        if (error) {
+            console.error('Error al contar planes pendientes:', error);
+            return;
+        }
+        
+        const badge = document.getElementById('badgePlanesPendientes');
+        const countPendientes = document.getElementById('countPendientes');
+        
+        if (badge) {
+            if (count > 0) {
+                badge.textContent = count;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+        
+        if (countPendientes) {
+            countPendientes.textContent = count || 0;
+        }
+    } catch (error) {
+        console.error('Error al actualizar badge:', error);
+    }
+}
+
+// Función para cargar planes pendientes
+async function cargarPlanesPendientes() {
+    const container = document.getElementById('listaPlanessPendientes');
+    if (!container) return;
+    
+    container.innerHTML = '<p style="text-align: center; padding: 40px; color: #64748b;">Cargando planes...</p>';
+    
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        
+        const { data: planes, error } = await window.supabaseClient
+            .from('planes_movimiento')
+            .select('*')
+            .eq('empresa_id', user.empresa_id)
+            .eq('estado', 'pendiente')
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (!planes || planes.length === 0) {
+            container.innerHTML = `
+                <p style="text-align: center; color: #64748b; padding: 40px;">
+                    <i class="fas fa-clipboard-check" style="font-size: 48px; margin-bottom: 15px; display: block; opacity: 0.3;"></i>
+                    No hay planes de movimiento pendientes.
+                </p>
+            `;
+            return;
+        }
+        
+        container.innerHTML = planes.map(plan => renderizarPlanCard(plan, true)).join('');
+        
+    } catch (error) {
+        console.error('Error al cargar planes:', error);
+        container.innerHTML = '<p style="text-align: center; color: #ef4444; padding: 40px;">Error al cargar planes</p>';
+    }
+}
+
+// Función para cargar historial de movimientos
+async function cargarHistorialMovimientos() {
+    const container = document.getElementById('listaHistorialMovimientos');
+    if (!container) return;
+    
+    container.innerHTML = '<p style="text-align: center; padding: 40px; color: #64748b;">Cargando historial...</p>';
+    
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        
+        // Obtener fechas de filtro
+        const fechaDesde = document.getElementById('historialFechaDesde')?.value;
+        const fechaHasta = document.getElementById('historialFechaHasta')?.value;
+        
+        let query = window.supabaseClient
+            .from('planes_movimiento')
+            .select('*')
+            .eq('empresa_id', user.empresa_id)
+            .in('estado', ['ejecutado', 'cancelado'])
+            .order('ejecutado_at', { ascending: false, nullsFirst: false })
+            .order('created_at', { ascending: false })
+            .limit(50);
+        
+        if (fechaDesde) {
+            query = query.gte('created_at', fechaDesde + 'T00:00:00');
+        }
+        if (fechaHasta) {
+            query = query.lte('created_at', fechaHasta + 'T23:59:59');
+        }
+        
+        const { data: planes, error } = await query;
+        
+        if (error) throw error;
+        
+        if (!planes || planes.length === 0) {
+            container.innerHTML = `
+                <p style="text-align: center; color: #64748b; padding: 40px;">
+                    <i class="fas fa-history" style="font-size: 48px; margin-bottom: 15px; display: block; opacity: 0.3;"></i>
+                    No hay movimientos en el historial.
+                </p>
+            `;
+            return;
+        }
+        
+        container.innerHTML = planes.map(plan => renderizarPlanCard(plan, false)).join('');
+        
+    } catch (error) {
+        console.error('Error al cargar historial:', error);
+        container.innerHTML = '<p style="text-align: center; color: #ef4444; padding: 40px;">Error al cargar historial</p>';
+    }
+}
+
+// Función para renderizar una tarjeta de plan
+function renderizarPlanCard(plan, esPendiente) {
+    const fecha = new Date(plan.created_at).toLocaleString('es-CO', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    
+    const estadoClass = plan.estado === 'ejecutado' ? 'ejecutado' : (plan.estado === 'cancelado' ? 'cancelado' : '');
+    const estadoBadge = plan.estado === 'ejecutado' 
+        ? '<span style="background: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">EJECUTADO</span>'
+        : (plan.estado === 'cancelado' 
+            ? '<span style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">CANCELADO</span>'
+            : '<span style="background: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">PENDIENTE</span>');
+    
+    const items = plan.items || [];
+    const itemsPreview = items.slice(0, 3).map(i => `${i.nombre} (${i.cantidad})`).join(', ');
+    const masItems = items.length > 3 ? ` y ${items.length - 3} más...` : '';
+    
+    return `
+        <div class="plan-card ${estadoClass}">
+            <div class="plan-header">
+                <div>
+                    <span class="plan-codigo">${plan.codigo_plan}</span>
+                    ${estadoBadge}
+                    <p class="plan-fecha">${fecha}</p>
+                </div>
+            </div>
+            
+            <div class="plan-ubicaciones">
+                <div class="plan-ubicacion">
+                    <p class="plan-ubicacion-tipo">${plan.tipo_origen === 'bodega' ? 'Bodega' : 'Tienda'}</p>
+                    <p class="plan-ubicacion-nombre">${plan.origen_nombre}</p>
+                </div>
+                <div class="plan-flecha">
+                    <i class="fas fa-arrow-right"></i>
+                </div>
+                <div class="plan-ubicacion">
+                    <p class="plan-ubicacion-tipo">${plan.tipo_destino === 'bodega' ? 'Bodega' : 'Tienda'}</p>
+                    <p class="plan-ubicacion-nombre">${plan.destino_nombre}</p>
+                </div>
+            </div>
+            
+            <div class="plan-items-resumen">
+                <span><i class="fas fa-box"></i> ${plan.total_items} items</span>
+                <span><i class="fas fa-cubes"></i> ${plan.total_unidades} unidades</span>
+            </div>
+            
+            <p style="font-size: 13px; color: #64748b; margin-bottom: 15px;">
+                ${itemsPreview}${masItems}
+            </p>
+            
+            ${esPendiente ? `
+                <div class="plan-actions">
+                    <button type="button" onclick="ejecutarPlanMovimiento(${plan.id})" class="btn-primary" style="background: #10b981;">
+                        <i class="fas fa-check"></i> Ejecutar Movimiento
+                    </button>
+                    <button type="button" onclick="verDetallePlan(${plan.id})" class="btn-secondary">
+                        <i class="fas fa-eye"></i> Ver Detalle
+                    </button>
+                    <button type="button" onclick="cancelarPlan(${plan.id})" class="btn-secondary" style="color: #ef4444;">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+                </div>
+            ` : `
+                <div class="plan-actions">
+                    <button type="button" onclick="verDetallePlan(${plan.id})" class="btn-secondary">
+                        <i class="fas fa-eye"></i> Ver Detalle
+                    </button>
+                </div>
+                ${plan.ejecutado_por ? `<p style="font-size: 11px; color: #64748b; margin-top: 10px;">Ejecutado por: ${plan.ejecutado_por}</p>` : ''}
+            `}
+        </div>
+    `;
+}
+
+// Función para cambiar entre tabs
+window.cambiarTabPlanes = function(tab) {
+    const tabPendientes = document.getElementById('tabPendientes');
+    const tabHistorial = document.getElementById('tabHistorial');
+    const contentPendientes = document.getElementById('planesPendientesContent');
+    const contentHistorial = document.getElementById('historialMovimientosContent');
+    
+    if (tab === 'pendientes') {
+        tabPendientes.style.background = '#6366f1';
+        tabPendientes.style.color = 'white';
+        tabHistorial.style.background = '#e2e8f0';
+        tabHistorial.style.color = '#64748b';
+        contentPendientes.style.display = 'block';
+        contentHistorial.style.display = 'none';
+        cargarPlanesPendientes();
+    } else {
+        tabHistorial.style.background = '#6366f1';
+        tabHistorial.style.color = 'white';
+        tabPendientes.style.background = '#e2e8f0';
+        tabPendientes.style.color = '#64748b';
+        contentHistorial.style.display = 'block';
+        contentPendientes.style.display = 'none';
+        cargarHistorialMovimientos();
+    }
+};
+
+// Función para filtrar historial
+window.filtrarHistorialMovimientos = function() {
+    cargarHistorialMovimientos();
+};
+
+// Función para ejecutar un plan de movimiento
+window.ejecutarPlanMovimiento = async function(planId) {
+    if (!confirm('¿Estás seguro de que deseas ejecutar este plan de movimiento?\n\nEsto moverá los juguetes del origen al destino en el sistema.')) {
+        return;
+    }
+    
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        
+        // Obtener el plan
+        const { data: plan, error: planError } = await window.supabaseClient
+            .from('planes_movimiento')
+            .select('*')
+            .eq('id', planId)
+            .single();
+        
+        if (planError) throw planError;
+        
+        if (plan.estado !== 'pendiente') {
+            alert('Este plan ya fue ejecutado o cancelado');
+            cargarPlanesPendientes();
+            return;
+        }
+        
+        const items = plan.items || [];
+        let itemsProcesados = 0;
+        
+        // Procesar cada item del plan
+        for (const item of items) {
+            try {
+                // Obtener juguete actual del origen
+                const { data: jugueteActualData } = await window.supabaseClient
+                    .from('juguetes')
+                    .select('*')
+                    .eq('id', item.juguete_id)
+                    .limit(1);
+
+                if (!jugueteActualData || jugueteActualData.length === 0) {
+                    console.warn(`Juguete ${item.nombre} no encontrado, saltando...`);
+                    continue;
+                }
+
+                const jugueteActual = jugueteActualData[0];
+
+                if (jugueteActual.cantidad < item.cantidad) {
+                    console.warn(`No hay suficiente cantidad del juguete ${jugueteActual.nombre}`);
+                    continue;
+                }
+
+                // Verificar si existe en destino
+                const campoDestino = plan.tipo_destino === 'bodega' ? 'bodega_id' : 'tienda_id';
+                const { data: jugueteExistenteData } = await window.supabaseClient
+                    .from('juguetes')
+                    .select('*')
+                    .eq('codigo', jugueteActual.codigo)
+                    .eq('nombre', jugueteActual.nombre)
+                    .eq('empresa_id', user.empresa_id)
+                    .eq(campoDestino, plan.destino_id)
+                    .limit(1);
+
+                // Reducir cantidad en origen
+                const nuevaCantidadOrigen = jugueteActual.cantidad - item.cantidad;
+                
+                if (nuevaCantidadOrigen <= 0) {
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .delete()
+                        .eq('id', jugueteActual.id);
+                } else {
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .update({ cantidad: nuevaCantidadOrigen })
+                        .eq('id', jugueteActual.id);
+                }
+
+                // Agregar en destino
+                if (jugueteExistenteData && jugueteExistenteData.length > 0) {
+                    const jugueteExistente = jugueteExistenteData[0];
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .update({ cantidad: jugueteExistente.cantidad + item.cantidad })
+                        .eq('id', jugueteExistente.id);
+                } else {
+                    const nuevoJuguete = {
+                        nombre: jugueteActual.nombre,
+                        codigo: jugueteActual.codigo,
+                        cantidad: item.cantidad,
+                        foto_url: jugueteActual.foto_url,
+                        empresa_id: user.empresa_id
+                    };
+                    
+                    if (plan.tipo_destino === 'bodega') {
+                        nuevoJuguete.bodega_id = plan.destino_id;
+                        nuevoJuguete.tienda_id = null;
+                    } else {
+                        nuevoJuguete.tienda_id = plan.destino_id;
+                        nuevoJuguete.bodega_id = null;
+                    }
+                    
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .insert(nuevoJuguete);
+                }
+
+                // Registrar movimiento
+                await window.supabaseClient
+                    .from('movimientos')
+                    .insert({
+                        tipo_origen: plan.tipo_origen,
+                        origen_id: plan.origen_id,
+                        tipo_destino: plan.tipo_destino,
+                        destino_id: plan.destino_id,
+                        juguete_id: item.juguete_id,
+                        cantidad: item.cantidad,
+                        empresa_id: user.empresa_id
+                    });
+
+                itemsProcesados++;
+            } catch (itemError) {
+                console.error('Error procesando item:', itemError);
+            }
+        }
+        
+        // Actualizar estado del plan
+        await window.supabaseClient
+            .from('planes_movimiento')
+            .update({
+                estado: 'ejecutado',
+                ejecutado_por: user.nombre,
+                ejecutado_at: new Date().toISOString()
+            })
+            .eq('id', planId);
+        
+        alert(`Plan ejecutado correctamente. ${itemsProcesados} de ${items.length} items procesados.`);
+        
+        // Actualizar vistas
+        await actualizarBadgePlanesPendientes();
+        cargarPlanesPendientes();
+        
+    } catch (error) {
+        console.error('Error al ejecutar plan:', error);
+        alert('Error al ejecutar el plan: ' + error.message);
+    }
+};
+
+// Función para cancelar un plan
+window.cancelarPlan = async function(planId) {
+    if (!confirm('¿Estás seguro de que deseas cancelar este plan?')) {
+        return;
+    }
+    
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        
+        await window.supabaseClient
+            .from('planes_movimiento')
+            .update({
+                estado: 'cancelado',
+                ejecutado_por: user.nombre,
+                ejecutado_at: new Date().toISOString()
+            })
+            .eq('id', planId);
+        
+        await actualizarBadgePlanesPendientes();
+        cargarPlanesPendientes();
+        
+    } catch (error) {
+        console.error('Error al cancelar plan:', error);
+        alert('Error al cancelar el plan: ' + error.message);
+    }
+};
+
+// Función para ver detalle de un plan
+window.verDetallePlan = async function(planId) {
+    try {
+        const { data: plan, error } = await window.supabaseClient
+            .from('planes_movimiento')
+            .select('*')
+            .eq('id', planId)
+            .single();
+        
+        if (error) throw error;
+        
+        const items = plan.items || [];
+        const fecha = new Date(plan.created_at).toLocaleString('es-CO');
+        
+        const detalleHTML = `
+            <div style="max-width: 600px; margin: 0 auto;">
+                <h3 style="color: #6366f1; margin-bottom: 20px;">${plan.codigo_plan}</h3>
+                <p><strong>Fecha:</strong> ${fecha}</p>
+                <p><strong>Estado:</strong> ${plan.estado.toUpperCase()}</p>
+                <p><strong>Creado por:</strong> ${plan.creado_por || 'N/A'}</p>
+                ${plan.ejecutado_por ? `<p><strong>Ejecutado por:</strong> ${plan.ejecutado_por}</p>` : ''}
+                
+                <div style="margin: 20px 0; padding: 15px; background: #f8fafc; border-radius: 8px;">
+                    <p><strong>Origen:</strong> ${plan.origen_nombre} (${plan.tipo_origen})</p>
+                    <p><strong>Destino:</strong> ${plan.destino_nombre} (${plan.tipo_destino})</p>
+                </div>
+                
+                <h4>Items (${items.length}):</h4>
+                <ul style="list-style: none; padding: 0;">
+                    ${items.map(i => `
+                        <li style="padding: 8px; border-bottom: 1px solid #e2e8f0;">
+                            <strong>${i.nombre}</strong> (${i.codigo}) - ${i.cantidad} unidades
+                        </li>
+                    `).join('')}
+                </ul>
+                
+                <p style="margin-top: 15px;"><strong>Total:</strong> ${plan.total_unidades} unidades</p>
+            </div>
+        `;
+        
+        // Mostrar en modal o alert
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+        modal.innerHTML = `
+            <div style="background: white; padding: 30px; border-radius: 12px; max-width: 90%; max-height: 90%; overflow: auto;">
+                ${detalleHTML}
+                <button onclick="this.closest('div').parentElement.remove()" style="margin-top: 20px; padding: 10px 20px; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer;">
+                    Cerrar
+                </button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+    } catch (error) {
+        console.error('Error al cargar detalle:', error);
+        alert('Error al cargar detalle del plan');
+    }
+};
+
+// Inicializar planes al cargar la vista
+function initPlanesMovimiento() {
+    actualizarBadgePlanesPendientes();
+    cargarPlanesPendientes();
+}
+
+// Función para imprimir el plan de movimiento
+window.imprimirPlanMovimiento = function() {
+    const planParaImprimir = document.getElementById('planParaImprimir');
+    
+    if (!planParaImprimir) {
+        showAbastecerMessage('Primero genera el plan de movimiento', 'error');
+        return;
+    }
+    
+    // Crear ventana de impresión
+    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
+    
+    ventanaImpresion.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Plan de Movimiento - Toys Wall</title>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { 
+                    font-family: 'Segoe UI', Arial, sans-serif; 
+                    padding: 20px;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+                @media print {
+                    body { padding: 10px; }
+                    @page { margin: 1cm; }
+                }
+            </style>
+        </head>
+        <body>
+            ${planParaImprimir.outerHTML}
+            <script>
+                window.onload = function() {
+                    window.print();
+                    window.onafterprint = function() {
+                        window.close();
+                    };
+                };
+            </script>
+        </body>
+        </html>
+    `);
+    
+    ventanaImpresion.document.close();
+};
 
 function showAbastecerMessage(message, type) {
     const errorMsg = document.getElementById('abastecerErrorMessage');
@@ -3154,22 +3982,31 @@ async function buscarVentaParaDevolucion() {
 
         ventasListContainer.innerHTML = `
             <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 2px solid #e2e8f0;">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 2px solid #e2e8f0; flex-wrap: wrap; gap: 15px;">
                     <div>
                         <h3 style="color: #8b5cf6; margin-bottom: 10px;">${codigoVenta}</h3>
                         <p style="color: #64748b; margin: 5px 0;"><strong>Fecha:</strong> ${fecha}</p>
                         <p style="color: #64748b; margin: 5px 0;"><strong>Empleado:</strong> ${empleado}</p>
-                        <p style="color: #64748b; margin: 5px 0;"><strong>Total:</strong> <span style="color: #10b981; font-weight: bold; font-size: 18px;">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span></p>
+                        <p style="color: #64748b; margin: 5px 0;"><strong>Total Venta:</strong> <span style="color: #10b981; font-weight: bold; font-size: 18px;">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span></p>
+                        <p style="color: #64748b; margin: 5px 0;" id="totalSeleccionadoDevolucion"><strong>Total Seleccionado:</strong> <span style="color: #ef4444; font-weight: bold;">$0.00</span> (0 items)</p>
                     </div>
-                    <button type="button" class="btn-primary" style="background: #ef4444;" onclick="procesarDevolucion('${codigoVenta}')">
-                        <i class="fas fa-undo"></i> Procesar Devolución
-                    </button>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <button type="button" class="btn-primary" style="background: #f97316;" onclick="procesarDevolucionSelectiva('${codigoVenta}')" id="btnDevolverSeleccionados" disabled>
+                            <i class="fas fa-check-square"></i> Devolver Seleccionados
+                        </button>
+                        <button type="button" class="btn-primary" style="background: #ef4444;" onclick="procesarDevolucion('${codigoVenta}', null)">
+                            <i class="fas fa-undo"></i> Devolver Todo
+                        </button>
+                    </div>
                 </div>
                 <div>
                     <h4 style="color: #1e293b; margin-bottom: 15px;">Items de la Venta:</h4>
                     <table class="inventario-table" style="width: 100%;">
                         <thead>
                             <tr>
+                                <th style="width: 50px; text-align: center;">
+                                    <input type="checkbox" id="selectAllDevolucion" onchange="toggleSeleccionarTodos(this)" title="Seleccionar todos">
+                                </th>
                                 <th>Juguete</th>
                                 <th>Código</th>
                                 <th>Cantidad</th>
@@ -3183,6 +4020,12 @@ async function buscarVentaParaDevolucion() {
                                 const precioUnitario = parseFloat(venta.precio_venta) / cantidad;
                                 return `
                                     <tr>
+                                        <td style="text-align: center;">
+                                            <input type="checkbox" class="item-devolucion-checkbox" 
+                                                data-venta-id="${venta.id}" 
+                                                data-precio="${venta.precio_venta}"
+                                                onchange="toggleSeleccionItem()">
+                                        </td>
                                         <td>${venta.juguetes?.nombre || 'N/A'}</td>
                                         <td>${venta.juguetes?.codigo || 'N/A'}</td>
                                         <td>${cantidad}</td>
@@ -3202,24 +4045,104 @@ async function buscarVentaParaDevolucion() {
     }
 }
 
+// Función para toggle de selección de un item individual
+window.toggleSeleccionItem = function() {
+    const checkboxes = document.querySelectorAll('.item-devolucion-checkbox');
+    const selectAll = document.getElementById('selectAllDevolucion');
+    const btnDevolverSeleccionados = document.getElementById('btnDevolverSeleccionados');
+    const totalSeleccionadoEl = document.getElementById('totalSeleccionadoDevolucion');
+    
+    // Calcular totales
+    let totalSeleccionado = 0;
+    let itemsSeleccionados = 0;
+    let todosSeleccionados = true;
+    
+    checkboxes.forEach(cb => {
+        if (cb.checked) {
+            totalSeleccionado += parseFloat(cb.dataset.precio || 0);
+            itemsSeleccionados++;
+        } else {
+            todosSeleccionados = false;
+        }
+    });
+    
+    // Actualizar checkbox "Seleccionar todos"
+    if (selectAll) {
+        selectAll.checked = todosSeleccionados && checkboxes.length > 0;
+        selectAll.indeterminate = itemsSeleccionados > 0 && !todosSeleccionados;
+    }
+    
+    // Actualizar botón y total
+    if (btnDevolverSeleccionados) {
+        btnDevolverSeleccionados.disabled = itemsSeleccionados === 0;
+    }
+    
+    if (totalSeleccionadoEl) {
+        totalSeleccionadoEl.innerHTML = `<strong>Total Seleccionado:</strong> <span style="color: #ef4444; font-weight: bold;">$${totalSeleccionado.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span> (${itemsSeleccionados} item${itemsSeleccionados !== 1 ? 's' : ''})`;
+    }
+};
+
+// Función para toggle de seleccionar todos los items
+window.toggleSeleccionarTodos = function(selectAllCheckbox) {
+    const checkboxes = document.querySelectorAll('.item-devolucion-checkbox');
+    const isChecked = selectAllCheckbox.checked;
+    
+    checkboxes.forEach(cb => {
+        cb.checked = isChecked;
+    });
+    
+    // Actualizar totales
+    toggleSeleccionItem();
+};
+
+// Función para procesar devolución de items seleccionados
+window.procesarDevolucionSelectiva = async function(codigoVenta) {
+    const checkboxes = document.querySelectorAll('.item-devolucion-checkbox:checked');
+    
+    if (checkboxes.length === 0) {
+        showAjustesMessage('Por favor, selecciona al menos un item para devolver', 'error');
+        return;
+    }
+    
+    // Obtener los IDs de las ventas seleccionadas
+    const idsVentas = Array.from(checkboxes).map(cb => cb.dataset.ventaId);
+    
+    // Llamar a procesarDevolucion con los IDs específicos
+    await procesarDevolucion(codigoVenta, idsVentas);
+};
+
 // Función global para procesar devolución
-window.procesarDevolucion = async function(codigoVenta) {
-    if (!confirm('¿Estás seguro de que deseas procesar esta devolución?\n\nEsta acción:\n- Agregará los juguetes nuevamente al inventario\n- Eliminará la venta del sistema\n\nEsta acción no se puede deshacer.')) {
+window.procesarDevolucion = async function(codigoVenta, idsVentas = null) {
+    // Mensaje de confirmación diferente según si es selectiva o total
+    const esSelectiva = idsVentas && idsVentas.length > 0;
+    const mensajeConfirmacion = esSelectiva 
+        ? `¿Estás seguro de que deseas devolver ${idsVentas.length} item(s) seleccionado(s)?\n\nEsta acción:\n- Agregará los juguetes seleccionados al inventario\n- Eliminará los items seleccionados de la venta\n\nEsta acción no se puede deshacer.`
+        : '¿Estás seguro de que deseas procesar la devolución COMPLETA?\n\nEsta acción:\n- Agregará TODOS los juguetes nuevamente al inventario\n- Eliminará la venta completa del sistema\n\nEsta acción no se puede deshacer.';
+    
+    if (!confirm(mensajeConfirmacion)) {
         return;
     }
 
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
         
-        // Obtener todas las ventas con ese código
-        const { data: ventas, error: ventasError } = await window.supabaseClient
+        // Obtener las ventas según si es selectiva o total
+        let query = window.supabaseClient
             .from('ventas')
             .select(`
                 *,
                 juguetes(id, nombre, codigo, cantidad, bodega_id, tienda_id, empresa_id)
             `)
-            .eq('codigo_venta', codigoVenta)
             .eq('empresa_id', user.empresa_id);
+        
+        // Si hay IDs específicos, filtrar por ellos; si no, por código de venta
+        if (esSelectiva) {
+            query = query.in('id', idsVentas);
+        } else {
+            query = query.eq('codigo_venta', codigoVenta);
+        }
+        
+        const { data: ventas, error: ventasError } = await query;
 
         if (ventasError) throw ventasError;
 
@@ -3390,15 +4313,24 @@ window.procesarDevolucion = async function(codigoVenta) {
             throw new Error('No se eliminó ninguna venta. Verifica las políticas RLS en Supabase.');
         }
 
-        showAjustesMessage(`Devolución procesada correctamente. ${ventasEliminadas} venta(s) eliminada(s) y juguetes agregados nuevamente al inventario.`, 'success');
+        const mensajeExito = esSelectiva 
+            ? `Devolución selectiva procesada correctamente. ${ventasEliminadas} item(s) devuelto(s) y agregados nuevamente al inventario.`
+            : `Devolución completa procesada correctamente. ${ventasEliminadas} venta(s) eliminada(s) y juguetes agregados nuevamente al inventario.`;
+        showAjustesMessage(mensajeExito, 'success');
         
-        // Limpiar búsqueda
-        document.getElementById('buscarVentaCodigo').value = '';
-        document.getElementById('ventasListContainer').innerHTML = `
-            <p style="text-align: center; color: #64748b; padding: 40px;">
-                Ingresa un código de venta para buscar y realizar una devolución.
-            </p>
-        `;
+        // Si fue selectiva y quedan más items, recargar la búsqueda
+        if (esSelectiva) {
+            // Recargar la búsqueda para ver los items restantes
+            await buscarVentaParaDevolucion();
+        } else {
+            // Limpiar búsqueda si fue devolución total
+            document.getElementById('buscarVentaCodigo').value = '';
+            document.getElementById('ventasListContainer').innerHTML = `
+                <p style="text-align: center; color: #64748b; padding: 40px;">
+                    Ingresa un código de venta para buscar y realizar una devolución.
+                </p>
+            `;
+        }
 
         // Recargar resumen del dashboard si existe
         if (typeof loadDashboardSummary === 'function') {
@@ -3896,4 +4828,278 @@ function crearGraficoDashboardVentas(ventasPorDia) {
         }
     });
 }
+
+// ============================================
+// VISTA DE VENTAS - LISTA COMPLETA
+// ============================================
+
+// Variables para paginación de ventas
+let todasLasVentas = [];
+let ventasFiltradas = [];
+let paginaActualVentas = 1;
+const itemsPorPaginaVentas = 20;
+
+// Función para inicializar la vista de ventas
+async function initVentasLista() {
+    await cargarTodasLasVentas();
+}
+
+// Función para cargar todas las ventas
+async function cargarTodasLasVentas() {
+    const tbody = document.getElementById('ventasTableBody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">Cargando ventas...</td></tr>';
+    
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        
+        const { data: ventas, error } = await window.supabaseClient
+            .from('ventas')
+            .select(`
+                *,
+                juguetes(nombre, codigo),
+                empleados(nombre, codigo)
+            `)
+            .eq('empresa_id', user.empresa_id)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        todasLasVentas = ventas || [];
+        ventasFiltradas = [...todasLasVentas];
+        
+        // Calcular resúmenes
+        calcularResumenVentas();
+        
+        // Renderizar primera página
+        paginaActualVentas = 1;
+        renderizarVentasTabla();
+        renderizarPaginacionVentas();
+        
+    } catch (error) {
+        console.error('Error al cargar ventas:', error);
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #ef4444;">Error al cargar ventas</td></tr>';
+    }
+}
+
+// Función para calcular resumen de ventas
+function calcularResumenVentas() {
+    const totalCount = document.getElementById('totalVentasCount');
+    const totalGanancias = document.getElementById('totalGananciasVentas');
+    const gananciasEfectivo = document.getElementById('gananciasEfectivo');
+    const gananciasTransferencia = document.getElementById('gananciasTransferencia');
+    const gananciasTarjeta = document.getElementById('gananciasTarjeta');
+    const gananciasOtros = document.getElementById('gananciasOtros');
+    
+    // Usar ventas filtradas para el cálculo
+    const ventas = ventasFiltradas;
+    
+    // Calcular totales
+    const total = ventas.reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0);
+    const efectivo = ventas.filter(v => v.metodo_pago?.toLowerCase() === 'efectivo')
+        .reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0);
+    const transferencia = ventas.filter(v => v.metodo_pago?.toLowerCase() === 'transferencia')
+        .reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0);
+    const tarjeta = ventas.filter(v => v.metodo_pago?.toLowerCase() === 'tarjeta')
+        .reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0);
+    const otros = ventas.filter(v => !['efectivo', 'transferencia', 'tarjeta'].includes(v.metodo_pago?.toLowerCase()))
+        .reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0);
+    
+    // Actualizar UI
+    if (totalCount) totalCount.textContent = ventas.length.toLocaleString('es-CO');
+    if (totalGanancias) totalGanancias.textContent = `$${total.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    if (gananciasEfectivo) gananciasEfectivo.textContent = `$${efectivo.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    if (gananciasTransferencia) gananciasTransferencia.textContent = `$${transferencia.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    if (gananciasTarjeta) gananciasTarjeta.textContent = `$${tarjeta.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    if (gananciasOtros) gananciasOtros.textContent = `$${otros.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+// Función para renderizar la tabla de ventas
+function renderizarVentasTabla() {
+    const tbody = document.getElementById('ventasTableBody');
+    if (!tbody) return;
+    
+    if (ventasFiltradas.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">No se encontraron ventas</td></tr>';
+        return;
+    }
+    
+    // Calcular índices de paginación
+    const inicio = (paginaActualVentas - 1) * itemsPorPaginaVentas;
+    const fin = inicio + itemsPorPaginaVentas;
+    const ventasPagina = ventasFiltradas.slice(inicio, fin);
+    
+    tbody.innerHTML = ventasPagina.map(venta => {
+        const fecha = new Date(venta.created_at).toLocaleString('es-CO', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        const metodoBadge = getMetodoPagoBadge(venta.metodo_pago);
+        
+        return `
+            <tr>
+                <td style="font-family: monospace; color: #6366f1; font-weight: bold;">${venta.codigo_venta || 'N/A'}</td>
+                <td style="font-size: 13px; color: #64748b;">${fecha}</td>
+                <td>
+                    <strong>${venta.juguetes?.nombre || 'N/A'}</strong>
+                    <br><small style="color: #64748b;">${venta.juguetes?.codigo || ''}</small>
+                </td>
+                <td style="text-align: center;">${venta.cantidad || 1}</td>
+                <td style="font-weight: bold; color: #10b981;">$${parseFloat(venta.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 0 })}</td>
+                <td>${metodoBadge}</td>
+                <td style="font-size: 13px;">${venta.empleados?.nombre || 'N/A'}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Función para obtener badge de método de pago
+function getMetodoPagoBadge(metodo) {
+    const metodosColores = {
+        'efectivo': { bg: '#dbeafe', color: '#1d4ed8', icon: 'fa-money-bill-wave' },
+        'transferencia': { bg: '#ede9fe', color: '#7c3aed', icon: 'fa-university' },
+        'tarjeta': { bg: '#fef3c7', color: '#d97706', icon: 'fa-credit-card' }
+    };
+    
+    const config = metodosColores[metodo?.toLowerCase()] || { bg: '#f1f5f9', color: '#64748b', icon: 'fa-question' };
+    
+    return `<span style="background: ${config.bg}; color: ${config.color}; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;">
+        <i class="fas ${config.icon}"></i> ${metodo || 'N/A'}
+    </span>`;
+}
+
+// Función para renderizar paginación
+function renderizarPaginacionVentas() {
+    const container = document.getElementById('ventasPaginacion');
+    if (!container) return;
+    
+    const totalPaginas = Math.ceil(ventasFiltradas.length / itemsPorPaginaVentas);
+    
+    if (totalPaginas <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let html = '';
+    
+    // Botón anterior
+    html += `<button onclick="cambiarPaginaVentas(${paginaActualVentas - 1})" 
+        class="btn-paginacion" ${paginaActualVentas === 1 ? 'disabled' : ''}>
+        <i class="fas fa-chevron-left"></i>
+    </button>`;
+    
+    // Páginas
+    const maxVisible = 5;
+    let inicioP = Math.max(1, paginaActualVentas - Math.floor(maxVisible / 2));
+    let finP = Math.min(totalPaginas, inicioP + maxVisible - 1);
+    
+    if (finP - inicioP + 1 < maxVisible) {
+        inicioP = Math.max(1, finP - maxVisible + 1);
+    }
+    
+    if (inicioP > 1) {
+        html += `<button onclick="cambiarPaginaVentas(1)" class="btn-paginacion">1</button>`;
+        if (inicioP > 2) html += `<span style="padding: 0 10px;">...</span>`;
+    }
+    
+    for (let i = inicioP; i <= finP; i++) {
+        html += `<button onclick="cambiarPaginaVentas(${i})" 
+            class="btn-paginacion ${i === paginaActualVentas ? 'active' : ''}">${i}</button>`;
+    }
+    
+    if (finP < totalPaginas) {
+        if (finP < totalPaginas - 1) html += `<span style="padding: 0 10px;">...</span>`;
+        html += `<button onclick="cambiarPaginaVentas(${totalPaginas})" class="btn-paginacion">${totalPaginas}</button>`;
+    }
+    
+    // Botón siguiente
+    html += `<button onclick="cambiarPaginaVentas(${paginaActualVentas + 1})" 
+        class="btn-paginacion" ${paginaActualVentas === totalPaginas ? 'disabled' : ''}>
+        <i class="fas fa-chevron-right"></i>
+    </button>`;
+    
+    // Info de registros
+    const inicioReg = (paginaActualVentas - 1) * itemsPorPaginaVentas + 1;
+    const finReg = Math.min(paginaActualVentas * itemsPorPaginaVentas, ventasFiltradas.length);
+    html += `<span style="margin-left: 15px; color: #64748b; font-size: 13px;">
+        ${inicioReg}-${finReg} de ${ventasFiltradas.length}
+    </span>`;
+    
+    container.innerHTML = html;
+}
+
+// Función para cambiar de página
+window.cambiarPaginaVentas = function(pagina) {
+    const totalPaginas = Math.ceil(ventasFiltradas.length / itemsPorPaginaVentas);
+    if (pagina < 1 || pagina > totalPaginas) return;
+    
+    paginaActualVentas = pagina;
+    renderizarVentasTabla();
+    renderizarPaginacionVentas();
+    
+    // Scroll al inicio de la tabla
+    const tabla = document.querySelector('.ventas-tabla-container');
+    if (tabla) tabla.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+// Función para filtrar ventas
+window.filtrarVentasLista = function() {
+    const buscar = document.getElementById('buscarVentaInput')?.value.toLowerCase().trim() || '';
+    const metodoPago = document.getElementById('filtroMetodoPago')?.value.toLowerCase() || '';
+    const fechaDesde = document.getElementById('filtroFechaDesde')?.value || '';
+    const fechaHasta = document.getElementById('filtroFechaHasta')?.value || '';
+    
+    ventasFiltradas = todasLasVentas.filter(venta => {
+        // Filtro por texto
+        if (buscar) {
+            const codigoVenta = (venta.codigo_venta || '').toLowerCase();
+            const jugueteNombre = (venta.juguetes?.nombre || '').toLowerCase();
+            const jugueteCodigo = (venta.juguetes?.codigo || '').toLowerCase();
+            const empleado = (venta.empleados?.nombre || '').toLowerCase();
+            const precio = venta.precio_venta?.toString() || '';
+            const metodo = (venta.metodo_pago || '').toLowerCase();
+            
+            const coincide = codigoVenta.includes(buscar) ||
+                jugueteNombre.includes(buscar) ||
+                jugueteCodigo.includes(buscar) ||
+                empleado.includes(buscar) ||
+                precio.includes(buscar) ||
+                metodo.includes(buscar);
+            
+            if (!coincide) return false;
+        }
+        
+        // Filtro por método de pago
+        if (metodoPago && venta.metodo_pago?.toLowerCase() !== metodoPago) {
+            return false;
+        }
+        
+        // Filtro por fecha desde
+        if (fechaDesde) {
+            const fechaVenta = new Date(venta.created_at).toISOString().split('T')[0];
+            if (fechaVenta < fechaDesde) return false;
+        }
+        
+        // Filtro por fecha hasta
+        if (fechaHasta) {
+            const fechaVenta = new Date(venta.created_at).toISOString().split('T')[0];
+            if (fechaVenta > fechaHasta) return false;
+        }
+        
+        return true;
+    });
+    
+    // Recalcular resumen con ventas filtradas
+    calcularResumenVentas();
+    
+    // Volver a página 1 y renderizar
+    paginaActualVentas = 1;
+    renderizarVentasTabla();
+    renderizarPaginacionVentas();
+};
 

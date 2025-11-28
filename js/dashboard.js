@@ -336,6 +336,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     const empleadosView = document.getElementById('empleadosView');
     const usuariosView = document.getElementById('usuariosView');
     const abastecerView = document.getElementById('abastecerView');
+    const planesMovimientoView = document.getElementById('planesMovimientoView');
+    const ventasListView = document.getElementById('ventasListView');
     const analisisView = document.getElementById('analisisView');
     const ajustesView = document.getElementById('ajustesView');
     
@@ -358,6 +360,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         empleadosView.style.display = 'none';
         usuariosView.style.display = 'none';
         abastecerView.style.display = 'none';
+        if (planesMovimientoView) planesMovimientoView.style.display = 'none';
+        if (ventasListView) ventasListView.style.display = 'none';
         analisisView.style.display = 'none';
         ajustesView.style.display = 'none';
         
@@ -390,8 +394,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
                 break;
             case 'inventario':
-                inventarioView.style.display = 'block';
-                loadInventario();
+                    inventarioView.style.display = 'block';
+                    loadInventario();
                 break;
             case 'bodegas':
                 if (isAdmin) {
@@ -438,16 +442,34 @@ document.addEventListener('DOMContentLoaded', async function() {
                     }
                 }
                 break;
-            case 'analisis':
-                analisisView.style.display = 'block';
-                if (typeof loadAnalisis === 'function') {
-                    loadAnalisis();
+            case 'planesMovimiento':
+                if (isAdmin) {
+                    if (planesMovimientoView) {
+                        planesMovimientoView.style.display = 'block';
+                        if (typeof initPlanesMovimiento === 'function') {
+                            initPlanesMovimiento();
+                        }
+                    }
                 }
+                break;
+            case 'analisis':
+                    analisisView.style.display = 'block';
+                    if (typeof loadAnalisis === 'function') {
+                        loadAnalisis();
+                    }
                 break;
             case 'ajustes':
                 ajustesView.style.display = 'block';
                 if (typeof initAjustes === 'function') {
                     initAjustes();
+                }
+                break;
+            case 'ventas':
+                if (ventasListView) {
+                    ventasListView.style.display = 'block';
+                    if (typeof initVentasLista === 'function') {
+                        initVentasLista();
+                    }
                 }
                 break;
             default:
@@ -523,10 +545,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         const bodegasList = document.getElementById('bodegasList');
         
         if (!todasLasBodegas || todasLasBodegas.length === 0) {
-            bodegasList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay bodegas registradas. Agrega una nueva bodega.</p>';
+                bodegasList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay bodegas registradas. Agrega una nueva bodega.</p>';
             document.getElementById('bodegasPagination').innerHTML = '';
-            return;
-        }
+                return;
+            }
 
         // Calcular paginación
         const totalPaginas = Math.ceil(todasLasBodegas.length / itemsPorPaginaBodegas);
@@ -535,11 +557,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         const bodegasPagina = todasLasBodegas.slice(inicio, fin);
 
         // Renderizar bodegas de la página actual
-        bodegasList.innerHTML = '';
+            bodegasList.innerHTML = '';
         bodegasPagina.forEach(bodega => {
-            const bodegaCard = createBodegaCard(bodega);
-            bodegasList.appendChild(bodegaCard);
-        });
+                const bodegaCard = createBodegaCard(bodega);
+                bodegasList.appendChild(bodegaCard);
+            });
 
         renderizarPaginacionBodegas(totalPaginas, todasLasBodegas.length);
     }
@@ -1004,7 +1026,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (errorMsg) errorMsg.style.display = 'none';
             if (successMsg) successMsg.style.display = 'none';
         currentBodegaId = null;
-        }
+    }
     }
 
     // Solo agregar event listeners si los elementos existen
@@ -1262,28 +1284,28 @@ document.addEventListener('DOMContentLoaded', async function() {
                     subirFotoBtn.disabled = true;
                     subirFotoBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Subiendo...';
                     
-                    // Subir a Imgur
-                    const url = await window.subirImagenAImgur(archivo);
+                    // Subir imagen
+                    const url = await window.subirImagen(archivo);
                     
                     // Actualizar URL y vista previa
                     actualizarFotoUrl(url);
                     
-                    showJugueteFormMessage('Foto subida exitosamente a Imgur', 'success');
+                    showJugueteFormMessage('Foto subida exitosamente', 'success');
                     
                     subirFotoBtn.disabled = false;
-                    subirFotoBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Subir a Imgur';
+                    subirFotoBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Subir Foto';
                 } catch (error) {
                     console.error('Error al subir foto:', error);
-                    showJugueteFormMessage('Error al subir la foto: ' + error.message + '. Puedes ingresar la URL manualmente en el campo de abajo.', 'error');
+                    showJugueteFormMessage('Error al subir la foto: ' + error.message + '. Puedes ingresar la URL manualmente.', 'error');
                     subirFotoBtn.disabled = false;
-                    subirFotoBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Subir a Imgur';
+                    subirFotoBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Subir Foto';
                     
                     // Mostrar vista previa local aunque falle la subida
                     const reader = new FileReader();
                     reader.onload = function(e) {
                         fotoPreviewImg.src = e.target.result;
                         fotoPreview.style.display = 'block';
-                        fotoUrlText.textContent = 'Error al subir. Usa el campo de URL manual para ingresar la URL de la imagen.';
+                        fotoUrlText.textContent = 'Error al subir. Usa el campo de URL manual.';
                     };
                     reader.readAsDataURL(archivo);
                 }
@@ -1311,14 +1333,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                         if (window.esHeic && window.esHeic(archivo)) {
                             try {
                                 archivoParaVistaPrevia = await window.convertirHeicAJpeg(archivo);
-                                fotoUrlText.textContent = 'Archivo HEIC detectado. Se convertirá a JPEG al subir. Selecciona "Subir a Imgur" para subir la foto.';
+                                fotoUrlText.textContent = 'Archivo HEIC detectado. Se convertirá a JPEG al subir.';
                             } catch (error) {
                                 console.warn('No se pudo convertir HEIC para vista previa:', error);
-                                fotoUrlText.textContent = 'Archivo HEIC detectado. Selecciona "Subir a Imgur" para convertir y subir la foto.';
-                                // Continuar con el archivo original
+                                fotoUrlText.textContent = 'Archivo HEIC detectado. Haz clic en "Subir Foto".';
                             }
                         } else {
-                            fotoUrlText.textContent = 'Selecciona "Subir a Imgur" para subir la foto';
+                            fotoUrlText.textContent = 'Haz clic en "Subir Foto" para guardar la imagen';
                         }
                         
                         const reader = new FileReader();
@@ -1346,6 +1367,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             const nombre = capitalizarPrimeraLetra(document.getElementById('jugueteNombreInput').value.trim());
             const codigo = document.getElementById('jugueteCodigoInput').value.trim();
             const cantidad = parseInt(document.getElementById('jugueteCantidadInput').value);
+            const precioMin = parseFloat(document.getElementById('juguetePrecioMinInput').value);
+            const precioMax = parseFloat(document.getElementById('juguetePrecioMaxInput').value);
             const ubicacionTipo = document.getElementById('jugueteUbicacionTipo').value;
             const ubicacionId = document.getElementById('jugueteUbicacionSelect').value;
             // Obtener URL de foto (del campo oculto o del input manual)
@@ -1354,8 +1377,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                 ? jugueteFotoUrlInput.value.trim() 
                 : document.getElementById('jugueteFotoUrl').value.trim();
 
-            if (!nombre || !codigo || isNaN(cantidad) || cantidad < 0 || !ubicacionTipo || !ubicacionId) {
+            if (!nombre || !codigo || isNaN(cantidad) || cantidad < 0 || !ubicacionTipo || !ubicacionId || 
+                isNaN(precioMin) || precioMin < 0 || isNaN(precioMax) || precioMax < 0) {
                 showJugueteFormMessage('Por favor, completa todos los campos obligatorios', 'error');
+                return;
+            }
+
+            if (precioMin > precioMax) {
+                showJugueteFormMessage('El precio mínimo no puede ser mayor que el precio máximo', 'error');
                 return;
             }
 
@@ -1392,7 +1421,11 @@ document.addEventListener('DOMContentLoaded', async function() {
                     const cantidadOriginal = jugueteExistente.cantidad;
                     const nuevaCantidad = jugueteExistente.cantidad + cantidad;
                     
-                    const updateData = { cantidad: nuevaCantidad };
+                    const updateData = { 
+                        cantidad: nuevaCantidad,
+                        precio_min: precioMin,
+                        precio_max: precioMax
+                    };
                     
                     // Actualizar foto_url si se proporciona una nueva
                     if (fotoUrl) {
@@ -1426,6 +1459,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                     nombre: nombre,
                     codigo: codigo,
                     cantidad: cantidad,
+                    precio_min: precioMin,
+                    precio_max: precioMax,
                     empresa_id: user.empresa_id
                 };
 
@@ -1458,7 +1493,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     // Habilitar botón deshacer
                     if (window.actualizarEstadoBotonDeshacer) {
                         window.actualizarEstadoBotonDeshacer(true);
-                    }
+                }
 
                 showJugueteFormMessage('Juguete agregado correctamente', 'success');
                 }
@@ -1906,7 +1941,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                             nombre: tienda.nombre,
                             cantidad: 0
                         });
-                    }
+        }
                 });
 
                 // Agregar todas las bodegas (con cantidad 0 si no existe)
@@ -1931,8 +1966,8 @@ document.addEventListener('DOMContentLoaded', async function() {
 
                 j.cantidadTotal = j.ubicaciones.reduce((sum, u) => sum + u.cantidad, 0);
                 return j;
-            });
-            
+    });
+
             // Calcular totales
             const totalJuguetes = todosLosJuguetes.reduce((sum, j) => sum + j.cantidadTotal, 0);
             
@@ -2132,7 +2167,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         paginacionHTML += '</div>';
         paginationContainer.innerHTML = paginacionHTML;
-    }
+        }
 
     // Función global para cambiar de página
     window.cambiarPaginaInventario = function(nuevaPagina) {
@@ -2151,7 +2186,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         newSearchInput.addEventListener('input', function() {
             const searchTerm = this.value.toLowerCase().trim();
-            
+        
             if (searchTerm === '') {
                 // Si no hay búsqueda, mostrar todos los juguetes
                 paginaActualInventario = 1;
@@ -2216,12 +2251,16 @@ document.addEventListener('DOMContentLoaded', async function() {
                 document.getElementById('editarJugueteNombre').value = data.nombre;
                 document.getElementById('editarJugueteCodigo').value = data.codigo;
                 document.getElementById('editarJugueteCantidad').value = data.cantidad;
+                document.getElementById('editarJuguetePrecioMin').value = data.precio_min || '';
+                document.getElementById('editarJuguetePrecioMax').value = data.precio_max || '';
             } else {
                 // Llenar el formulario con datos del juguete
                 document.getElementById('editarJugueteId').value = juguete.id;
                 document.getElementById('editarJugueteNombre').value = juguete.nombre;
                 document.getElementById('editarJugueteCodigo').value = juguete.codigo;
                 document.getElementById('editarJugueteCantidad').value = juguete.cantidad;
+                document.getElementById('editarJuguetePrecioMin').value = juguete.precio_min || '';
+                document.getElementById('editarJuguetePrecioMax').value = juguete.precio_max || '';
             }
             
             // Mostrar modal
@@ -2255,6 +2294,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 const nombre = capitalizarPrimeraLetra(document.getElementById('editarJugueteNombre').value.trim());
                 const codigo = document.getElementById('editarJugueteCodigo').value.trim();
                 const cantidad = parseInt(document.getElementById('editarJugueteCantidad').value);
+                const precioMin = parseFloat(document.getElementById('editarJuguetePrecioMin').value);
+                const precioMax = parseFloat(document.getElementById('editarJuguetePrecioMax').value);
                 
                 const errorMsg = document.getElementById('editarJugueteErrorMessage');
                 const successMsg = document.getElementById('editarJugueteSuccessMessage');
@@ -2262,11 +2303,18 @@ document.addEventListener('DOMContentLoaded', async function() {
                 errorMsg.style.display = 'none';
                 successMsg.style.display = 'none';
                 
-                if (!nombre || !codigo || cantidad < 0) {
+                if (!nombre || !codigo || cantidad < 0 || isNaN(precioMin) || precioMin < 0 || 
+                    isNaN(precioMax) || precioMax < 0) {
                     errorMsg.textContent = 'Por favor, completa todos los campos correctamente';
                     errorMsg.style.display = 'block';
-            return;
-        }
+                    return;
+                }
+
+                if (precioMin > precioMax) {
+                    errorMsg.textContent = 'El precio mínimo no puede ser mayor que el precio máximo';
+                    errorMsg.style.display = 'block';
+                    return;
+                }
 
         try {
                     const user = JSON.parse(sessionStorage.getItem('user'));
@@ -2279,7 +2327,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                         .eq('empresa_id', user.empresa_id)
                         .neq('id', jugueteId)
                         .limit(1);
-                    
+
                     if (checkError) throw checkError;
                     
                     if (jugueteExistente && jugueteExistente.length > 0) {
@@ -2294,7 +2342,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                         .select('codigo, nombre')
                         .eq('id', jugueteId)
                         .single();
-                    
+        
                     if (fetchError) throw fetchError;
                     
                     const codigoCambio = jugueteOriginal.codigo !== codigo;
@@ -2302,7 +2350,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     
                     // Si cambió el código o nombre, actualizar todos los registros relacionados
                     if (codigoCambio || nombreCambio) {
-                        // Actualizar todos los registros con el mismo código y nombre original
+                        // Actualizar todos los registros con el mismo código y nombre original (solo código y nombre, no precios)
                         const { error: updateAllError } = await window.supabaseClient
                             .from('juguetes')
                             .update({
@@ -2315,10 +2363,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                         
                         if (updateAllError) throw updateAllError;
                         
-                        // Luego actualizar la cantidad solo del registro específico
+                        // Luego actualizar la cantidad y precios solo del registro específico
                         const { error: updateCantidadError } = await window.supabaseClient
                             .from('juguetes')
-                            .update({ cantidad: cantidad })
+                            .update({ 
+                                cantidad: cantidad,
+                                precio_min: precioMin,
+                                precio_max: precioMax
+                            })
                             .eq('id', jugueteId);
                         
                         if (updateCantidadError) throw updateCantidadError;
@@ -2328,11 +2380,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                             .from('juguetes')
                             .update({
                                 nombre: nombre,
+                                precio_min: precioMin,
+                                precio_max: precioMax,
                                 codigo: codigo,
                                 cantidad: cantidad
                             })
                             .eq('id', jugueteId);
-                        
+
                         if (updateError) throw updateError;
                     }
                     
@@ -2402,10 +2456,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         const empleadosList = document.getElementById('empleadosList');
         
         if (!todosLosEmpleados || todosLosEmpleados.length === 0) {
-            empleadosList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay empleados registrados. Agrega un nuevo empleado.</p>';
+                empleadosList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay empleados registrados. Agrega un nuevo empleado.</p>';
             document.getElementById('empleadosPagination').innerHTML = '';
-            return;
-        }
+                return;
+            }
 
         // Calcular paginación
         const totalPaginas = Math.ceil(todosLosEmpleados.length / itemsPorPaginaEmpleados);
@@ -2414,11 +2468,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         const empleadosPagina = todosLosEmpleados.slice(inicio, fin);
 
         // Renderizar empleados de la página actual
-        empleadosList.innerHTML = '';
+            empleadosList.innerHTML = '';
         empleadosPagina.forEach(empleado => {
-            const empleadoCard = createEmpleadoCard(empleado);
-            empleadosList.appendChild(empleadoCard);
-        });
+                const empleadoCard = createEmpleadoCard(empleado);
+                empleadosList.appendChild(empleadoCard);
+            });
 
         renderizarPaginacionEmpleados(totalPaginas, todosLosEmpleados.length);
     }
@@ -2823,11 +2877,27 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (typeof loadDashboardSummary === 'function') {
         loadDashboardSummary();
     }
+    
+    // Actualizar badge de planes pendientes
+    if (typeof actualizarBadgePlanesPendientes === 'function') {
+        actualizarBadgePlanesPendientes();
+    }
 
     // Hacer las cards del dashboard clicables
     const cardTiendas = document.getElementById('cardTiendas');
     const cardBodegas = document.getElementById('cardBodegas');
     const cardUsuarios = document.getElementById('cardUsuarios');
+    const cardGanancias = document.getElementById('cardGanancias');
+
+    if (cardGanancias) {
+        cardGanancias.addEventListener('click', function() {
+            // Simular click en el botón de ventas del sidebar
+            const ventasBtn = document.querySelector('.sidebar-btn[data-page="ventas"]');
+            if (ventasBtn) {
+                ventasBtn.click();
+            }
+        });
+    }
 
     if (cardTiendas) {
         cardTiendas.addEventListener('click', function() {

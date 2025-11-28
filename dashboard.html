@@ -47,6 +47,10 @@
                     <i class="fas fa-tools"></i>
                     <span>Ajustes</span>
                 </button>
+                <button class="sidebar-btn" data-page="ventas">
+                    <i class="fas fa-cash-register"></i>
+                    <span>Ventas</span>
+                </button>
                 <button class="sidebar-btn" data-page="juguetes">
                     <i class="fas fa-cube"></i>
                     <span>Juguetes</span>
@@ -74,6 +78,11 @@
                 <button class="sidebar-btn" data-page="abastecer">
                     <i class="fas fa-truck-loading"></i>
                     <span>Abastecer Tiendas</span>
+                </button>
+                <button class="sidebar-btn" data-page="planesMovimiento">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>Planes de Movimiento</span>
+                    <span id="badgePlanesPendientes" class="notification-badge" style="display: none;">0</span>
                 </button>
                 <button class="sidebar-btn" data-page="analisis">
                     <i class="fas fa-chart-line"></i>
@@ -116,13 +125,13 @@
                                     <p>Usuarios</p>
                                 </div>
                             </div>
-                            <div class="summary-card">
-                                <div class="card-icon" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
-                                    <i class="fas fa-dollar-sign"></i>
+                            <div class="summary-card ganancias-card" id="cardGanancias" style="cursor: pointer; grid-column: span 2;" title="Haz clic para ver Ventas">
+                                <div class="card-icon" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); width: 70px; height: 70px;">
+                                    <i class="fas fa-dollar-sign" style="font-size: 28px;"></i>
                                 </div>
                                 <div class="card-info">
-                                    <h3 id="totalGanancias">$0</h3>
-                                    <p>Ganancias Totales</p>
+                                    <h3 id="totalGanancias" style="font-size: 32px;">$0</h3>
+                                    <p style="font-size: 16px;">Ganancias Totales</p>
                                 </div>
                             </div>
                         </div>
@@ -258,28 +267,28 @@
                         <div class="factura-items">
                             <h3>Items de la Venta</h3>
                             <div class="factura-table-wrapper">
-                                <table class="factura-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Juguete</th>
-                                            <th>Precio</th>
-                                            <th>Cantidad</th>
-                                            <th>Subtotal</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="facturaItemsBody">
-                                    </tbody>
-                                    <tfoot>
-                                        <tr>
+                            <table class="factura-table">
+                                <thead>
+                                    <tr>
+                                        <th>Juguete</th>
+                                        <th>Precio</th>
+                                        <th>Cantidad</th>
+                                        <th>Subtotal</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="facturaItemsBody">
+                                </tbody>
+                                <tfoot>
+                                    <tr>
                                             <td colspan="3" style="text-align: right; font-weight: bold; word-wrap: break-word;">IVA (19%):</td>
                                             <td style="font-weight: bold; font-size: 16px; word-wrap: break-word; color: #64748b;" id="facturaIva">$0.00</td>
                                         </tr>
                                         <tr>
                                             <td colspan="3" style="text-align: right; font-weight: bold; word-wrap: break-word;">TOTAL:</td>
                                             <td style="font-weight: bold; font-size: 18px; word-wrap: break-word;" id="facturaTotal">$0.00</td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
+                                    </tr>
+                                </tfoot>
+                            </table>
                             </div>
                         </div>
                         <form id="enviarFacturaForm" class="bodega-form">
@@ -381,7 +390,7 @@
                                 class="btn-secondary"
                                 style="width: 100%; margin-bottom: 10px;"
                             >
-                                <i class="fas fa-cloud-upload-alt"></i> Subir a Imgur
+                                <i class="fas fa-cloud-upload-alt"></i> Subir Foto
                             </button>
                             <div style="margin-top: 10px; margin-bottom: 10px;">
                                 <label for="jugueteFotoUrlInput" style="display: block; margin-bottom: 5px; font-size: 14px; color: #64748b;">
@@ -403,7 +412,7 @@
                                 <img id="fotoPreviewImg" src="" alt="Vista previa" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid #e2e8f0;">
                                 <p id="fotoUrlText" style="margin-top: 5px; font-size: 12px; color: #64748b; word-break: break-all;"></p>
                             </div>
-                            <small class="form-help">Selecciona una foto y haz clic en "Subir a Imgur" o ingresa la URL manualmente</small>
+                            <small class="form-help">Selecciona una foto y haz clic en "Subir Foto" o ingresa la URL manualmente</small>
                         </div>
                         <div class="form-group">
                             <label for="jugueteCantidadInput">
@@ -417,6 +426,38 @@
                                 min="0"
                                 required
                             >
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="juguetePrecioMinInput">
+                                    <i class="fas fa-dollar-sign"></i> Precio Mínimo *
+                                </label>
+                                <input 
+                                    type="number" 
+                                    id="juguetePrecioMinInput" 
+                                    name="precio_min" 
+                                    placeholder="0.00"
+                                    min="0"
+                                    step="0.01"
+                                    required
+                                >
+                                <small class="form-help">Precio mínimo permitido para la venta</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="juguetePrecioMaxInput">
+                                    <i class="fas fa-dollar-sign"></i> Precio Máximo *
+                                </label>
+                                <input 
+                                    type="number" 
+                                    id="juguetePrecioMaxInput" 
+                                    name="precio_max" 
+                                    placeholder="0.00"
+                                    min="0"
+                                    step="0.01"
+                                    required
+                                >
+                                <small class="form-help">Precio máximo permitido para la venta</small>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label for="jugueteUbicacionTipo">
@@ -449,8 +490,8 @@
                         <div id="jugueteFormSuccessMessage" class="success-message" style="display: none;"></div>
                         <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 20px;">
                             <button type="submit" class="btn-primary" style="width: 100%;">
-                                <i class="fas fa-plus"></i> Agregar Juguete
-                            </button>
+                            <i class="fas fa-plus"></i> Agregar Juguete
+                        </button>
                             <button type="button" id="deshacerUltimoJugueteBtn" class="btn-secondary" style="width: 100%; padding: 12px 24px; border-radius: 8px; font-size: 14px;">
                                 <i class="fas fa-undo"></i> Deshacer
                             </button>
@@ -879,18 +920,99 @@
                             <label for="juguetesDisponibles">
                                 <i class="fas fa-boxes"></i> Juguetes Disponibles en Origen
                             </label>
+                            <div class="search-box" style="margin-bottom: 10px;">
+                                <input 
+                                    type="text" 
+                                    id="buscarJugueteAbastecer" 
+                                    placeholder="Buscar por nombre o código..."
+                                    class="form-input"
+                                    style="width: 100%;"
+                                    oninput="filtrarJuguetesAbastecer()"
+                                >
+                            </div>
                             <div id="juguetesDisponiblesList" class="juguetes-disponibles">
                                 <p style="text-align: center; color: #64748b; padding: 20px;">
                                     Selecciona origen y destino para ver juguetes disponibles
                                 </p>
                             </div>
                         </div>
+                        
+                        <!-- Botón para generar plan -->
+                        <div class="form-group" style="margin-top: 15px;">
+                            <button type="button" class="btn-secondary" onclick="generarPlanMovimiento()" style="width: 100%; background: #6366f1; color: white;">
+                                <i class="fas fa-clipboard-list"></i> Ver Plan de Movimiento
+                            </button>
+                        </div>
+                        
+                        <!-- Plan de Movimiento -->
+                        <div id="planMovimientoContainer" style="display: none; margin-top: 20px; border: 2px dashed #6366f1; border-radius: 12px; padding: 20px; background: #f8fafc;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                                <h3 style="margin: 0; color: #6366f1;">
+                                    <i class="fas fa-clipboard-list"></i> Plan de Movimiento
+                                </h3>
+                                <button type="button" onclick="imprimirPlanMovimiento()" class="btn-secondary" style="background: #10b981; color: white; padding: 8px 16px;">
+                                    <i class="fas fa-print"></i> Imprimir
+                                </button>
+                            </div>
+                            <div id="planMovimientoContent">
+                                <!-- Contenido del plan se genera dinámicamente -->
+                            </div>
+                        </div>
+                        
                         <div id="abastecerErrorMessage" class="error-message" style="display: none;"></div>
                         <div id="abastecerSuccessMessage" class="success-message" style="display: none;"></div>
                         <button type="submit" class="btn-primary">
                             <i class="fas fa-truck"></i> Realizar Movimiento
                         </button>
                     </form>
+                </div>
+                
+                <!-- Vista de Planes de Movimiento -->
+                <div id="planesMovimientoView" style="display: none;">
+                    <h1><i class="fas fa-clipboard-list"></i> Planes de Movimiento</h1>
+                    
+                    <!-- Tabs -->
+                    <div class="planes-tabs" style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
+                        <button type="button" class="tab-btn active" id="tabPendientes" onclick="cambiarTabPlanes('pendientes')" style="padding: 10px 20px; border: none; background: #6366f1; color: white; border-radius: 8px 8px 0 0; cursor: pointer; font-weight: bold;">
+                            <i class="fas fa-clock"></i> Pendientes <span id="countPendientes" style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 5px;">0</span>
+                        </button>
+                        <button type="button" class="tab-btn" id="tabHistorial" onclick="cambiarTabPlanes('historial')" style="padding: 10px 20px; border: none; background: #e2e8f0; color: #64748b; border-radius: 8px 8px 0 0; cursor: pointer; font-weight: bold;">
+                            <i class="fas fa-history"></i> Historial
+                        </button>
+                    </div>
+                    
+                    <!-- Contenido de Pendientes -->
+                    <div id="planesPendientesContent" style="display: block;">
+                        <div id="listaPlanessPendientes" class="planes-list">
+                            <p style="text-align: center; color: #64748b; padding: 40px;">
+                                <i class="fas fa-clipboard-check" style="font-size: 48px; margin-bottom: 15px; display: block; opacity: 0.3;"></i>
+                                No hay planes de movimiento pendientes.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Contenido de Historial -->
+                    <div id="historialMovimientosContent" style="display: none;">
+                        <div class="filtros-historial" style="margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
+                            <div class="form-group" style="margin: 0;">
+                                <label style="font-size: 12px; color: #64748b;">Desde:</label>
+                                <input type="date" id="historialFechaDesde" class="form-input" style="padding: 8px;">
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <label style="font-size: 12px; color: #64748b;">Hasta:</label>
+                                <input type="date" id="historialFechaHasta" class="form-input" style="padding: 8px;">
+                            </div>
+                            <button type="button" onclick="filtrarHistorialMovimientos()" class="btn-secondary" style="margin-top: 18px; padding: 8px 16px;">
+                                <i class="fas fa-filter"></i> Filtrar
+                            </button>
+                        </div>
+                        <div id="listaHistorialMovimientos" class="planes-list">
+                            <p style="text-align: center; color: #64748b; padding: 40px;">
+                                <i class="fas fa-history" style="font-size: 48px; margin-bottom: 15px; display: block; opacity: 0.3;"></i>
+                                No hay movimientos en el historial.
+                            </p>
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- Vista de Análisis -->
@@ -937,9 +1059,9 @@
                             <h3>Total Empleados</h3>
                             <p id="totalEmpleadosAnalisis" class="stat-number">0</p>
                         </div>
-                        <div class="stat-card">
-                            <h3>Ganancias Totales</h3>
-                            <p id="gananciasTotales" class="stat-number">$0</p>
+                        <div class="stat-card ganancias-stat-card" style="grid-column: span 2; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white;">
+                            <h3 style="font-size: 20px; margin-bottom: 10px;">💰 Ganancias Totales</h3>
+                            <p id="gananciasTotales" class="stat-number" style="font-size: 36px; font-weight: bold;">$0</p>
                         </div>
                     </div>
                     
@@ -1023,6 +1145,89 @@
                     
                     <div id="analisisResults" class="analisis-results">
                         <!-- Los resultados se mostrarán aquí -->
+                    </div>
+                </div>
+
+                <!-- Vista de Ventas -->
+                <div id="ventasListView" style="display: none;">
+                    <h1><i class="fas fa-cash-register"></i> Historial de Ventas</h1>
+                    
+                    <!-- Resumen de ventas -->
+                    <div class="ventas-resumen" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px;">
+                        <div class="stat-card" style="background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); color: white; padding: 20px; border-radius: 12px;">
+                            <h3 style="font-size: 14px; margin-bottom: 5px;">📊 Total Ventas</h3>
+                            <p id="totalVentasCount" style="font-size: 28px; font-weight: bold; margin: 0;">0</p>
+                        </div>
+                        <div class="stat-card ganancias-destacada" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white; padding: 20px; border-radius: 12px; grid-column: span 2;">
+                            <h3 style="font-size: 14px; margin-bottom: 5px; opacity: 0.9;">💰 Ganancias Totales</h3>
+                            <p id="totalGananciasVentas" style="font-size: 36px; font-weight: bold; margin: 0;">$0</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Ganancias por método de pago -->
+                    <div class="metodos-pago-resumen" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 25px;">
+                        <div class="metodo-card" style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                            <p style="font-size: 12px; color: #64748b; margin: 0;">Efectivo</p>
+                            <p id="gananciasEfectivo" style="font-size: 18px; font-weight: bold; color: #1e293b; margin: 5px 0 0 0;">$0</p>
+                        </div>
+                        <div class="metodo-card" style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #8b5cf6;">
+                            <p style="font-size: 12px; color: #64748b; margin: 0;">Transferencia</p>
+                            <p id="gananciasTransferencia" style="font-size: 18px; font-weight: bold; color: #1e293b; margin: 5px 0 0 0;">$0</p>
+                        </div>
+                        <div class="metodo-card" style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                            <p style="font-size: 12px; color: #64748b; margin: 0;">Tarjeta</p>
+                            <p id="gananciasTarjeta" style="font-size: 18px; font-weight: bold; color: #1e293b; margin: 5px 0 0 0;">$0</p>
+                        </div>
+                        <div class="metodo-card" style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #10b981;">
+                            <p style="font-size: 12px; color: #64748b; margin: 0;">Otros</p>
+                            <p id="gananciasOtros" style="font-size: 18px; font-weight: bold; color: #1e293b; margin: 5px 0 0 0;">$0</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Barra de búsqueda -->
+                    <div class="ventas-filtros" style="margin-bottom: 20px;">
+                        <div class="search-box" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                            <input 
+                                type="text" 
+                                id="buscarVentaInput" 
+                                placeholder="Buscar por código, juguete, precio, método de pago..."
+                                class="form-input"
+                                style="flex: 1; min-width: 250px; padding: 12px 15px;"
+                                oninput="filtrarVentasLista()"
+                            >
+                            <select id="filtroMetodoPago" class="form-select" style="min-width: 150px;" onchange="filtrarVentasLista()">
+                                <option value="">Todos los métodos</option>
+                                <option value="efectivo">Efectivo</option>
+                                <option value="transferencia">Transferencia</option>
+                                <option value="tarjeta">Tarjeta</option>
+                            </select>
+                            <input type="date" id="filtroFechaDesde" class="form-input" style="width: 150px;" onchange="filtrarVentasLista()">
+                            <input type="date" id="filtroFechaHasta" class="form-input" style="width: 150px;" onchange="filtrarVentasLista()">
+                        </div>
+                    </div>
+                    
+                    <!-- Tabla de ventas -->
+                    <div class="ventas-tabla-container" style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden;">
+                        <table class="inventario-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Código Venta</th>
+                                    <th>Fecha</th>
+                                    <th>Juguete</th>
+                                    <th>Cantidad</th>
+                                    <th>Precio</th>
+                                    <th>Método</th>
+                                    <th>Empleado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ventasTableBody">
+                                <tr><td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">Cargando ventas...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Paginación -->
+                    <div id="ventasPaginacion" class="paginacion" style="margin-top: 20px; display: flex; justify-content: center; gap: 5px; flex-wrap: wrap;">
                     </div>
                 </div>
 
@@ -1411,7 +1616,7 @@
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/config.js"></script>
-    <script src="js/imgur-config.js"></script>
+    <script src="js/supabase-storage.js"></script>
     <!-- Modal para editar juguete -->
     <div id="editarJugueteModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; align-items: center; justify-content: center;">
         <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
@@ -1437,6 +1642,18 @@
                     <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Cantidad</label>
                     <input type="number" id="editarJugueteCantidad" required min="0"
                            style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Precio Mínimo *</label>
+                        <input type="number" id="editarJuguetePrecioMin" required min="0" step="0.01"
+                               style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Precio Máximo *</label>
+                        <input type="number" id="editarJuguetePrecioMax" required min="0" step="0.01"
+                               style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
+                    </div>
                 </div>
                 <div id="editarJugueteErrorMessage" style="display: none; padding: 12px; background: #fee2e2; color: #dc2626; border-radius: 6px; margin-bottom: 15px; font-size: 14px;"></div>
                 <div id="editarJugueteSuccessMessage" style="display: none; padding: 12px; background: #d1fae5; color: #059669; border-radius: 6px; margin-bottom: 15px; font-size: 14px;"></div>
