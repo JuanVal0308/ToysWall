@@ -359,10 +359,10 @@ window.cambiarPaginaClientes = function(pagina) {
 async function agregarCliente() {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
-        const nombre = document.getElementById('clienteNombre').value.trim();
-        const telefono = document.getElementById('clienteTelefono').value.trim();
-        const correo = document.getElementById('clienteCorreo').value.trim();
-        const direccion = document.getElementById('clienteDireccion').value.trim();
+        const nombre = document.getElementById('clienteNuevoNombre').value.trim();
+        const telefono = document.getElementById('clienteNuevoTelefono').value.trim();
+        const correo = document.getElementById('clienteNuevoCorreo').value.trim();
+        const direccion = document.getElementById('clienteNuevoDireccion').value.trim();
 
         if (!nombre) {
             showClienteMessage('El nombre es obligatorio', 'error');
@@ -773,10 +773,19 @@ window.abrirModalPago = async function(ventaId, clienteId) {
         document.getElementById('pagoModalTotal').value = `$${totalVenta.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
         document.getElementById('pagoModalPagado').value = `$${totalPagado.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
         document.getElementById('pagoModalPendiente').value = `$${pendiente.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-        document.getElementById('pagoModalMonto').max = pendiente;
-        document.getElementById('pagoModalMonto').value = '';
 
-        // Mostrar modal
+        const montoInput = document.getElementById('pagoModalMonto');
+        if (montoInput) {
+            montoInput.dataset.max = pendiente.toString();
+            montoInput.dataset.numericValue = '';
+            montoInput.value = '';
+        }
+
+        // Ocultar modal de ventas (si está abierto) y mostrar modal de pago encima
+        const ventasModal = document.getElementById('ventasClienteModal');
+        if (ventasModal) {
+            ventasModal.style.display = 'none';
+        }
         document.getElementById('pagoModal').style.display = 'flex';
     } catch (error) {
         console.error('Error al abrir modal de pago:', error);
@@ -790,7 +799,9 @@ async function registrarPago() {
         const user = JSON.parse(sessionStorage.getItem('user'));
         const ventaId = parseInt(document.getElementById('pagoModalVentaId').value);
         const clienteId = document.getElementById('pagoModalClienteId').value;
-        const monto = parseFloat(document.getElementById('pagoModalMonto').value);
+        const montoInput = document.getElementById('pagoModalMonto');
+        const montoRaw = (montoInput?.dataset.numericValue || montoInput?.value || '').toString().replace(/[^\d]/g, '');
+        const monto = parseFloat(montoRaw || '0');
         const metodoPago = document.getElementById('pagoModalMetodo').value;
 
         if (!ventaId || !monto || monto <= 0 || !metodoPago) {
@@ -800,7 +811,7 @@ async function registrarPago() {
 
         // Verificar que el monto no exceda el pendiente
         const pendienteText = document.getElementById('pagoModalPendiente').value;
-        const pendiente = parseFloat(pendienteText.replace(/[^0-9.]/g, ''));
+        const pendiente = parseFloat(pendienteText.replace(/[^\d]/g, '')) || 0;
         
         if (monto > pendiente) {
             showPagoModalMessage(`El monto no puede exceder el saldo pendiente ($${pendiente.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })})`, 'error');
@@ -838,6 +849,33 @@ async function registrarPago() {
         showPagoModalMessage('Error al registrar el pago: ' + error.message, 'error');
     }
 }
+
+// Formateo del campo de monto a pagar (permite escribir solo números y los muestra con puntos)
+document.addEventListener('DOMContentLoaded', function() {
+    const montoInput = document.getElementById('pagoModalMonto');
+    if (!montoInput) return;
+
+    montoInput.addEventListener('input', function(e) {
+        let value = e.target.value || '';
+        // Mantener solo dígitos
+        const numeric = value.replace(/[^\d]/g, '');
+
+        if (numeric === '') {
+            e.target.value = '';
+            e.target.dataset.numericValue = '';
+            return;
+        }
+
+        const num = parseInt(numeric, 10);
+        e.target.dataset.numericValue = num.toString();
+
+        // Mostrar con formato colombiano sin decimales (ej: 18244 -> 18.244)
+        e.target.value = num.toLocaleString('es-CO', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        });
+    });
+});
 
 // Función para mostrar mensajes en modal de pago
 function showPagoModalMessage(message, type) {

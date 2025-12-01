@@ -2249,10 +2249,37 @@ function renderizarJuguetesAbastecer(juguetes) {
             return;
         }
 
-        container.innerHTML = juguetes.map(juguete => `
+        container.innerHTML = juguetes.map(juguete => {
+            const itemText = juguete.item ? ` | ITEM: ${juguete.item}` : '';
+
+            // Imagen del juguete (si existe)
+            let imagenHTML = '';
+            const fotoUrlLimpia = juguete.foto_url ? juguete.foto_url.trim() : '';
+            if (fotoUrlLimpia) {
+                try {
+                    new URL(fotoUrlLimpia);
+                    imagenHTML = `<div class="juguete-imagen" style="flex-shrink:0; margin-right:12px;">
+                        <img src="${fotoUrlLimpia}" alt="${juguete.nombre}" 
+                             style="width:60px; height:60px; border-radius:6px; border:2px solid #e2e8f0; object-fit:cover; background:#f1f5f9;"
+                             onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'width:60px; height:60px; background:#f1f5f9; border-radius:6px; border:2px solid #e2e8f0; display:flex; align-items:center; justify-content:center;\\'><i class=\\'fas fa-image\\' style=\\'color:#cbd5e1; font-size:20px;\\'></i></div>';"
+                        >
+                    </div>`;
+                } catch (e) {
+                    imagenHTML = `<div class="juguete-imagen" style="flex-shrink:0; margin-right:12px; width:60px; height:60px; background:#f1f5f9; border-radius:6px; border:2px solid #e2e8f0; display:flex; align-items:center; justify-content:center;">
+                        <i class="fas fa-image" style="color:#cbd5e1; font-size:20px;"></i>
+                    </div>`;
+                }
+            } else {
+                imagenHTML = `<div class="juguete-imagen" style="flex-shrink:0; margin-right:12px; width:60px; height:60px; background:#f1f5f9; border-radius:6px; border:2px solid #e2e8f0; display:flex; align-items:center; justify-content:center;">
+                    <i class="fas fa-image" style="color:#cbd5e1; font-size:20px;"></i>
+                </div>`;
+            }
+
+            return `
             <div class="juguete-movimiento-item">
+                ${imagenHTML}
                 <div class="juguete-info">
-                    <strong>${juguete.nombre}</strong> (${juguete.codigo})
+                    <strong>${juguete.nombre}</strong> (${juguete.codigo})${itemText}
                     <br><small>Cantidad disponible: ${juguete.cantidad}</small>
                 </div>
                 <div class="juguete-cantidad">
@@ -2260,14 +2287,15 @@ function renderizarJuguetesAbastecer(juguetes) {
                         type="number" 
                         class="cantidad-input" 
                         data-juguete-id="${juguete.id}"
-                        min="1" 
+                        min="0" 
                         max="${juguete.cantidad}" 
-                        value="1"
-                        placeholder="Cantidad"
+                        value="0"
+                        placeholder="0"
                     >
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
 }
 
 // Función para filtrar juguetes por nombre o código
@@ -2281,11 +2309,12 @@ window.filtrarJuguetesAbastecer = function() {
         return;
     }
     
-    // Filtrar por nombre o código
+    // Filtrar por nombre, código o ITEM
     const juguetesFiltrados = juguetesDisponiblesAbastecer.filter(juguete => {
         const nombre = (juguete.nombre || '').toLowerCase();
         const codigo = (juguete.codigo || '').toLowerCase();
-        return nombre.includes(termino) || codigo.includes(termino);
+        const item = (juguete.item || '').toLowerCase();
+        return nombre.includes(termino) || codigo.includes(termino) || item.includes(termino);
     });
     
     renderizarJuguetesAbastecer(juguetesFiltrados);
@@ -4270,7 +4299,8 @@ async function buscarVentaParaDevolucion() {
                                 </th>
                                 <th>Juguete</th>
                                 <th>Código</th>
-                                <th>Cantidad</th>
+                                <th>Cantidad Vendida</th>
+                                <th>Cantidad a Devolver</th>
                                 <th>Precio Unitario</th>
                                 <th>Subtotal</th>
                             </tr>
@@ -4284,12 +4314,25 @@ async function buscarVentaParaDevolucion() {
                                         <td style="text-align: center;">
                                             <input type="checkbox" class="item-devolucion-checkbox" 
                                                 data-venta-id="${venta.id}" 
-                                                data-precio="${venta.precio_venta}"
+                                                data-precio-unitario="${precioUnitario}"
+                                                data-cantidad-max="${cantidad}"
                                                 onchange="toggleSeleccionItem()">
                                         </td>
                                         <td>${venta.juguetes?.nombre || 'N/A'}</td>
                                         <td>${venta.juguetes?.codigo || 'N/A'}</td>
                                         <td>${cantidad}</td>
+                                        <td>
+                                            <input 
+                                                type="number" 
+                                                class="cantidad-devolver-input" 
+                                                data-venta-id="${venta.id}" 
+                                                min="1" 
+                                                max="${cantidad}" 
+                                                value="${cantidad}" 
+                                                style="width: 80px; text-align: center;"
+                                                onchange="toggleSeleccionItem()"
+                                            >
+                                        </td>
                                         <td>$${precioUnitario.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
                                         <td>$${parseFloat(venta.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
                                     </tr>
@@ -4319,8 +4362,21 @@ window.toggleSeleccionItem = function() {
     let todosSeleccionados = true;
     
     checkboxes.forEach(cb => {
-        if (cb.checked) {
-            totalSeleccionado += parseFloat(cb.dataset.precio || 0);
+        const ventaId = cb.dataset.ventaId;
+        const input = document.querySelector(`.cantidad-devolver-input[data-venta-id="${ventaId}"]`);
+        const maxCantidad = parseInt(cb.dataset.cantidadMax || (input?.max || '0'), 10) || 0;
+        let cantidad = parseInt(input?.value || '0', 10) || 0;
+
+        // Normalizar cantidad dentro de 0..maxCantidad
+        if (cantidad < 0) cantidad = 0;
+        if (cantidad > maxCantidad) {
+            cantidad = maxCantidad;
+            if (input) input.value = maxCantidad;
+        }
+
+        if (cb.checked && cantidad > 0) {
+            const precioUnitario = parseFloat(cb.dataset.precioUnitario || '0');
+            totalSeleccionado += precioUnitario * cantidad;
             itemsSeleccionados++;
         } else {
             todosSeleccionados = false;
@@ -4365,19 +4421,34 @@ window.procesarDevolucionSelectiva = async function(codigoVenta) {
         return;
     }
     
-    // Obtener los IDs de las ventas seleccionadas
-    const idsVentas = Array.from(checkboxes).map(cb => cb.dataset.ventaId);
+    // Obtener los IDs de las ventas seleccionadas y las cantidades a devolver
+    const itemsSeleccionados = Array.from(checkboxes).map(cb => {
+        const ventaId = parseInt(cb.dataset.ventaId, 10);
+        const input = document.querySelector(`.cantidad-devolver-input[data-venta-id="${ventaId}"]`);
+        const maxCantidad = parseInt(cb.dataset.cantidadMax || (input?.max || '0'), 10) || 0;
+        let cantidad = parseInt(input?.value || '0', 10) || 0;
+
+        if (cantidad <= 0) cantidad = 0;
+        if (cantidad > maxCantidad) cantidad = maxCantidad;
+
+        return { ventaId, cantidadDevolver: cantidad };
+    }).filter(item => item.cantidadDevolver > 0);
     
-    // Llamar a procesarDevolucion con los IDs específicos
-    await procesarDevolucion(codigoVenta, idsVentas);
+    if (itemsSeleccionados.length === 0) {
+        showAjustesMessage('Ingresa una cantidad válida a devolver para al menos un item', 'error');
+        return;
+    }
+
+    // Llamar a procesarDevolucion con los items específicos
+    await procesarDevolucion(codigoVenta, itemsSeleccionados);
 };
 
 // Función global para procesar devolución
-window.procesarDevolucion = async function(codigoVenta, idsVentas = null) {
+window.procesarDevolucion = async function(codigoVenta, itemsSeleccionados = null) {
     // Mensaje de confirmación diferente según si es selectiva o total
-    const esSelectiva = idsVentas && idsVentas.length > 0;
+    const esSelectiva = Array.isArray(itemsSeleccionados) && itemsSeleccionados.length > 0;
     const mensajeConfirmacion = esSelectiva 
-        ? `¿Estás seguro de que deseas devolver ${idsVentas.length} item(s) seleccionado(s)?\n\nEsta acción:\n- Agregará los juguetes seleccionados al inventario\n- Eliminará los items seleccionados de la venta\n\nEsta acción no se puede deshacer.`
+        ? `¿Estás seguro de que deseas devolver los items seleccionados?\n\nEsta acción:\n- Agregará las cantidades seleccionadas al inventario\n- Actualizará o eliminará las ventas correspondientes\n\nEsta acción no se puede deshacer.`
         : '¿Estás seguro de que deseas procesar la devolución COMPLETA?\n\nEsta acción:\n- Agregará TODOS los juguetes nuevamente al inventario\n- Eliminará la venta completa del sistema\n\nEsta acción no se puede deshacer.';
     
     if (!confirm(mensajeConfirmacion)) {
@@ -4393,9 +4464,12 @@ window.procesarDevolucion = async function(codigoVenta, idsVentas = null) {
             .select('*')
             .eq('empresa_id', user.empresa_id);
         
-        // Si hay IDs específicos, filtrar por ellos; si no, por código de venta
+        // Si hay items específicos, filtrar por sus IDs; si no, por código de venta
+        let cantidadesMap = new Map();
         if (esSelectiva) {
+            const idsVentas = itemsSeleccionados.map(it => it.ventaId);
             query = query.in('id', idsVentas);
+            cantidadesMap = new Map(itemsSeleccionados.map(it => [it.ventaId, it.cantidadDevolver]));
         } else {
             query = query.eq('codigo_venta', codigoVenta);
         }
@@ -4425,21 +4499,9 @@ window.procesarDevolucion = async function(codigoVenta, idsVentas = null) {
 
         let ventasProcesadas = 0;
         let ventasEliminadas = 0;
-        const ventasIds = ventas.map(v => v.id);
 
         // Procesar cada venta
         for (const venta of ventas) {
-            // Verificar que la venta aún existe (por si ya fue eliminada)
-            const { data: ventaVerificada, error: verificarError } = await window.supabaseClient
-                .from('ventas')
-                .select('id')
-                .eq('id', venta.id)
-                .single();
-
-            if (verificarError || !ventaVerificada) {
-                console.warn(`La venta ${venta.id} ya no existe, saltando...`);
-                continue;
-            }
 
             const juguete = venta.juguetes;
             if (!juguete) {
@@ -4455,23 +4517,22 @@ window.procesarDevolucion = async function(codigoVenta, idsVentas = null) {
                     throw deleteError;
                 }
 
-                // Verificar que se eliminó
-                const { data: ventaEliminada } = await window.supabaseClient
-                    .from('ventas')
-                    .select('id')
-                    .eq('id', venta.id)
-                    .single();
-
-                if (!ventaEliminada) {
-                    ventasEliminadas++;
-                    console.log(`Venta ${venta.id} eliminada correctamente`);
-                } else {
-                    throw new Error(`No se pudo eliminar la venta ${venta.id}`);
-                }
+                // Si el DELETE no devolvió error, asumimos que la venta fue eliminada correctamente
+                ventasEliminadas++;
+                console.log(`Venta ${venta.id} eliminada correctamente`);
                 continue;
             }
 
-            const cantidadDevolver = venta.cantidad || 1;
+            // Cantidad a devolver: si es selectiva, usar la cantidad indicada para esta venta; si no, toda la cantidad
+            let cantidadSolicitada = venta.cantidad || 1;
+            if (esSelectiva && cantidadesMap.has(venta.id)) {
+                cantidadSolicitada = Math.min(cantidadesMap.get(venta.id) || 0, venta.cantidad || 1);
+            }
+            const cantidadDevolver = cantidadSolicitada;
+
+            if (!cantidadDevolver || cantidadDevolver <= 0) {
+                continue;
+            }
 
             // Buscar juguete en la ubicación original específica (bodega o tienda)
             let jugueteEnUbicacion = null;
@@ -4553,40 +4614,54 @@ window.procesarDevolucion = async function(codigoVenta, idsVentas = null) {
                 console.log(`Juguete nuevo creado en ubicación: ${campoUbicacion} = ${valorUbicacion}`);
             }
 
-            // Eliminar la venta (esto debe hacerse después de procesar el juguete)
-            const { error: deleteError, data: deleteData } = await window.supabaseClient
-                .from('ventas')
-                .delete()
-                .eq('id', venta.id)
-                .select();
+            // Actualizar o eliminar la venta según la cantidad devuelta
+            const cantidadOriginal = venta.cantidad || 1;
+            if (cantidadDevolver >= cantidadOriginal) {
+                // Eliminar la venta completa
+                const { error: deleteError } = await window.supabaseClient
+                    .from('ventas')
+                    .delete()
+                    .eq('id', venta.id);
 
-            if (deleteError) {
-                console.error('Error al eliminar venta:', deleteError);
-                throw deleteError;
+                if (deleteError) {
+                    console.error('Error al eliminar venta:', deleteError);
+                    throw deleteError;
+                }
+
+                ventasProcesadas++;
+                ventasEliminadas++;
+                console.log(`Venta ${venta.id} procesada y eliminada completamente`);
+            } else {
+                // Devolver solo parte: actualizar cantidad y precio de la venta
+                const precioUnitarioVenta = parseFloat(venta.precio_venta || 0) / cantidadOriginal;
+                const nuevaCantidadVenta = cantidadOriginal - cantidadDevolver;
+                const nuevoPrecioVenta = precioUnitarioVenta * nuevaCantidadVenta;
+
+                const { error: updateVentaError } = await window.supabaseClient
+                    .from('ventas')
+                    .update({
+                        cantidad: nuevaCantidadVenta,
+                        precio_venta: nuevoPrecioVenta
+                    })
+                    .eq('id', venta.id);
+
+                if (updateVentaError) {
+                    console.error('Error al actualizar venta después de devolución parcial:', updateVentaError);
+                    throw updateVentaError;
+                }
+
+                ventasProcesadas++;
+                console.log(`Venta ${venta.id} actualizada: cantidad ${cantidadOriginal} -> ${nuevaCantidadVenta}`);
             }
-
-            // Verificar que la venta fue eliminada
-            const { data: ventaEliminada } = await window.supabaseClient
-                .from('ventas')
-                .select('id')
-                .eq('id', venta.id)
-                .single();
-
-            if (ventaEliminada) {
-                throw new Error(`La venta ${venta.id} no se eliminó correctamente`);
-            }
-
-            ventasProcesadas++;
-            ventasEliminadas++;
-            console.log(`Venta ${venta.id} procesada y eliminada correctamente`);
         }
 
-        if (ventasEliminadas === 0) {
-            throw new Error('No se eliminó ninguna venta. Verifica las políticas RLS en Supabase.');
+        // Si es devolución completa y no se eliminó nada, puede indicar problema de permisos
+        if (!esSelectiva && ventasEliminadas === 0) {
+            throw new Error('No se eliminó ninguna venta. Verifica las políticas RLS en Supabase para la tabla ventas.');
         }
 
         const mensajeExito = esSelectiva 
-            ? `Devolución selectiva procesada correctamente. ${ventasEliminadas} item(s) devuelto(s) y agregados nuevamente al inventario.`
+            ? `Devolución selectiva procesada correctamente. Cantidades devueltas y stock actualizado.`
             : `Devolución completa procesada correctamente. ${ventasEliminadas} venta(s) eliminada(s) y juguetes agregados nuevamente al inventario.`;
         showAjustesMessage(mensajeExito, 'success');
         

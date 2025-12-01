@@ -88,3 +88,4 @@ python scripts/excel_to_sql.py "Inventario 2025 1.xlsx" 1
 Este script generará INSERT statements que incluyen los campos de bultos si están presentes en el Excel.
 
 
+

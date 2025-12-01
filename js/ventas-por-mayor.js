@@ -255,7 +255,7 @@ function initVentaPorMayor() {
         const metodoPago = document.getElementById('ventaPorMayorMetodoPago').value;
 
         if (!codigoJuguete || !codigoEmpleado || !metodoPago) {
-            showVentaPorMayorMessage('Por favor, completa todos los campos', 'error');
+            showVentaPorMayorMessage('Por favor, completa código de juguete, código de empleado y método de pago para agregar el item', 'error');
             return;
         }
 
@@ -321,20 +321,17 @@ function initVentaPorMayor() {
                 metodo_pago: metodoPago
             });
 
-            // Limpiar campo ITEM también
+            // Actualizar lista de items en pantalla
+            updateVentaPorMayorItemsList();
+            
+            // Limpiar solo campos del juguete y cantidad; mantener empleado, cliente y método de pago
             if (jugueteItemInput) {
                 jugueteItemInput.value = '';
             }
-
-            updateVentaPorMayorItemsList();
-            
-            // Limpiar campos
             jugueteCodigoInput.value = '';
-            empleadoCodigoInput.value = '';
             document.getElementById('ventaPorMayorCantidad').value = '1';
-            document.getElementById('ventaPorMayorMetodoPago').value = '';
-            document.getElementById('juguetePorMayorInfo').style.display = 'none';
-            document.getElementById('empleadoPorMayorInfo').style.display = 'none';
+            const jugueteInfo = document.getElementById('juguetePorMayorInfo');
+            if (jugueteInfo) jugueteInfo.style.display = 'none';
             
             showVentaPorMayorMessage('Item agregado correctamente', 'success');
         } catch (error) {

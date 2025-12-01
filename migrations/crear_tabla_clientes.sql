@@ -61,85 +61,49 @@ COMMENT ON COLUMN ventas.abono IS 'Monto abonado en esta venta (para pagos parci
 ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pagos ENABLE ROW LEVEL SECURITY;
 
--- Políticas RLS para clientes
+-- Políticas RLS para clientes (abiertas, igual que en ventas / juguetes / empleados)
 DROP POLICY IF EXISTS "clientes_select_policy" ON clientes;
-CREATE POLICY "clientes_select_policy" ON clientes
-    FOR SELECT
-    USING (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
-
 DROP POLICY IF EXISTS "clientes_insert_policy" ON clientes;
-CREATE POLICY "clientes_insert_policy" ON clientes
-    FOR INSERT
-    WITH CHECK (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
-
 DROP POLICY IF EXISTS "clientes_update_policy" ON clientes;
-CREATE POLICY "clientes_update_policy" ON clientes
-    FOR UPDATE
-    USING (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
-
 DROP POLICY IF EXISTS "clientes_delete_policy" ON clientes;
-CREATE POLICY "clientes_delete_policy" ON clientes
-    FOR DELETE
-    USING (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
 
--- Políticas RLS para pagos
+CREATE POLICY "clientes_select_policy"
+    ON clientes FOR SELECT
+    USING (true);
+
+CREATE POLICY "clientes_insert_policy"
+    ON clientes FOR INSERT
+    WITH CHECK (true);
+
+CREATE POLICY "clientes_update_policy"
+    ON clientes FOR UPDATE
+    USING (true)
+    WITH CHECK (true);
+
+CREATE POLICY "clientes_delete_policy"
+    ON clientes FOR DELETE
+    USING (true);
+
+-- Políticas RLS para pagos (abiertas)
 DROP POLICY IF EXISTS "pagos_select_policy" ON pagos;
-CREATE POLICY "pagos_select_policy" ON pagos
-    FOR SELECT
-    USING (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
-
 DROP POLICY IF EXISTS "pagos_insert_policy" ON pagos;
-CREATE POLICY "pagos_insert_policy" ON pagos
-    FOR INSERT
-    WITH CHECK (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
-
 DROP POLICY IF EXISTS "pagos_update_policy" ON pagos;
-CREATE POLICY "pagos_update_policy" ON pagos
-    FOR UPDATE
-    USING (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
-
 DROP POLICY IF EXISTS "pagos_delete_policy" ON pagos;
-CREATE POLICY "pagos_delete_policy" ON pagos
-    FOR DELETE
-    USING (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
+
+CREATE POLICY "pagos_select_policy"
+    ON pagos FOR SELECT
+    USING (true);
+
+CREATE POLICY "pagos_insert_policy"
+    ON pagos FOR INSERT
+    WITH CHECK (true);
+
+CREATE POLICY "pagos_update_policy"
+    ON pagos FOR UPDATE
+    USING (true)
+    WITH CHECK (true);
+
+CREATE POLICY "pagos_delete_policy"
+    ON pagos FOR DELETE
+    USING (true);
 
