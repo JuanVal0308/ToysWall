@@ -365,6 +365,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         analisisView.style.display = 'none';
         ajustesView.style.display = 'none';
         
+        // Ocultar vistas nuevas
+        const ventaPorMayorView = document.getElementById('ventaPorMayorView');
+        if (ventaPorMayorView) ventaPorMayorView.style.display = 'none';
+        const inventarioDetalleView = document.getElementById('inventarioDetalleView');
+        if (inventarioDetalleView) inventarioDetalleView.style.display = 'none';
+        
         // Verificar permisos para empleados (pueden acceder a Dashboard, Registrar Venta, Inventario, Ajustes y Análisis)
         if (isEmpleado && viewName !== 'default' && viewName !== 'venta' && viewName !== 'facturar' && viewName !== 'inventario' && viewName !== 'ajustes' && viewName !== 'analisis') {
             alert('No tienes permisos para acceder a esta sección');
@@ -378,6 +384,15 @@ document.addEventListener('DOMContentLoaded', async function() {
                 // initRegistrarVenta ya se inicializa al cargar la página
                 if (typeof updateVentaItemsList === 'function') {
                     updateVentaItemsList();
+                }
+                break;
+            case 'ventaPorMayor':
+                const ventaPorMayorView = document.getElementById('ventaPorMayorView');
+                if (ventaPorMayorView) {
+                    ventaPorMayorView.style.display = 'block';
+                    if (typeof initVentaPorMayor === 'function') {
+                        initVentaPorMayor();
+                    }
                 }
                 break;
             case 'facturar':
@@ -397,6 +412,12 @@ document.addEventListener('DOMContentLoaded', async function() {
                     inventarioView.style.display = 'block';
                     loadInventario();
                 break;
+            case 'inventarioDetalle':
+                inventarioDetalleView.style.display = 'block';
+                if (typeof loadInventarioDetalle === 'function') {
+                    loadInventarioDetalle();
+                }
+                break;
             case 'bodegas':
                 if (isAdmin) {
                     bodegasView.style.display = 'block';
@@ -406,9 +427,32 @@ document.addEventListener('DOMContentLoaded', async function() {
             case 'tiendas':
                 if (isAdmin) {
                     tiendasView.style.display = 'block';
+                    // Inicializar acordeón primero
+                    if (typeof initAgregarTiendaAccordion === 'function') {
+                        initAgregarTiendaAccordion();
+                    } else {
+                        // Fallback: inicializar directamente
+                        setTimeout(() => {
+                            const agregarTiendaHeader = document.getElementById('agregarTiendaHeader');
+                            const agregarTiendaContent = document.getElementById('agregarTiendaContent');
+                            if (agregarTiendaHeader && agregarTiendaContent && !agregarTiendaHeader.hasAttribute('data-listener-added')) {
+                                agregarTiendaHeader.setAttribute('data-listener-added', 'true');
+                                agregarTiendaHeader.addEventListener('click', function() {
+                                    agregarTiendaContent.classList.toggle('active');
+                                    const icon = agregarTiendaHeader.querySelector('.accordion-icon');
+                                    if (icon) {
+                                        icon.classList.toggle('fa-chevron-down');
+                                        icon.classList.toggle('fa-chevron-up');
+                                    }
+                                });
+                            }
+                        }, 100);
+                    }
+                    // Cargar tiendas
                     if (typeof loadTiendas === 'function') {
                         loadTiendas();
                     }
+                    // Configurar formulario
                     if (typeof setupTiendaForm === 'function') {
                         setupTiendaForm();
                     }
@@ -933,26 +977,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         try {
-                // Primero verificar si existe un juguete con el mismo código pero diferente nombre
-                const { data: jugueteConMismoCodigo } = await window.supabaseClient
-                    .from('juguetes')
-                    .select('nombre')
-                    .eq('codigo', codigo)
-                    .eq('empresa_id', user.empresa_id)
-                    .neq('nombre', nombre)
-                    .limit(1);
-                
-                if (jugueteConMismoCodigo && jugueteConMismoCodigo.length > 0) {
-                    showJugueteMessage(`Error: El código "${codigo}" ya está asignado a otro juguete con nombre diferente. El código debe ser único por tipo de juguete.`, 'error');
-                    return;
-                }
-                
-                // Verificar si ya existe un juguete con el mismo código Y nombre en la misma bodega
+                // Verificar si ya existe un juguete con el mismo código en la misma ubicación
+                // Nota: Ahora permitimos nombres duplicados, solo verificamos código + ubicación
                 const { data: jugueteExistenteData } = await window.supabaseClient
                     .from('juguetes')
                     .select('*')
                     .eq('codigo', codigo)
-                    .eq('nombre', nombre)
                     .eq('empresa_id', user.empresa_id)
                     .eq('bodega_id', currentBodegaId)
                     .limit(1);
@@ -1117,14 +1147,117 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     // Configurar autocompletado para formulario de agregar juguete
+    // Función para convertir URL de Imgur a formato directo de imagen
+    function convertirUrlImgur(url) {
+        if (!url || !url.trim()) return url;
+        
+        const urlLimpia = url.trim();
+        
+        // Si ya es una URL directa de imagen (i.imgur.com), devolverla tal cual
+        if (urlLimpia.includes('i.imgur.com/')) {
+            return urlLimpia;
+        }
+        
+        // Si es una URL de álbum (imgur.com/a/xxx), intentar convertir
+        const matchAlbum = urlLimpia.match(/imgur\.com\/a\/([a-zA-Z0-9]+)/i);
+        if (matchAlbum) {
+            // Para álbumes de Imgur, intentar con formato de imagen directa
+            // Nota: Esto puede no funcionar para todos los álbumes, pero es un intento
+            const albumId = matchAlbum[1];
+            // Intentar con diferentes extensiones comunes
+            return `https://i.imgur.com/${albumId}.jpg`;
+        }
+        
+        // Si es una URL de imagen (imgur.com/xxx), convertir a i.imgur.com/xxx.jpg
+        const matchImagen = urlLimpia.match(/imgur\.com\/([a-zA-Z0-9]+)/i);
+        if (matchImagen) {
+            return `https://i.imgur.com/${matchImagen[1]}.jpg`;
+        }
+        
+        // Si no coincide con ningún patrón, devolver la URL original
+        return urlLimpia;
+    }
+    
     function configurarAutocompletadoJuguete() {
         const nombreInput = document.getElementById('jugueteNombreInput');
         const codigoInput = document.getElementById('jugueteCodigoInput');
+        const precioMinInput = document.getElementById('juguetePrecioMinInput');
+        const fotoUrlInput = document.getElementById('jugueteFotoUrlInput');
         
         if (!nombreInput || !codigoInput) return;
         
         let timeoutNombre = null;
         let timeoutCodigo = null;
+        
+        // Función para autocompletar todos los campos excepto cantidad y ubicación
+        function autocompletarCampos(juguete) {
+            if (juguete.codigo) {
+                codigoInput.value = juguete.codigo;
+            }
+            if (juguete.nombre) {
+                nombreInput.value = juguete.nombre;
+            }
+            if (juguete.precio_min !== null && juguete.precio_min !== undefined && precioMinInput) {
+                const precioFormateado = juguete.precio_min.toLocaleString('es-CO', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0
+                });
+                precioMinInput.value = precioFormateado;
+                precioMinInput.dataset.numericValue = juguete.precio_min;
+            }
+            if (juguete.precio_por_mayor !== null && juguete.precio_por_mayor !== undefined) {
+                const precioPorMayorInput = document.getElementById('juguetePrecioPorMayorInput');
+                if (precioPorMayorInput) {
+                    const precioFormateado = juguete.precio_por_mayor.toLocaleString('es-CO', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0
+                    });
+                    precioPorMayorInput.value = precioFormateado;
+                    precioPorMayorInput.dataset.numericValue = juguete.precio_por_mayor;
+                }
+            }
+            if (juguete.item) {
+                const itemInput = document.getElementById('jugueteItemInput');
+                if (itemInput) {
+                    itemInput.value = juguete.item;
+                }
+            }
+            if (juguete.foto_url && fotoUrlInput) {
+                const fotoUrlConvertida = convertirUrlImgur(juguete.foto_url);
+                fotoUrlInput.value = fotoUrlConvertida;
+                // Actualizar campo hidden también
+                const jugueteFotoUrl = document.getElementById('jugueteFotoUrl');
+                if (jugueteFotoUrl) {
+                    jugueteFotoUrl.value = fotoUrlConvertida;
+                }
+            }
+            // Autocompletar campos de bultos si existen
+            if (juguete.numero_bultos !== null && juguete.numero_bultos !== undefined) {
+                const numeroBultosInput = document.getElementById('jugueteNumeroBultosInput');
+                if (numeroBultosInput) {
+                    numeroBultosInput.value = juguete.numero_bultos;
+                }
+            }
+            if (juguete.cantidad_por_bulto !== null && juguete.cantidad_por_bulto !== undefined) {
+                const cantidadPorBultoInput = document.getElementById('jugueteCantidadPorBultoInput');
+                if (cantidadPorBultoInput) {
+                    cantidadPorBultoInput.value = juguete.cantidad_por_bulto;
+                }
+            }
+            // Mostrar vista previa de foto si existe
+            if (juguete.foto_url && fotoUrlInput) {
+                const fotoUrlConvertida = convertirUrlImgur(juguete.foto_url);
+                const fotoPreview = document.getElementById('fotoPreview');
+                const fotoPreviewImg = document.getElementById('fotoPreviewImg');
+                if (fotoPreviewImg && fotoPreview) {
+                    fotoPreviewImg.src = fotoUrlConvertida;
+                    fotoPreview.style.display = 'block';
+                    fotoPreviewImg.onerror = function() {
+                        fotoPreview.style.display = 'none';
+                    };
+                }
+            }
+        }
         
         // Autocompletar código cuando se ingresa nombre
         nombreInput.addEventListener('input', async function() {
@@ -1141,19 +1274,19 @@ document.addEventListener('DOMContentLoaded', async function() {
                     const user = JSON.parse(sessionStorage.getItem('user'));
                     const { data: juguetes, error } = await window.supabaseClient
                         .from('juguetes')
-                        .select('codigo, nombre')
+                        .select('codigo, nombre, precio_min, precio_por_mayor, item, foto_url')
                         .eq('empresa_id', user.empresa_id)
                         .ilike('nombre', nombre)
                         .limit(1);
                     
                     if (error) throw error;
                     
-                    // Si hay un resultado, autocompletar el código
+                    // Si hay un resultado, autocompletar todos los campos
                     if (juguetes && juguetes.length > 0) {
                         const juguete = juguetes[0];
                         // Solo autocompletar si el nombre coincide exactamente (ignorando mayúsculas)
                         if (juguete.nombre.toLowerCase().trim() === nombre.toLowerCase().trim()) {
-                            codigoInput.value = juguete.codigo;
+                            autocompletarCampos(juguete);
                         }
                     }
                 } catch (error) {
@@ -1177,19 +1310,19 @@ document.addEventListener('DOMContentLoaded', async function() {
                     const user = JSON.parse(sessionStorage.getItem('user'));
                     const { data: juguetes, error } = await window.supabaseClient
                         .from('juguetes')
-                        .select('codigo, nombre')
+                        .select('codigo, nombre, precio_min, precio_por_mayor, item, foto_url')
                         .eq('empresa_id', user.empresa_id)
                         .ilike('codigo', codigo)
                         .limit(1);
                     
                     if (error) throw error;
                     
-                    // Si hay un resultado, autocompletar el nombre
+                    // Si hay un resultado, autocompletar todos los campos
                     if (juguetes && juguetes.length > 0) {
                         const juguete = juguetes[0];
                         // Solo autocompletar si el código coincide exactamente (ignorando mayúsculas)
                         if (juguete.codigo.toLowerCase().trim() === codigo.toLowerCase().trim()) {
-                            nombreInput.value = juguete.nombre;
+                            autocompletarCampos(juguete);
                         }
                     }
                 } catch (error) {
@@ -1205,43 +1338,163 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Configurar autocompletado
         configurarAutocompletadoJuguete();
         
-        // Configurar botón de subir foto a Imgur
-        const subirFotoBtn = document.getElementById('subirFotoBtn');
-        const jugueteFotoInput = document.getElementById('jugueteFotoInput');
-        const jugueteFotoUrl = document.getElementById('jugueteFotoUrl');
-        const jugueteFotoUrlInput = document.getElementById('jugueteFotoUrlInput');
-        const fotoPreview = document.getElementById('fotoPreview');
-        const fotoPreviewImg = document.getElementById('fotoPreviewImg');
-        const fotoUrlText = document.getElementById('fotoUrlText');
-        
-        // Función para actualizar la URL y vista previa
-        function actualizarFotoUrl(url) {
-            jugueteFotoUrl.value = url;
-            if (jugueteFotoUrlInput) {
-                jugueteFotoUrlInput.value = url;
-            }
-            fotoPreviewImg.src = url;
-            fotoUrlText.textContent = url;
-            fotoPreview.style.display = 'block';
-        }
-        
-        // Manejar input de URL manual
-        if (jugueteFotoUrlInput) {
-            jugueteFotoUrlInput.addEventListener('input', function() {
-                const url = this.value.trim();
-                if (url) {
-                    jugueteFotoUrl.value = url;
-                    fotoPreviewImg.src = url;
-                    fotoUrlText.textContent = url;
-                    fotoPreview.style.display = 'block';
-                } else {
-                    jugueteFotoUrl.value = '';
-                    fotoPreview.style.display = 'none';
+        // Configurar formato de precio mínimo con separadores de miles
+        const juguetePrecioMinInput = document.getElementById('juguetePrecioMinInput');
+        if (juguetePrecioMinInput) {
+            juguetePrecioMinInput.addEventListener('input', function(e) {
+                let value = e.target.value;
+                // Remover todos los caracteres que no sean números
+                const numericValue = value.replace(/[^\d]/g, '');
+                
+                if (numericValue === '') {
+                    e.target.value = '';
+                    e.target.dataset.numericValue = '';
+                    return;
+                }
+                
+                // Guardar el valor numérico
+                const numValue = parseInt(numericValue);
+                e.target.dataset.numericValue = numValue;
+                
+                // Formatear con separadores de miles
+                const formatted = numValue.toLocaleString('es-CO', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0
+                });
+                
+                // Actualizar el valor mostrado
+                e.target.value = formatted;
+            });
+            
+            // Al hacer blur, asegurar que el valor esté formateado
+            juguetePrecioMinInput.addEventListener('blur', function(e) {
+                const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
+                if (numericValue && numericValue !== '') {
+                    const numValue = parseInt(numericValue);
+                    e.target.value = numValue.toLocaleString('es-CO', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0
+                    });
+                    e.target.dataset.numericValue = numValue;
+                }
+            });
+            
+            // Al hacer focus, mantener el valor formateado
+            juguetePrecioMinInput.addEventListener('focus', function(e) {
+                const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
+                if (numericValue && numericValue !== '') {
+                    const numValue = parseInt(numericValue);
+                    e.target.value = numValue.toLocaleString('es-CO', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0
+                    });
                 }
             });
         }
         
-        if (subirFotoBtn && jugueteFotoInput) {
+        // Configurar formato de precio al por mayor con separadores de miles
+        const juguetePrecioPorMayorInput = document.getElementById('juguetePrecioPorMayorInput');
+        if (juguetePrecioPorMayorInput) {
+            juguetePrecioPorMayorInput.addEventListener('input', function(e) {
+                let value = e.target.value;
+                // Remover todos los caracteres que no sean números
+                const numericValue = value.replace(/[^\d]/g, '');
+                
+                if (numericValue === '') {
+                    e.target.value = '';
+                    e.target.dataset.numericValue = '';
+                    return;
+                }
+                
+                // Guardar el valor numérico
+                const numValue = parseInt(numericValue);
+                e.target.dataset.numericValue = numValue;
+                
+                // Formatear con separadores de miles
+                const formatted = numValue.toLocaleString('es-CO', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0
+                });
+                
+                // Actualizar el valor mostrado
+                e.target.value = formatted;
+            });
+            
+            // Al hacer blur, asegurar que el valor esté formateado
+            juguetePrecioPorMayorInput.addEventListener('blur', function(e) {
+                const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
+                if (numericValue && numericValue !== '') {
+                    const numValue = parseInt(numericValue);
+                    e.target.value = numValue.toLocaleString('es-CO', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0
+                    });
+                    e.target.dataset.numericValue = numValue;
+                }
+            });
+            
+            // Al hacer focus, mantener el valor formateado
+            juguetePrecioPorMayorInput.addEventListener('focus', function(e) {
+                const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
+                if (numericValue && numericValue !== '') {
+                    const numValue = parseInt(numericValue);
+                    e.target.value = numValue.toLocaleString('es-CO', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0
+                    });
+                }
+            });
+        }
+        
+        // Configurar campo de URL de foto
+        const jugueteFotoUrl = document.getElementById('jugueteFotoUrl');
+        const jugueteFotoUrlInput = document.getElementById('jugueteFotoUrlInput');
+        const fotoPreview = document.getElementById('fotoPreview');
+        const fotoPreviewImg = document.getElementById('fotoPreviewImg');
+        
+        // Manejar input de URL de foto
+        if (jugueteFotoUrlInput) {
+            jugueteFotoUrlInput.addEventListener('input', function() {
+                let url = this.value.trim();
+                
+                // Convertir URL de Imgur si es necesario
+                if (url) {
+                    url = convertirUrlImgur(url);
+                    this.value = url;
+                }
+                
+                if (url) {
+                    // Actualizar campo hidden
+                    if (jugueteFotoUrl) {
+                        jugueteFotoUrl.value = url;
+                    }
+                    // Mostrar vista previa
+                    if (fotoPreviewImg) {
+                        fotoPreviewImg.src = url;
+                        fotoPreviewImg.onerror = function() {
+                            // Si la imagen no carga, ocultar la vista previa
+                            if (fotoPreview) {
+                                fotoPreview.style.display = 'none';
+                            }
+                        };
+                    }
+                    if (fotoPreview) {
+                        fotoPreview.style.display = 'block';
+                    }
+                } else {
+                    // Limpiar si está vacío
+                    if (jugueteFotoUrl) {
+                        jugueteFotoUrl.value = '';
+                    }
+                    if (fotoPreview) {
+                        fotoPreview.style.display = 'none';
+                    }
+                }
+            });
+        }
+        
+        // Código de subida de archivos eliminado - solo se usa URL
+        if (false && subirFotoBtn && jugueteFotoInput) {
             subirFotoBtn.addEventListener('click', async function() {
                 const archivo = jugueteFotoInput.files[0];
                 
@@ -1266,15 +1519,15 @@ document.addEventListener('DOMContentLoaded', async function() {
                     return;
                 }
                 
-                // Verificar si Imgur está configurado
-                if (!window.IMGUR_CONFIG || !window.IMGUR_CONFIG.CLIENT_ID || window.IMGUR_CONFIG.CLIENT_ID === 'YOUR_IMGUR_CLIENT_ID') {
-                    showJugueteFormMessage('Imgur no está configurado. Puedes ingresar la URL de la foto manualmente en el campo de abajo. Si necesitas subir una imagen, puedes hacerlo manualmente a Imgur.com y copiar la URL.', 'info');
-                    // Mostrar vista previa local aunque no se pueda subir
+                // Verificar que Supabase Storage esté disponible
+                if (!window.subirImagen) {
+                    showJugueteFormMessage('Error: La función de subida de imágenes no está disponible. Verifica que Supabase Storage esté configurado correctamente. Puedes ingresar la URL manualmente.', 'error');
+                    // Mostrar vista previa local
                     const reader = new FileReader();
                     reader.onload = function(e) {
                         fotoPreviewImg.src = e.target.result;
                         fotoPreview.style.display = 'block';
-                        fotoUrlText.textContent = 'Imgur no configurado. Usa el campo de URL manual para ingresar la URL de la imagen.';
+                        fotoUrlText.textContent = 'Supabase Storage no configurado. Usa el campo de URL manual.';
                     };
                     reader.readAsDataURL(archivo);
                     return;
@@ -1284,28 +1537,41 @@ document.addEventListener('DOMContentLoaded', async function() {
                     subirFotoBtn.disabled = true;
                     subirFotoBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Subiendo...';
                     
-                    // Subir imagen
+                    // Subir imagen a Supabase Storage
                     const url = await window.subirImagen(archivo);
                     
                     // Actualizar URL y vista previa
                     actualizarFotoUrl(url);
                     
-                    showJugueteFormMessage('Foto subida exitosamente', 'success');
+                    showJugueteFormMessage('Foto subida exitosamente a Supabase Storage', 'success');
                     
                     subirFotoBtn.disabled = false;
                     subirFotoBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Subir Foto';
                 } catch (error) {
                     console.error('Error al subir foto:', error);
-                    showJugueteFormMessage('Error al subir la foto: ' + error.message + '. Puedes ingresar la URL manualmente.', 'error');
+                    let mensajeError = 'Error al subir la foto: ' + error.message;
+                    
+                    // Mensaje más específico si el bucket no existe
+                    if (error.message.includes('Bucket no existe') || error.message.includes('bucket')) {
+                        mensajeError = 'El bucket de Supabase Storage no está configurado. Por favor, crea el bucket "juguetes" en Supabase Storage (público). Puedes ingresar la URL manualmente mientras tanto.';
+                    }
+                    
+                    showJugueteFormMessage(mensajeError, 'error');
                     subirFotoBtn.disabled = false;
                     subirFotoBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Subir Foto';
                     
                     // Mostrar vista previa local aunque falle la subida
                     const reader = new FileReader();
                     reader.onload = function(e) {
-                        fotoPreviewImg.src = e.target.result;
-                        fotoPreview.style.display = 'block';
-                        fotoUrlText.textContent = 'Error al subir. Usa el campo de URL manual.';
+                        if (fotoPreviewImg) {
+                            fotoPreviewImg.src = e.target.result;
+                        }
+                        if (fotoPreview) {
+                            fotoPreview.style.display = 'block';
+                        }
+                        if (fotoUrlText) {
+                            fotoUrlText.textContent = 'Error al subir. Usa el campo de URL manual.';
+                        }
                     };
                     reader.readAsDataURL(archivo);
                 }
@@ -1366,9 +1632,16 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             const nombre = capitalizarPrimeraLetra(document.getElementById('jugueteNombreInput').value.trim());
             const codigo = document.getElementById('jugueteCodigoInput').value.trim();
+            const item = document.getElementById('jugueteItemInput')?.value.trim() || null;
             const cantidad = parseInt(document.getElementById('jugueteCantidadInput').value);
-            const precioMin = parseFloat(document.getElementById('juguetePrecioMinInput').value);
-            const precioMax = parseFloat(document.getElementById('juguetePrecioMaxInput').value);
+            // Obtener el valor numérico real del campo de precio mínimo (puede estar formateado)
+            const precioMinInput = document.getElementById('juguetePrecioMinInput');
+            const precioMinRaw = precioMinInput?.dataset.numericValue || precioMinInput?.value.replace(/[^\d]/g, '') || '0';
+            const precioMin = parseFloat(precioMinRaw);
+            // Obtener el valor numérico real del campo de precio al por mayor (puede estar formateado)
+            const precioPorMayorInput = document.getElementById('juguetePrecioPorMayorInput');
+            const precioPorMayorRaw = precioPorMayorInput?.dataset.numericValue || precioPorMayorInput?.value.replace(/[^\d]/g, '') || null;
+            const precioPorMayor = precioPorMayorRaw ? parseFloat(precioPorMayorRaw) : null;
             const ubicacionTipo = document.getElementById('jugueteUbicacionTipo').value;
             const ubicacionId = document.getElementById('jugueteUbicacionSelect').value;
             // Obtener URL de foto (del campo oculto o del input manual)
@@ -1376,15 +1649,19 @@ document.addEventListener('DOMContentLoaded', async function() {
             const fotoUrl = jugueteFotoUrlInput && jugueteFotoUrlInput.value.trim() 
                 ? jugueteFotoUrlInput.value.trim() 
                 : document.getElementById('jugueteFotoUrl').value.trim();
+            // Obtener campos de bultos (opcionales)
+            const numeroBultosInput = document.getElementById('jugueteNumeroBultosInput');
+            const cantidadPorBultoInput = document.getElementById('jugueteCantidadPorBultoInput');
+            const numeroBultos = numeroBultosInput && numeroBultosInput.value.trim() 
+                ? parseInt(numeroBultosInput.value) 
+                : null;
+            const cantidadPorBulto = cantidadPorBultoInput && cantidadPorBultoInput.value.trim() 
+                ? parseInt(cantidadPorBultoInput.value) 
+                : null;
 
             if (!nombre || !codigo || isNaN(cantidad) || cantidad < 0 || !ubicacionTipo || !ubicacionId || 
-                isNaN(precioMin) || precioMin < 0 || isNaN(precioMax) || precioMax < 0) {
+                isNaN(precioMin) || precioMin < 0) {
                 showJugueteFormMessage('Por favor, completa todos los campos obligatorios', 'error');
-                return;
-            }
-
-            if (precioMin > precioMax) {
-                showJugueteFormMessage('El precio mínimo no puede ser mayor que el precio máximo', 'error');
                 return;
             }
 
@@ -1405,12 +1682,12 @@ document.addEventListener('DOMContentLoaded', async function() {
                     return;
                 }
                 
-                // Verificar si ya existe un juguete con el mismo código Y nombre en la misma ubicación
+                // Verificar si ya existe un juguete con el mismo código en la misma ubicación
+                // Nota: Ahora permitimos nombres duplicados, solo verificamos código + ubicación
                 const { data: jugueteExistenteData } = await window.supabaseClient
                     .from('juguetes')
                     .select('*')
                     .eq('codigo', codigo)
-                    .eq('nombre', nombre)
                     .eq('empresa_id', user.empresa_id)
                     .eq(campoUbicacion, ubicacionId)
                     .limit(1);
@@ -1423,9 +1700,26 @@ document.addEventListener('DOMContentLoaded', async function() {
                     
                     const updateData = { 
                         cantidad: nuevaCantidad,
-                        precio_min: precioMin,
-                        precio_max: precioMax
+                        precio_min: precioMin
                     };
+                    
+                    // Actualizar precio_por_mayor si se proporciona
+                    if (precioPorMayor !== null) {
+                        updateData.precio_por_mayor = precioPorMayor;
+                    }
+                    
+                    // Actualizar item si se proporciona
+                    if (item !== null) {
+                        updateData.item = item;
+                    }
+                    
+                    // Actualizar campos de bultos si se proporcionan
+                    if (numeroBultos !== null && !isNaN(numeroBultos)) {
+                        updateData.numero_bultos = numeroBultos;
+                    }
+                    if (cantidadPorBulto !== null && !isNaN(cantidadPorBulto)) {
+                        updateData.cantidad_por_bulto = cantidadPorBulto;
+                    }
                     
                     // Actualizar foto_url si se proporciona una nueva
                     if (fotoUrl) {
@@ -1460,12 +1754,27 @@ document.addEventListener('DOMContentLoaded', async function() {
                     codigo: codigo,
                     cantidad: cantidad,
                     precio_min: precioMin,
-                    precio_max: precioMax,
                     empresa_id: user.empresa_id
                 };
 
+                    if (item) {
+                        jugueteData.item = item;
+                    }
+                    
+                    if (precioPorMayor !== null) {
+                        jugueteData.precio_por_mayor = precioPorMayor;
+                    }
+
                     if (fotoUrl) {
                         jugueteData.foto_url = fotoUrl;
+                    }
+
+                    // Agregar campos de bultos si se proporcionan
+                    if (numeroBultos !== null && !isNaN(numeroBultos)) {
+                        jugueteData.numero_bultos = numeroBultos;
+                    }
+                    if (cantidadPorBulto !== null && !isNaN(cantidadPorBulto)) {
+                        jugueteData.cantidad_por_bulto = cantidadPorBulto;
                     }
 
                 if (ubicacionTipo === 'bodega') {
@@ -1855,7 +2164,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     async function loadInventario() {
         const tbody = document.getElementById('inventarioTableBody');
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #64748b;">Cargando inventario...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">Cargando inventario...</td></tr>';
         
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
@@ -1892,7 +2201,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             const todasLasBodegas = bodegasResult.data || [];
 
             if (juguetes.length === 0 && todasLasTiendas.length === 0 && todasLasBodegas.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes en el inventario</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes en el inventario</td></tr>';
                 document.getElementById('inventarioPagination').innerHTML = '';
                 return;
             }
@@ -1905,6 +2214,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     juguetesAgrupados.set(key, {
                         codigo: juguete.codigo,
                         nombre: juguete.nombre,
+                        item: juguete.item,
                         foto_url: juguete.foto_url,
                         ubicaciones: []
                     });
@@ -1984,7 +2294,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             configurarBusquedaInventario();
         } catch (error) {
             console.error('Error al cargar inventario:', error);
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #ef4444;">Error al cargar el inventario</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #ef4444;">Error al cargar el inventario</td></tr>';
             document.getElementById('inventarioPagination').innerHTML = '';
         }
     }
@@ -1994,7 +2304,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         const productos = juguetesFiltrados || todosLosJuguetes;
         
         if (!productos || productos.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes para mostrar</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes para mostrar</td></tr>';
             document.getElementById('inventarioPagination').innerHTML = '';
             return;
         }
@@ -2010,9 +2320,19 @@ document.addEventListener('DOMContentLoaded', async function() {
         productosPagina.forEach(juguete => {
             const row = document.createElement('tr');
             const nombreCapitalizado = capitalizarPrimeraLetra(juguete.nombre);
-            const foto = juguete.foto_url 
-                ? `<img src="${juguete.foto_url}" alt="${nombreCapitalizado}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">`
-                : '<span style="color: #64748b;">Sin foto</span>';
+            let foto = '';
+            if (juguete.foto_url) {
+                const fotoUrlEscapada = juguete.foto_url.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const nombreEscapado = nombreCapitalizado.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                foto = `<img src="${juguete.foto_url}" alt="${nombreCapitalizado}" 
+                    style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px; cursor: pointer; transition: transform 0.2s;"
+                    onclick="if(typeof mostrarImagenGrande === 'function') mostrarImagenGrande('${fotoUrlEscapada}', '${nombreEscapado}');"
+                    onmouseover="this.style.transform='scale(1.1)'"
+                    onmouseout="this.style.transform='scale(1)'"
+                    title="Haz clic para ver imagen grande">`;
+            } else {
+                foto = '<span style="color: #64748b;">Sin foto</span>';
+            }
             
             // Construir desplegable de ubicaciones
             const ubicacionesConCantidad = juguete.ubicaciones.filter(u => u.cantidad > 0).length;
@@ -2064,6 +2384,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             row.innerHTML = `
                 <td>${nombreCapitalizado}</td>
                 <td>${juguete.codigo}</td>
+                <td>${juguete.item ? `<code style="background: #fef3c7; padding: 4px 8px; border-radius: 4px; font-size: 11px; color: #92400e;">${juguete.item}</code>` : '<span style="color: #94a3b8;">-</span>'}</td>
                 <td>${foto}</td>
                 <td>${juguete.cantidadTotal || 0}</td>
                 <td>${ubicacionesHTML}</td>
@@ -2179,46 +2500,121 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     function configurarBusquedaInventario() {
         const searchInput = document.getElementById('inventarioSearch');
+        const codigoFilterInput = document.getElementById('inventarioCodigoFilter');
         
-        // Remover listeners anteriores si existen
-        const newSearchInput = searchInput.cloneNode(true);
-        searchInput.parentNode.replaceChild(newSearchInput, searchInput);
+        if (!searchInput || !codigoFilterInput) {
+            console.error('No se encontraron los campos de búsqueda');
+            return;
+        }
         
-        newSearchInput.addEventListener('input', function() {
-            const searchTerm = this.value.toLowerCase().trim();
-        
-            if (searchTerm === '') {
-                // Si no hay búsqueda, mostrar todos los juguetes
-                paginaActualInventario = 1;
-                renderizarPaginaInventario();
+        // Función para aplicar ambos filtros (usa getElementById para obtener valores actuales)
+        function aplicarFiltros() {
+            const currentSearchInput = document.getElementById('inventarioSearch');
+            const currentCodigoFilterInput = document.getElementById('inventarioCodigoFilter');
+            
+            if (!currentSearchInput || !currentCodigoFilterInput) {
                 return;
             }
-
-            // Filtrar juguetes (búsqueda mejorada: nombre, código, cantidad, ubicación)
-            const juguetesFiltrados = todosLosJuguetes.filter(juguete => {
-                const nombre = juguete.nombre?.toLowerCase() || '';
-                const codigo = juguete.codigo?.toLowerCase() || '';
-                const cantidad = juguete.cantidadTotal?.toString() || '';
+            
+            const searchTerm = currentSearchInput.value.trim();
+            const codigoFilter = currentCodigoFilterInput.value.trim();
+        
+            let juguetesFiltrados = todosLosJuguetes;
+            
+            // Aplicar filtro de búsqueda general
+            if (searchTerm !== '') {
+                const searchTermLower = searchTerm.toLowerCase();
+                const searchTermNormal = searchTerm.replace(/\s+/g, '').toLowerCase();
                 
-                // Buscar en todas las ubicaciones
-                const ubicacionesTexto = juguete.ubicaciones 
-                    ? juguete.ubicaciones.map(u => {
-                        const nombreUbicacion = u.nombre?.toLowerCase() || '';
-                        const tipoUbicacion = u.tipo?.toLowerCase() || '';
-                        return `${nombreUbicacion} ${tipoUbicacion}`;
-                    }).join(' ')
-                    : '';
+                // Detectar si contiene letras (no es solo números)
+                const tieneLetras = /[a-záéíóúñü]/i.test(searchTerm);
+                // Detectar si es un solo dígito
+                const esUnSoloDigito = /^\d$/.test(searchTermNormal);
                 
-                return nombre.includes(searchTerm) || 
-                       codigo.includes(searchTerm) || 
-                       cantidad.includes(searchTerm) ||
-                       ubicacionesTexto.includes(searchTerm);
-            });
+                juguetesFiltrados = juguetesFiltrados.filter(juguete => {
+                    const nombre = juguete.nombre?.toLowerCase() || '';
+                    const codigo = juguete.codigo?.toLowerCase().replace(/\s+/g, '') || '';
+                    const item = juguete.item?.toLowerCase().replace(/\s+/g, '') || '';
+                    
+                    // Buscar en todas las ubicaciones (nombre de bodega/tienda)
+                    const ubicacionesTexto = juguete.ubicaciones 
+                        ? juguete.ubicaciones.map(u => {
+                            const nombreUbicacion = u.nombre?.toLowerCase() || '';
+                            const tipoUbicacion = u.tipo?.toLowerCase() || '';
+                            return `${nombreUbicacion} ${tipoUbicacion}`;
+                        }).join(' ')
+                        : '';
+                    
+                    if (tieneLetras) {
+                        // Si tiene letras, buscar en nombre, ubicaciones e ITEM (puede tener letras y números)
+                        return nombre.includes(searchTermLower) || 
+                               ubicacionesTexto.includes(searchTermLower) ||
+                               item.includes(searchTermLower) ||
+                               item.includes(searchTermNormal);
+                    } else {
+                        // Si es solo números
+                        if (esUnSoloDigito) {
+                            // Para un solo dígito, buscar que el código o ITEM:
+                            // 1. Comience con ese dígito (ej: "4" encuentra "4", "41", "42", etc.)
+                            // 2. Sea exactamente ese dígito
+                            // 3. Tenga ese dígito al inicio después de letras (ej: "A4", "ITM-4")
+                            const codigoComienzaConDigito = codigo.startsWith(searchTermNormal) || 
+                                                             codigo === searchTermNormal ||
+                                                             /^[a-z]*[^a-z0-9]*/.test(codigo) && codigo.replace(/^[a-z]*[^a-z0-9]*/, '').startsWith(searchTermNormal);
+                            const itemComienzaConDigito = item.startsWith(searchTermNormal) || 
+                                                           item === searchTermNormal ||
+                                                           /^[a-z]*[^a-z0-9]*/.test(item) && item.replace(/^[a-z]*[^a-z0-9]*/, '').startsWith(searchTermNormal);
+                            return codigoComienzaConDigito || itemComienzaConDigito;
+                        } else {
+                            // Si es más de un dígito, buscar en cualquier parte del código e ITEM
+                            return codigo.includes(searchTermNormal) || 
+                                   item.includes(searchTermNormal);
+                        }
+                    }
+                });
+            }
+            
+            // Aplicar filtro específico por código
+            if (codigoFilter !== '') {
+                const codigoFilterNormal = codigoFilter.toLowerCase().replace(/\s+/g, '');
+                juguetesFiltrados = juguetesFiltrados.filter(juguete => {
+                    const codigo = juguete.codigo?.toLowerCase().replace(/\s+/g, '') || '';
+                    return codigo.includes(codigoFilterNormal);
+                });
+            }
 
             // Resetear a página 1 cuando se filtra
             paginaActualInventario = 1;
             renderizarPaginaInventario(juguetesFiltrados);
-        });
+        }
+        
+        // Remover listeners anteriores si existen (usando una bandera para evitar duplicados)
+        if (searchInput.dataset.listenerAdded === 'true') {
+            // Ya tiene listeners, remover los anteriores y agregar nuevos
+            const newSearchInput = searchInput.cloneNode(true);
+            searchInput.parentNode.replaceChild(newSearchInput, searchInput);
+            const newCodigoFilterInput = codigoFilterInput.cloneNode(true);
+            codigoFilterInput.parentNode.replaceChild(newCodigoFilterInput, codigoFilterInput);
+            
+            // Actualizar referencias
+            const updatedSearchInput = document.getElementById('inventarioSearch');
+            const updatedCodigoFilterInput = document.getElementById('inventarioCodigoFilter');
+            
+            // Agregar listeners a los nuevos elementos
+            updatedSearchInput.addEventListener('input', aplicarFiltros);
+            updatedCodigoFilterInput.addEventListener('input', aplicarFiltros);
+            updatedSearchInput.dataset.listenerAdded = 'true';
+            updatedCodigoFilterInput.dataset.listenerAdded = 'true';
+            return;
+        }
+        
+        // Agregar listeners
+        searchInput.addEventListener('input', aplicarFiltros);
+        codigoFilterInput.addEventListener('input', aplicarFiltros);
+        
+        // Marcar que ya se agregaron los listeners
+        searchInput.dataset.listenerAdded = 'true';
+        codigoFilterInput.dataset.listenerAdded = 'true';
     }
 
     // Función global para abrir menú de editar juguete
@@ -2252,7 +2648,31 @@ document.addEventListener('DOMContentLoaded', async function() {
                 document.getElementById('editarJugueteCodigo').value = data.codigo;
                 document.getElementById('editarJugueteCantidad').value = data.cantidad;
                 document.getElementById('editarJuguetePrecioMin').value = data.precio_min || '';
-                document.getElementById('editarJuguetePrecioMax').value = data.precio_max || '';
+                // Llenar campos de bultos si existen
+                const numeroBultosInput = document.getElementById('editarJugueteNumeroBultos');
+                const cantidadPorBultoInput = document.getElementById('editarJugueteCantidadPorBulto');
+                if (numeroBultosInput) {
+                    numeroBultosInput.value = data.numero_bultos || '';
+                }
+                if (cantidadPorBultoInput) {
+                    cantidadPorBultoInput.value = data.cantidad_por_bulto || '';
+                }
+                const fotoUrlInput = document.getElementById('editarJugueteFotoUrl');
+                const fotoPreview = document.getElementById('editarFotoPreview');
+                const fotoPreviewImg = document.getElementById('editarFotoPreviewImg');
+                if (fotoUrlInput) {
+                    fotoUrlInput.value = data.foto_url || '';
+                    // Mostrar vista previa si hay URL
+                    if (data.foto_url && fotoPreviewImg && fotoPreview) {
+                        fotoPreviewImg.src = data.foto_url;
+                        fotoPreview.style.display = 'block';
+                        fotoPreviewImg.onerror = function() {
+                            fotoPreview.style.display = 'none';
+                        };
+                    } else if (fotoPreview) {
+                        fotoPreview.style.display = 'none';
+                    }
+                }
             } else {
                 // Llenar el formulario con datos del juguete
                 document.getElementById('editarJugueteId').value = juguete.id;
@@ -2260,7 +2680,47 @@ document.addEventListener('DOMContentLoaded', async function() {
                 document.getElementById('editarJugueteCodigo').value = juguete.codigo;
                 document.getElementById('editarJugueteCantidad').value = juguete.cantidad;
                 document.getElementById('editarJuguetePrecioMin').value = juguete.precio_min || '';
-                document.getElementById('editarJuguetePrecioMax').value = juguete.precio_max || '';
+                const fotoUrlInput = document.getElementById('editarJugueteFotoUrl');
+                const fotoPreview = document.getElementById('editarFotoPreview');
+                const fotoPreviewImg = document.getElementById('editarFotoPreviewImg');
+                if (fotoUrlInput) {
+                    fotoUrlInput.value = juguete.foto_url || '';
+                    // Mostrar vista previa si hay URL
+                    if (juguete.foto_url && fotoPreviewImg && fotoPreview) {
+                        fotoPreviewImg.src = juguete.foto_url;
+                        fotoPreview.style.display = 'block';
+                        fotoPreviewImg.onerror = function() {
+                            fotoPreview.style.display = 'none';
+                        };
+                    } else if (fotoPreview) {
+                        fotoPreview.style.display = 'none';
+                    }
+                }
+            }
+            
+            // Configurar vista previa de foto en modal de editar
+            const editarFotoUrlInput = document.getElementById('editarJugueteFotoUrl');
+            const editarFotoPreview = document.getElementById('editarFotoPreview');
+            const editarFotoPreviewImg = document.getElementById('editarFotoPreviewImg');
+            
+            if (editarFotoUrlInput) {
+                // Remover listener anterior si existe
+                const nuevoListener = function() {
+                    const url = editarFotoUrlInput.value.trim();
+                    if (url && editarFotoPreviewImg && editarFotoPreview) {
+                        editarFotoPreviewImg.src = url;
+                        editarFotoPreview.style.display = 'block';
+                        editarFotoPreviewImg.onerror = function() {
+                            editarFotoPreview.style.display = 'none';
+                        };
+                    } else if (editarFotoPreview) {
+                        editarFotoPreview.style.display = 'none';
+                    }
+                };
+                
+                // Remover listeners anteriores
+                editarFotoUrlInput.removeEventListener('input', nuevoListener);
+                editarFotoUrlInput.addEventListener('input', nuevoListener);
             }
             
             // Mostrar modal
@@ -2295,23 +2755,25 @@ document.addEventListener('DOMContentLoaded', async function() {
                 const codigo = document.getElementById('editarJugueteCodigo').value.trim();
                 const cantidad = parseInt(document.getElementById('editarJugueteCantidad').value);
                 const precioMin = parseFloat(document.getElementById('editarJuguetePrecioMin').value);
-                const precioMax = parseFloat(document.getElementById('editarJuguetePrecioMax').value);
+                const fotoUrl = document.getElementById('editarJugueteFotoUrl')?.value.trim() || null;
+                // Obtener campos de bultos (opcionales)
+                const numeroBultosInput = document.getElementById('editarJugueteNumeroBultos');
+                const cantidadPorBultoInput = document.getElementById('editarJugueteCantidadPorBulto');
+                const numeroBultos = numeroBultosInput && numeroBultosInput.value.trim() 
+                    ? parseInt(numeroBultosInput.value) 
+                    : null;
+                const cantidadPorBulto = cantidadPorBultoInput && cantidadPorBultoInput.value.trim() 
+                    ? parseInt(cantidadPorBultoInput.value) 
+                    : null;
                 
                 const errorMsg = document.getElementById('editarJugueteErrorMessage');
                 const successMsg = document.getElementById('editarJugueteSuccessMessage');
-                
-                errorMsg.style.display = 'none';
-                successMsg.style.display = 'none';
-                
-                if (!nombre || !codigo || cantidad < 0 || isNaN(precioMin) || precioMin < 0 || 
-                    isNaN(precioMax) || precioMax < 0) {
+        
+        errorMsg.style.display = 'none';
+        successMsg.style.display = 'none';
+        
+                if (!nombre || !codigo || cantidad < 0 || isNaN(precioMin) || precioMin < 0) {
                     errorMsg.textContent = 'Por favor, completa todos los campos correctamente';
-                    errorMsg.style.display = 'block';
-                    return;
-                }
-
-                if (precioMin > precioMax) {
-                    errorMsg.textContent = 'El precio mínimo no puede ser mayor que el precio máximo';
                     errorMsg.style.display = 'block';
                     return;
                 }
@@ -2363,28 +2825,56 @@ document.addEventListener('DOMContentLoaded', async function() {
                         
                         if (updateAllError) throw updateAllError;
                         
-                        // Luego actualizar la cantidad y precios solo del registro específico
+                        // Luego actualizar la cantidad, precio mínimo y foto_url solo del registro específico
+                        const updateData = { 
+                            cantidad: cantidad,
+                            precio_min: precioMin
+                        };
+                        if (fotoUrl !== null) {
+                            updateData.foto_url = fotoUrl || null;
+                        }
+                        // Agregar campos de bultos si se proporcionan
+                        if (numeroBultos !== null && !isNaN(numeroBultos)) {
+                            updateData.numero_bultos = numeroBultos;
+                        } else {
+                            updateData.numero_bultos = null;
+                        }
+                        if (cantidadPorBulto !== null && !isNaN(cantidadPorBulto)) {
+                            updateData.cantidad_por_bulto = cantidadPorBulto;
+                        } else {
+                            updateData.cantidad_por_bulto = null;
+                        }
                         const { error: updateCantidadError } = await window.supabaseClient
                             .from('juguetes')
-                            .update({ 
-                                cantidad: cantidad,
-                                precio_min: precioMin,
-                                precio_max: precioMax
-                            })
+                            .update(updateData)
                             .eq('id', jugueteId);
                         
                         if (updateCantidadError) throw updateCantidadError;
                     } else {
                         // Si solo cambió la cantidad, actualizar solo ese registro
+                        const updateData = {
+                            nombre: nombre,
+                            precio_min: precioMin,
+                            codigo: codigo,
+                            cantidad: cantidad
+                        };
+                        if (fotoUrl !== null) {
+                            updateData.foto_url = fotoUrl || null;
+                        }
+                        // Agregar campos de bultos si se proporcionan
+                        if (numeroBultos !== null && !isNaN(numeroBultos)) {
+                            updateData.numero_bultos = numeroBultos;
+                        } else {
+                            updateData.numero_bultos = null;
+                        }
+                        if (cantidadPorBulto !== null && !isNaN(cantidadPorBulto)) {
+                            updateData.cantidad_por_bulto = cantidadPorBulto;
+                        } else {
+                            updateData.cantidad_por_bulto = null;
+                        }
                         const { error: updateError } = await window.supabaseClient
                             .from('juguetes')
-                            .update({
-                                nombre: nombre,
-                                precio_min: precioMin,
-                                precio_max: precioMax,
-                                codigo: codigo,
-                                cantidad: cantidad
-                            })
+                            .update(updateData)
                             .eq('id', jugueteId);
 
                         if (updateError) throw updateError;

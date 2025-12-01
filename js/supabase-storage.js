@@ -87,3 +87,6 @@ window.convertirHeicAJpeg = convertirHeicAJpeg;
 window.esHeic = esHeic;
 
 
+
+
+

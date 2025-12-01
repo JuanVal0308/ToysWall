@@ -11,12 +11,15 @@ async function obtenerVentasDelMesCompleto() {
         const primerDiaMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
         const ultimoDiaMes = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59);
         
-        const { data: ventas, error } = await window.supabaseClient
+        // Intentar cargar con relaciones primero
+        let { data: ventas, error } = await window.supabaseClient
             .from('ventas')
             .select(`
                 created_at, 
                 precio_venta, 
                 cantidad,
+                juguete_id,
+                empleado_id,
                 juguetes!inner(tiendas(id, nombre), bodegas(id, nombre)),
                 empleados(id, nombre, codigo)
             `)
@@ -25,7 +28,48 @@ async function obtenerVentasDelMesCompleto() {
             .lte('created_at', ultimoDiaMes.toISOString())
             .order('created_at', { ascending: true });
 
-        if (error) throw error;
+        // Si falla con relaciones, usar fallback
+        if (error) {
+            console.warn('Error al cargar ventas con relaciones, usando fallback:', error);
+            const { data: ventasSimples, error: errorSimple } = await window.supabaseClient
+                .from('ventas')
+                .select('created_at, precio_venta, cantidad, juguete_id, empleado_id')
+                .eq('empresa_id', user.empresa_id)
+                .gte('created_at', primerDiaMes.toISOString())
+                .lte('created_at', ultimoDiaMes.toISOString())
+                .order('created_at', { ascending: true });
+            
+            if (errorSimple) throw errorSimple;
+            
+            // Cargar juguetes, tiendas, bodegas y empleados por separado
+            if (ventasSimples && ventasSimples.length > 0) {
+                const jugueteIds = [...new Set(ventasSimples.map(v => v.juguete_id))];
+                const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
+                
+                const [juguetesData, empleadosData] = await Promise.all([
+                    jugueteIds.length > 0 ? window.supabaseClient
+                        .from('juguetes')
+                        .select('id, tienda_id, bodega_id, tiendas(id, nombre), bodegas(id, nombre)')
+                        .in('id', jugueteIds) : { data: [] },
+                    empleadoIds.length > 0 ? window.supabaseClient
+                        .from('empleados')
+                        .select('id, nombre, codigo')
+                        .in('id', empleadoIds) : { data: [] }
+                ]);
+
+                const juguetesMap = new Map((juguetesData.data || []).map(j => [j.id, j]));
+                const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
+
+                // Combinar datos
+                ventas = ventasSimples.map(v => ({
+                    ...v,
+                    juguetes: juguetesMap.get(v.juguete_id) || null,
+                    empleados: empleadosMap.get(v.empleado_id) || null
+                }));
+            } else {
+                ventas = [];
+            }
+        }
         
         return ventas || [];
     } catch (error) {
@@ -496,6 +540,7 @@ function actualizarInfoVentasPorEmpleado(ventasPorEmpleado) {
         }
     }
 }
+
 
 
 

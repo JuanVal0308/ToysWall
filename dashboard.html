@@ -43,6 +43,10 @@
                     <i class="fas fa-cash-register"></i>
                     <span>Registrar Venta</span>
                 </button>
+                <button class="sidebar-btn" data-page="ventaPorMayor">
+                    <i class="fas fa-truck-loading"></i>
+                    <span>Ventas al por Mayor</span>
+                </button>
                 <button class="sidebar-btn" data-page="ajustes">
                     <i class="fas fa-tools"></i>
                     <span>Ajustes</span>
@@ -58,6 +62,10 @@
                 <button class="sidebar-btn" data-page="inventario">
                     <i class="fas fa-boxes"></i>
                     <span>Inventario</span>
+                </button>
+                <button class="sidebar-btn" data-page="inventarioDetalle">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>Inventario Detalle</span>
                 </button>
                 <button class="sidebar-btn" data-page="bodegas">
                     <i class="fas fa-warehouse"></i>
@@ -374,35 +382,28 @@
                             >
                         </div>
                         <div class="form-group">
-                            <label for="jugueteFotoInput">
-                                <i class="fas fa-image"></i> Foto del Juguete
+                            <label for="jugueteItemInput">
+                                <i class="fas fa-tag"></i> Código ITEM
                             </label>
                             <input 
-                                type="file" 
-                                id="jugueteFotoInput" 
-                                name="foto" 
-                                accept="image/*,.heic,.heif"
-                                style="width: 100%; margin-bottom: 10px;"
+                                type="text" 
+                                id="jugueteItemInput" 
+                                name="item" 
+                                placeholder="Ej: ITM-001"
                             >
-                            <button 
-                                type="button" 
-                                id="subirFotoBtn" 
-                                class="btn-secondary"
-                                style="width: 100%; margin-bottom: 10px;"
-                            >
-                                <i class="fas fa-cloud-upload-alt"></i> Subir Foto
-                            </button>
-                            <div style="margin-top: 10px; margin-bottom: 10px;">
-                                <label for="jugueteFotoUrlInput" style="display: block; margin-bottom: 5px; font-size: 14px; color: #64748b;">
-                                    O ingresa la URL de la foto manualmente:
-                                </label>
-                                <input 
-                                    type="url" 
-                                    id="jugueteFotoUrlInput" 
-                                    placeholder="https://i.imgur.com/ejemplo.jpg"
-                                    style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;"
-                                >
+                            <small class="form-help">Código único del item para identificación</small>
                             </div>
+                        <div class="form-group">
+                            <label for="jugueteFotoUrlInput">
+                                <i class="fas fa-image"></i> URL de la Foto del Juguete
+                            </label>
+                            <input 
+                                type="url" 
+                                id="jugueteFotoUrlInput" 
+                                name="foto_url"
+                                placeholder="https://ejemplo.com/imagen.jpg"
+                                style="width: 100%;"
+                            >
                             <input 
                                 type="hidden" 
                                 id="jugueteFotoUrl" 
@@ -410,9 +411,8 @@
                             >
                             <div id="fotoPreview" style="margin-top: 10px; display: none;">
                                 <img id="fotoPreviewImg" src="" alt="Vista previa" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid #e2e8f0;">
-                                <p id="fotoUrlText" style="margin-top: 5px; font-size: 12px; color: #64748b; word-break: break-all;"></p>
                             </div>
-                            <small class="form-help">Selecciona una foto y haz clic en "Subir Foto" o ingresa la URL manualmente</small>
+                            <small class="form-help">Ingresa la URL de la imagen del juguete</small>
                         </div>
                         <div class="form-group">
                             <label for="jugueteCantidadInput">
@@ -427,36 +427,61 @@
                                 required
                             >
                         </div>
-                        <div class="form-row">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 8px;">
+                            <div class="form-group">
+                                <label for="jugueteNumeroBultosInput">
+                                    <i class="fas fa-cube"></i> Número de Bultos
+                                </label>
+                                <input 
+                                    type="number" 
+                                    id="jugueteNumeroBultosInput" 
+                                    name="numero_bultos" 
+                                    placeholder="Ej: 24"
+                                    min="0"
+                                >
+                                <small class="form-help">Opcional: Número total de bultos</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="jugueteCantidadPorBultoInput">
+                                    <i class="fas fa-box"></i> Cantidad por Bulto
+                                </label>
+                                <input 
+                                    type="number" 
+                                    id="jugueteCantidadPorBultoInput" 
+                                    name="cantidad_por_bulto" 
+                                    placeholder="Ej: 12"
+                                    min="1"
+                                >
+                                <small class="form-help">Opcional: Unidades por bulto (por defecto: 12)</small>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                             <div class="form-group">
                                 <label for="juguetePrecioMinInput">
                                     <i class="fas fa-dollar-sign"></i> Precio Mínimo *
                                 </label>
                                 <input 
-                                    type="number" 
+                                    type="text" 
                                     id="juguetePrecioMinInput" 
                                     name="precio_min" 
-                                    placeholder="0.00"
+                                    placeholder="0"
                                     min="0"
-                                    step="0.01"
                                     required
                                 >
                                 <small class="form-help">Precio mínimo permitido para la venta</small>
                             </div>
                             <div class="form-group">
-                                <label for="juguetePrecioMaxInput">
-                                    <i class="fas fa-dollar-sign"></i> Precio Máximo *
+                                <label for="juguetePrecioPorMayorInput">
+                                    <i class="fas fa-dollar-sign"></i> Precio al por Mayor
                                 </label>
                                 <input 
-                                    type="number" 
-                                    id="juguetePrecioMaxInput" 
-                                    name="precio_max" 
-                                    placeholder="0.00"
+                                    type="text" 
+                                    id="juguetePrecioPorMayorInput" 
+                                    name="precio_por_mayor" 
+                                    placeholder="0"
                                     min="0"
-                                    step="0.01"
-                                    required
                                 >
-                                <small class="form-help">Precio máximo permitido para la venta</small>
+                                <small class="form-help">Precio exclusivo para ventas al por mayor</small>
                             </div>
                         </div>
                         <div class="form-group">
@@ -502,17 +527,26 @@
                 <!-- Vista de Inventario -->
                 <div id="inventarioView" style="display: none;">
                     <h1>Inventario</h1>
-                    <div class="inventario-filters" style="display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: 20px;">
-                        <input 
-                            type="text" 
-                            id="inventarioSearch" 
-                            placeholder="Buscar por nombre, código, cantidad o ubicación..."
-                            class="search-input"
-                            style="flex: 1;"
-                        >
-                        <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 10px 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                            <span style="color: #64748b; font-size: 14px;">Total:</span>
-                            <span style="font-size: 18px; font-weight: bold; color: #3b82f6;" id="totalJuguetesInventario">0</span>
+                    <div class="inventario-filters" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                            <input 
+                                type="text" 
+                                id="inventarioSearch" 
+                                placeholder="Buscar: nombre, ubicación o ITEM..."
+                                class="search-input"
+                                style="flex: 1; min-width: 200px;"
+                            >
+                            <input 
+                                type="text" 
+                                id="inventarioCodigoFilter" 
+                                placeholder="Filtrar por código..."
+                                class="search-input"
+                                style="width: 200px;"
+                            >
+                            <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 10px 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                <span style="color: #64748b; font-size: 14px;">Total:</span>
+                                <span style="font-size: 18px; font-weight: bold; color: #3b82f6;" id="totalJuguetesInventario">0</span>
+                            </div>
                         </div>
                     </div>
                     <div class="inventario-table-container">
@@ -521,6 +555,7 @@
                                 <tr>
                                     <th>Nombre</th>
                                     <th>Código</th>
+                                    <th>ITEM</th>
                                     <th>Foto</th>
                                     <th>Cantidad</th>
                                     <th>Ubicación</th>
@@ -528,7 +563,7 @@
                             </thead>
                             <tbody id="inventarioTableBody">
                                 <tr>
-                                    <td colspan="5" style="text-align: center; padding: 40px; color: #64748b;">
+                                    <td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">
                                         Cargando inventario...
                                     </td>
                                 </tr>
@@ -538,6 +573,75 @@
                     <!-- Controles de paginación -->
                     <div id="inventarioPagination" style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
                         <!-- Las pestañas se generarán dinámicamente -->
+                    </div>
+                </div>
+
+                <!-- Vista de Inventario Detalle -->
+                <div id="inventarioDetalleView" style="display: none;">
+                    <h1><i class="fas fa-clipboard-list"></i> Inventario Detalle</h1>
+                    <p style="color: #64748b; margin-bottom: 20px;">
+                        <i class="fas fa-info-circle"></i> Vista detallada del inventario para mayoristas. Muestra bultos disponibles, ubicaciones y precios al por mayor. 
+                        <strong>Nota:</strong> Los bultos se calculan asumiendo 12 unidades por bulto.
+                    </p>
+                    
+                    <!-- Filtros -->
+                    <div class="inventario-filters" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                            <input 
+                                type="text" 
+                                id="inventarioDetalleSearch" 
+                                placeholder="Buscar: nombre, ubicación o ITEM..."
+                                class="search-input"
+                                style="flex: 1; min-width: 200px;"
+                            >
+                            <input 
+                                type="text" 
+                                id="inventarioDetalleCodigoFilter" 
+                                placeholder="Filtrar por código..."
+                                class="search-input"
+                                style="width: 200px;"
+                            >
+                            <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 10px 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                <span style="color: #64748b; font-size: 14px;">Total Juguetes:</span>
+                                <span style="font-size: 18px; font-weight: bold; color: #3b82f6;" id="totalJuguetesDetalle">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tabla de inventario detalle -->
+                    <div class="inventario-table-container" style="overflow-x: auto;">
+                        <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">Foto</th>
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">Nombre</th>
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">Código</th>
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">ITEM</th>
+                                    <th style="padding: 12px; text-align: center; border: 1px solid #e2e8f0;">Cantidad Total</th>
+                                    <th style="padding: 12px; text-align: center; border: 1px solid #e2e8f0;">Vendida</th>
+                                    <th style="padding: 12px; text-align: center; border: 1px solid #e2e8f0;">Disponible</th>
+                                    <th style="padding: 12px; text-align: center; border: 1px solid #e2e8f0; background: rgba(255,255,255,0.2);">
+                                        <i class="fas fa-boxes"></i> Bultos Disponibles
+                                    </th>
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">Ubicaciones</th>
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">Precio Mín.</th>
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0; background: rgba(255,255,255,0.2);">
+                                        <i class="fas fa-tags"></i> Precio x Mayor
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventarioDetalleTableBody">
+                                <tr>
+                                    <td colspan="11" style="text-align: center; padding: 40px; color: #64748b;">
+                                        Cargando inventario detalle...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Paginación -->
+                    <div id="inventarioDetallePagination" style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
                     </div>
                 </div>
 
@@ -648,15 +752,18 @@
                                     </button>
                                 </form>
                             </div>
-                            
-                            <!-- Lista de tiendas existentes -->
-                            <div class="tiendas-list" id="tiendasList" style="margin-top: 30px;">
-                                <!-- Las tiendas se cargarán aquí dinámicamente -->
-                            </div>
-                            <!-- Controles de paginación -->
-                            <div id="tiendasPagination" style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
-                                <!-- Las pestañas se generarán dinámicamente -->
-                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Lista de tiendas existentes (fuera del acordeón para que siempre sea visible) -->
+                    <div style="margin-top: 30px;">
+                        <h2 style="color: #1e293b; margin-bottom: 20px;">Tiendas Registradas</h2>
+                        <div class="tiendas-list" id="tiendasList">
+                            <!-- Las tiendas se cargarán aquí dinámicamente -->
+                        </div>
+                        <!-- Controles de paginación -->
+                        <div id="tiendasPagination" style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <!-- Las pestañas se generarán dinámicamente -->
                         </div>
                     </div>
                 </div>
@@ -1231,6 +1338,89 @@
                     </div>
                 </div>
 
+                <!-- Vista de Ventas al por Mayor -->
+                <div id="ventaPorMayorView" style="display: none;">
+                    <h1><i class="fas fa-truck-loading"></i> Ventas al por Mayor</h1>
+                    <form id="registrarVentaPorMayorForm" class="bodega-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="ventaPorMayorJugueteCodigo">
+                                    <i class="fas fa-barcode"></i> Código del Juguete *
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="ventaPorMayorJugueteCodigo" 
+                                    name="juguete_codigo" 
+                                    placeholder="Ej: JUG-001"
+                                    required
+                                    autocomplete="off"
+                                >
+                                <div id="juguetePorMayorInfo" class="juguete-info" style="display: none;"></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="ventaPorMayorEmpleadoCodigo">
+                                    <i class="fas fa-id-card"></i> Código del Empleado *
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="ventaPorMayorEmpleadoCodigo" 
+                                    name="empleado_codigo" 
+                                    placeholder="Ej: EMP-001"
+                                    required
+                                    autocomplete="off"
+                                >
+                                <div id="empleadoPorMayorInfo" class="empleado-info" style="display: none;"></div>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="ventaPorMayorCantidad">
+                                    <i class="fas fa-boxes"></i> Cantidad *
+                                </label>
+                                <input 
+                                    type="number" 
+                                    id="ventaPorMayorCantidad" 
+                                    name="cantidad" 
+                                    placeholder="Cantidad"
+                                    min="1"
+                                    value="1"
+                                    required
+                                >
+                            </div>
+                            <div class="form-group">
+                                <label for="ventaPorMayorMetodoPago">
+                                    <i class="fas fa-credit-card"></i> Método de Pago *
+                                </label>
+                                <select 
+                                    id="ventaPorMayorMetodoPago" 
+                                    name="metodo_pago" 
+                                    required
+                                    class="form-select"
+                                >
+                                    <option value="">Selecciona método de pago</option>
+                                    <option value="efectivo">Efectivo</option>
+                                    <option value="transferencia">Transferencia</option>
+                                    <option value="tarjeta">Tarjeta</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="ventaPorMayorItems" class="venta-items">
+                            <h3>Items de la Venta al por Mayor</h3>
+                            <div id="ventaPorMayorItemsList"></div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn-secondary" id="agregarItemPorMayorBtn">
+                                <i class="fas fa-plus"></i> Agregar Item
+                            </button>
+                            <button type="submit" class="btn-primary">
+                                <i class="fas fa-save"></i> Registrar Venta al por Mayor
+                            </button>
+                        </div>
+                        <div id="ventaPorMayorErrorMessage" class="error-message" style="display: none;"></div>
+                        <div id="ventaPorMayorSuccessMessage" class="success-message" style="display: none;"></div>
+                    </form>
+                </div>
+
                 <!-- Vista de Ajustes -->
                 <div id="ajustesView" style="display: none;">
                     <h1>Ajustes y Devoluciones</h1>
@@ -1643,17 +1833,37 @@
                     <input type="number" id="editarJugueteCantidad" required min="0"
                            style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
                     <div>
-                        <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Precio Mínimo *</label>
-                        <input type="number" id="editarJuguetePrecioMin" required min="0" step="0.01"
+                        <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Número de Bultos</label>
+                        <input type="number" id="editarJugueteNumeroBultos" min="0"
+                               placeholder="Opcional"
                                style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
+                        <small style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Opcional: Número total de bultos</small>
                     </div>
                     <div>
-                        <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Precio Máximo *</label>
-                        <input type="number" id="editarJuguetePrecioMax" required min="0" step="0.01"
+                        <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Cantidad por Bulto</label>
+                        <input type="number" id="editarJugueteCantidadPorBulto" min="1"
+                               placeholder="Opcional (por defecto: 12)"
                                style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
+                        <small style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Opcional: Unidades por bulto</small>
                     </div>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">URL de la Foto</label>
+                    <input type="url" id="editarJugueteFotoUrl" 
+                           placeholder="https://ejemplo.com/imagen.jpg"
+                           style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
+                    <div id="editarFotoPreview" style="margin-top: 10px; display: none;">
+                        <img id="editarFotoPreviewImg" src="" alt="Vista previa" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid #e2e8f0;">
+                    </div>
+                    <small style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Ingresa la URL de la imagen del juguete</small>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Precio Mínimo *</label>
+                    <input type="number" id="editarJuguetePrecioMin" required min="0" step="0.01"
+                           style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
+                    <small style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Precio mínimo permitido para la venta</small>
                 </div>
                 <div id="editarJugueteErrorMessage" style="display: none; padding: 12px; background: #fee2e2; color: #dc2626; border-radius: 6px; margin-bottom: 15px; font-size: 14px;"></div>
                 <div id="editarJugueteSuccessMessage" style="display: none; padding: 12px; background: #d1fae5; color: #059669; border-radius: 6px; margin-bottom: 15px; font-size: 14px;"></div>
@@ -1674,6 +1884,8 @@
     <script src="js/email-config.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/dashboard-funcionalidades.js"></script>
+    <script src="js/ventas-por-mayor.js"></script>
+    <script src="js/inventario-detalle.js"></script>
     <script src="js/analisis-tiendas-empleados.js"></script>
 </body>
 </html>

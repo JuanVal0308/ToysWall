@@ -100,22 +100,25 @@ CREATE TABLE IF NOT EXISTS empleados (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Tabla: juguetes (sin categorías, con foto_url y rango de precios)
+-- Tabla: juguetes (sin categorías, con foto_url y precio mínimo)
 CREATE TABLE IF NOT EXISTS juguetes (
-    id SERIAL PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL,
-    codigo VARCHAR(50) NOT NULL,
-    cantidad INTEGER NOT NULL DEFAULT 0,
+            id SERIAL PRIMARY KEY,
+            nombre VARCHAR(100) NOT NULL,
+            codigo VARCHAR(50) NOT NULL,
+    item VARCHAR(50),
+            cantidad INTEGER NOT NULL DEFAULT 0,
     foto_url TEXT,
     precio_min DECIMAL(10, 2),
-    precio_max DECIMAL(10, 2),
-    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
-    bodega_id INTEGER REFERENCES bodegas(id) ON DELETE SET NULL,
-    tienda_id INTEGER REFERENCES tiendas(id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT check_ubicacion CHECK (
-        (bodega_id IS NOT NULL AND tienda_id IS NULL) OR 
+    precio_por_mayor DECIMAL(10, 2),
+    numero_bultos INTEGER,
+    cantidad_por_bulto INTEGER,
+            empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+            bodega_id INTEGER REFERENCES bodegas(id) ON DELETE SET NULL,
+            tienda_id INTEGER REFERENCES tiendas(id) ON DELETE SET NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            CONSTRAINT check_ubicacion CHECK (
+                (bodega_id IS NOT NULL AND tienda_id IS NULL) OR 
         (bodega_id IS NULL AND tienda_id IS NOT NULL) OR
         (bodega_id IS NULL AND tienda_id IS NULL)
     )
@@ -132,6 +135,7 @@ CREATE TABLE IF NOT EXISTS ventas (
     metodo_pago VARCHAR(50) NOT NULL,
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
     facturada BOOLEAN DEFAULT FALSE,
+    es_por_mayor BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -211,7 +215,7 @@ CREATE INDEX IF NOT EXISTS idx_juguetes_bodega_id ON juguetes(bodega_id);
 CREATE INDEX IF NOT EXISTS idx_juguetes_tienda_id ON juguetes(tienda_id);
 CREATE INDEX IF NOT EXISTS idx_juguetes_codigo ON juguetes(codigo);
 CREATE INDEX IF NOT EXISTS idx_juguetes_empresa_id ON juguetes(empresa_id);
-CREATE INDEX IF NOT EXISTS idx_juguetes_precio_rango ON juguetes(precio_min, precio_max) WHERE precio_min IS NOT NULL AND precio_max IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_juguetes_precio_min ON juguetes(precio_min) WHERE precio_min IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_ventas_empresa_id ON ventas(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_ventas_juguete_id ON ventas(juguete_id);
 CREATE INDEX IF NOT EXISTS idx_ventas_empleado_id ON ventas(empleado_id);
@@ -230,7 +234,7 @@ CREATE INDEX IF NOT EXISTS idx_planes_movimiento_created_at ON planes_movimiento
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM tipo_usuarios WHERE id = 1) THEN
-        INSERT INTO tipo_usuarios (id, nombre, descripcion) VALUES
+INSERT INTO tipo_usuarios (id, nombre, descripcion) VALUES
             (1, 'Super Administrador', 'Acceso completo al sistema');
     ELSE
         UPDATE tipo_usuarios SET nombre = 'Super Administrador', descripcion = 'Acceso completo al sistema' WHERE id = 1;
@@ -283,21 +287,21 @@ SELECT setval('empresas_id_seq', 1, true);
 -- Insertar usuarios de ejemplo si no existen
 DO $$
 BEGIN
-    -- Super Administrador
+-- Super Administrador
     IF NOT EXISTS (SELECT 1 FROM usuarios WHERE email = 'superadmin@toyswalls.com') THEN
-        INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
+INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
             ('Super Admin', 'superadmin@toyswalls.com', 'admin123', 1, 1);
     END IF;
-    
-    -- Administrador
+
+-- Administrador
     IF NOT EXISTS (SELECT 1 FROM usuarios WHERE email = 'admin@toyswalls.com') THEN
-        INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
+INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
             ('Admin', 'admin@toyswalls.com', 'admin123', 1, 2);
     END IF;
-    
+
     -- Empleado Juan Pérez
     IF NOT EXISTS (SELECT 1 FROM usuarios WHERE email = 'juan@toyswalls.com') THEN
-        INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
+INSERT INTO usuarios (nombre, email, password, empresa_id, tipo_usuario_id) VALUES
             ('Juan Pérez', 'juan@toyswalls.com', 'empleado123', 1, 3);
     END IF;
     
@@ -396,6 +400,8 @@ DROP POLICY IF EXISTS "juguetes_update_policy" ON juguetes;
 DROP POLICY IF EXISTS "juguetes_delete_policy" ON juguetes;
 DROP POLICY IF EXISTS "ventas_select_policy" ON ventas;
 DROP POLICY IF EXISTS "ventas_insert_policy" ON ventas;
+DROP POLICY IF EXISTS "ventas_update_policy" ON ventas;
+DROP POLICY IF EXISTS "ventas_delete_policy" ON ventas;
 DROP POLICY IF EXISTS "facturas_select_policy" ON facturas;
 DROP POLICY IF EXISTS "facturas_insert_policy" ON facturas;
 DROP POLICY IF EXISTS "facturas_items_select_policy" ON facturas_items;
@@ -404,141 +410,178 @@ DROP POLICY IF EXISTS "movimientos_select_policy" ON movimientos;
 DROP POLICY IF EXISTS "movimientos_insert_policy" ON movimientos;
 
 -- Crear políticas RLS para tipo_usuarios
+DROP POLICY IF EXISTS "tipo_usuarios_select_policy" ON tipo_usuarios;
 CREATE POLICY "tipo_usuarios_select_policy"
     ON tipo_usuarios FOR SELECT
     USING (true);
 
 -- Crear políticas RLS para empresas
+DROP POLICY IF EXISTS "empresas_select_policy" ON empresas;
 CREATE POLICY "empresas_select_policy"
     ON empresas FOR SELECT
     USING (true);
 
 -- Crear políticas RLS para usuarios
+DROP POLICY IF EXISTS "usuarios_select_policy" ON usuarios;
 CREATE POLICY "usuarios_select_policy"
     ON usuarios FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "usuarios_insert_policy" ON usuarios;
 CREATE POLICY "usuarios_insert_policy"
     ON usuarios FOR INSERT
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "usuarios_update_policy" ON usuarios;
 CREATE POLICY "usuarios_update_policy"
     ON usuarios FOR UPDATE
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "usuarios_delete_policy" ON usuarios;
 CREATE POLICY "usuarios_delete_policy"
     ON usuarios FOR DELETE
     USING (true);
 
 -- Crear políticas RLS para bodegas
+DROP POLICY IF EXISTS "bodegas_select_policy" ON bodegas;
 CREATE POLICY "bodegas_select_policy"
     ON bodegas FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "bodegas_insert_policy" ON bodegas;
 CREATE POLICY "bodegas_insert_policy"
     ON bodegas FOR INSERT
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "bodegas_update_policy" ON bodegas;
 CREATE POLICY "bodegas_update_policy"
     ON bodegas FOR UPDATE
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "bodegas_delete_policy" ON bodegas;
 CREATE POLICY "bodegas_delete_policy"
     ON bodegas FOR DELETE
     USING (true);
 
 -- Crear políticas RLS para tiendas
+DROP POLICY IF EXISTS "tiendas_select_policy" ON tiendas;
 CREATE POLICY "tiendas_select_policy"
     ON tiendas FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "tiendas_insert_policy" ON tiendas;
 CREATE POLICY "tiendas_insert_policy"
     ON tiendas FOR INSERT
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "tiendas_update_policy" ON tiendas;
 CREATE POLICY "tiendas_update_policy"
     ON tiendas FOR UPDATE
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "tiendas_delete_policy" ON tiendas;
 CREATE POLICY "tiendas_delete_policy"
     ON tiendas FOR DELETE
     USING (true);
 
 -- Crear políticas RLS para empleados
+DROP POLICY IF EXISTS "empleados_select_policy" ON empleados;
 CREATE POLICY "empleados_select_policy"
     ON empleados FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "empleados_insert_policy" ON empleados;
 CREATE POLICY "empleados_insert_policy"
     ON empleados FOR INSERT
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "empleados_update_policy" ON empleados;
 CREATE POLICY "empleados_update_policy"
     ON empleados FOR UPDATE
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "empleados_delete_policy" ON empleados;
 CREATE POLICY "empleados_delete_policy"
     ON empleados FOR DELETE
     USING (true);
 
 -- Crear políticas RLS para juguetes
+DROP POLICY IF EXISTS "juguetes_select_policy" ON juguetes;
 CREATE POLICY "juguetes_select_policy"
     ON juguetes FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "juguetes_insert_policy" ON juguetes;
 CREATE POLICY "juguetes_insert_policy"
     ON juguetes FOR INSERT
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "juguetes_update_policy" ON juguetes;
 CREATE POLICY "juguetes_update_policy"
     ON juguetes FOR UPDATE
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "juguetes_delete_policy" ON juguetes;
 CREATE POLICY "juguetes_delete_policy"
     ON juguetes FOR DELETE
     USING (true);
 
 -- Crear políticas RLS para ventas
+DROP POLICY IF EXISTS "ventas_select_policy" ON ventas;
 CREATE POLICY "ventas_select_policy"
     ON ventas FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "ventas_insert_policy" ON ventas;
 CREATE POLICY "ventas_insert_policy"
     ON ventas FOR INSERT
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "ventas_update_policy" ON ventas;
+CREATE POLICY "ventas_update_policy"
+    ON ventas FOR UPDATE
+    USING (true)
+    WITH CHECK (true);
+
+DROP POLICY IF EXISTS "ventas_delete_policy" ON ventas;
 CREATE POLICY "ventas_delete_policy"
     ON ventas FOR DELETE
     USING (true);
 
 -- Crear políticas RLS para facturas
+DROP POLICY IF EXISTS "facturas_select_policy" ON facturas;
 CREATE POLICY "facturas_select_policy"
     ON facturas FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "facturas_insert_policy" ON facturas;
 CREATE POLICY "facturas_insert_policy"
     ON facturas FOR INSERT
     WITH CHECK (true);
 
 -- Crear políticas RLS para facturas_items
+DROP POLICY IF EXISTS "facturas_items_select_policy" ON facturas_items;
 CREATE POLICY "facturas_items_select_policy"
     ON facturas_items FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "facturas_items_insert_policy" ON facturas_items;
 CREATE POLICY "facturas_items_insert_policy"
     ON facturas_items FOR INSERT
     WITH CHECK (true);
 
 -- Crear políticas RLS para movimientos
+DROP POLICY IF EXISTS "movimientos_select_policy" ON movimientos;
 CREATE POLICY "movimientos_select_policy"
     ON movimientos FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "movimientos_insert_policy" ON movimientos;
 CREATE POLICY "movimientos_insert_policy"
     ON movimientos FOR INSERT
     WITH CHECK (true);
@@ -781,450 +824,13 @@ ORDER BY e.nombre;
 -- - La columna "ubicacion" en tiendas se renombra automáticamente a "direccion" si existe
 -- - Los duplicados de juguetes se consolidan automáticamente al ejecutar este script
 -- 
--- ============================================
-
--- Función para actualizar updated_at automáticamente
-
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-
-RETURNS TRIGGER AS $$
-
-BEGIN
-
-    NEW.updated_at = NOW();
-
-    RETURN NEW;
-
-END;
-
-$$ LANGUAGE plpgsql;
-
-
-
--- ============================================
-
--- 8. CREAR TRIGGERS
-
--- ============================================
-
-
-
--- Trigger para tipo_usuarios
-
-DROP TRIGGER IF EXISTS update_tipo_usuarios_updated_at ON tipo_usuarios;
-
-CREATE TRIGGER update_tipo_usuarios_updated_at
-
-    BEFORE UPDATE ON tipo_usuarios
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- Trigger para empresas
-
-DROP TRIGGER IF EXISTS update_empresas_updated_at ON empresas;
-
-CREATE TRIGGER update_empresas_updated_at
-
-    BEFORE UPDATE ON empresas
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- Trigger para usuarios
-
-DROP TRIGGER IF EXISTS update_usuarios_updated_at ON usuarios;
-
-CREATE TRIGGER update_usuarios_updated_at
-
-    BEFORE UPDATE ON usuarios
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- Trigger para bodegas
-
-DROP TRIGGER IF EXISTS update_bodegas_updated_at ON bodegas;
-
-CREATE TRIGGER update_bodegas_updated_at
-
-    BEFORE UPDATE ON bodegas
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- Trigger para tiendas
-
-DROP TRIGGER IF EXISTS update_tiendas_updated_at ON tiendas;
-
-CREATE TRIGGER update_tiendas_updated_at
-
-    BEFORE UPDATE ON tiendas
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- Trigger para empleados
-
-DROP TRIGGER IF EXISTS update_empleados_updated_at ON empleados;
-
-CREATE TRIGGER update_empleados_updated_at
-
-    BEFORE UPDATE ON empleados
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- Trigger para juguetes
-
-DROP TRIGGER IF EXISTS update_juguetes_updated_at ON juguetes;
-
-CREATE TRIGGER update_juguetes_updated_at
-
-    BEFORE UPDATE ON juguetes
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- ============================================
-
--- 9. VERIFICACIÓN DE DATOS
-
--- ============================================
-
-
-
--- Ver tipos de usuario creados
-
-SELECT 'Tipos de Usuario:' as info;
-
-SELECT * FROM tipo_usuarios ORDER BY id;
-
-
-
--- Ver empresa creada
-SELECT 'Empresa:' as info;
-SELECT * FROM empresas ORDER BY id;
-
-
-
--- Ver usuarios creados (sin mostrar contraseñas)
-
-SELECT 'Usuarios:' as info;
-
-SELECT 
-
-    u.id,
-
-    u.nombre,
-
-    u.email,
-
-    e.nombre as empresa_nombre,
-
-    tu.nombre as tipo_usuario_nombre,
-
-    u.activo,
-
-    u.created_at
-
-FROM usuarios u
-
-JOIN empresas e ON u.empresa_id = e.id
-
-JOIN tipo_usuarios tu ON u.tipo_usuario_id = tu.id
-
-ORDER BY u.nombre;
-
-
-
--- ============================================
-
--- FIN DEL SCRIPT
-
--- ============================================
-
+-- MIGRACIONES INCLUIDAS:
+-- ✅ item y precio_por_mayor en juguetes (agregar_precio_por_mayor_e_item.sql)
+-- ✅ es_por_mayor en ventas (agregar_es_por_mayor.sql)
+-- ✅ facturada en ventas (agregar_campo_facturada.sql)
+-- ✅ tabla planes_movimiento (crear_tabla_planes_movimiento.sql)
+-- ✅ precio_min en juguetes (agregar_precios_juguetes.sql - solo precio_min, sin precio_max)
+-- ✅ Políticas RLS corregidas para ventas, usuarios y relaciones (fix_ventas_rls_policies.sql, fix_ventas_relations_rls.sql, fix_usuarios_rls.sql)
+-- ✅ Foreign keys con ON DELETE CASCADE (fix_foreign_keys_delete.sql)
 -- 
-
--- USUARIOS DE EJEMPLO CREADOS:
-
--- 
-
--- Super Administrador:
-
---   Email: "superadmin@toyswalls.com"
---   Contraseña: "admin123"
-
--- 
-
--- Administrador:
-
---   Email: "admin@toyswalls.com"
---   Contraseña: "admin123"
-
--- 
-
--- Empleados:
-
---   Email: "juan@toyswalls.com" o "maria@toyswalls.com"
---   Contraseña: "empleado123"
-
--- 
-
--- Empresa: "ToysWalls"
--- Logo: https://i.imgur.com/RBbjVnp.jpeg
--- 
--- NOTAS IMPORTANTES:
--- - Todos los usuarios pertenecen a ToysWalls
--- - El login ahora usa email en lugar de selección de empresa
--- - Las categorías han sido eliminadas
--- - Los juguetes ahora tienen un campo foto_url opcional
--- 
-
 -- ============================================
-
-
-
--- Función para actualizar updated_at automáticamente
-
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-
-RETURNS TRIGGER AS $$
-
-BEGIN
-
-    NEW.updated_at = NOW();
-
-    RETURN NEW;
-
-END;
-
-$$ LANGUAGE plpgsql;
-
-
-
--- ============================================
-
--- 8. CREAR TRIGGERS
-
--- ============================================
-
-
-
--- Trigger para tipo_usuarios
-
-DROP TRIGGER IF EXISTS update_tipo_usuarios_updated_at ON tipo_usuarios;
-
-CREATE TRIGGER update_tipo_usuarios_updated_at
-
-    BEFORE UPDATE ON tipo_usuarios
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- Trigger para empresas
-
-DROP TRIGGER IF EXISTS update_empresas_updated_at ON empresas;
-
-CREATE TRIGGER update_empresas_updated_at
-
-    BEFORE UPDATE ON empresas
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- Trigger para usuarios
-
-DROP TRIGGER IF EXISTS update_usuarios_updated_at ON usuarios;
-
-CREATE TRIGGER update_usuarios_updated_at
-
-    BEFORE UPDATE ON usuarios
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- Trigger para bodegas
-
-DROP TRIGGER IF EXISTS update_bodegas_updated_at ON bodegas;
-
-CREATE TRIGGER update_bodegas_updated_at
-
-    BEFORE UPDATE ON bodegas
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- Trigger para tiendas
-
-DROP TRIGGER IF EXISTS update_tiendas_updated_at ON tiendas;
-
-CREATE TRIGGER update_tiendas_updated_at
-
-    BEFORE UPDATE ON tiendas
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- Trigger para empleados
-
-DROP TRIGGER IF EXISTS update_empleados_updated_at ON empleados;
-
-CREATE TRIGGER update_empleados_updated_at
-
-    BEFORE UPDATE ON empleados
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- Trigger para juguetes
-
-DROP TRIGGER IF EXISTS update_juguetes_updated_at ON juguetes;
-
-CREATE TRIGGER update_juguetes_updated_at
-
-    BEFORE UPDATE ON juguetes
-
-    FOR EACH ROW
-
-    EXECUTE FUNCTION update_updated_at_column();
-
-
-
--- ============================================
-
--- 9. VERIFICACIÓN DE DATOS
-
--- ============================================
-
-
-
--- Ver tipos de usuario creados
-
-SELECT 'Tipos de Usuario:' as info;
-
-SELECT * FROM tipo_usuarios ORDER BY id;
-
-
-
--- Ver empresa creada
-SELECT 'Empresa:' as info;
-SELECT * FROM empresas ORDER BY id;
-
-
-
--- Ver usuarios creados (sin mostrar contraseñas)
-
-SELECT 'Usuarios:' as info;
-
-SELECT 
-
-    u.id,
-
-    u.nombre,
-
-    u.email,
-
-    e.nombre as empresa_nombre,
-
-    tu.nombre as tipo_usuario_nombre,
-
-    u.activo,
-
-    u.created_at
-
-FROM usuarios u
-
-JOIN empresas e ON u.empresa_id = e.id
-
-JOIN tipo_usuarios tu ON u.tipo_usuario_id = tu.id
-
-ORDER BY u.nombre;
-
-
-
--- ============================================
-
--- FIN DEL SCRIPT
-
--- ============================================
-
--- 
-
--- USUARIOS DE EJEMPLO CREADOS:
-
--- 
-
--- Super Administrador:
-
---   Email: "superadmin@toyswalls.com"
---   Contraseña: "admin123"
-
--- 
-
--- Administrador:
-
---   Email: "admin@toyswalls.com"
---   Contraseña: "admin123"
-
--- 
-
--- Empleados:
-
---   Email: "juan@toyswalls.com" o "maria@toyswalls.com"
---   Contraseña: "empleado123"
-
--- 
-
--- Empresa: "ToysWalls"
--- Logo: https://i.imgur.com/RBbjVnp.jpeg
--- 
--- NOTAS IMPORTANTES:
--- - Todos los usuarios pertenecen a ToysWalls
--- - El login ahora usa email en lugar de selección de empresa
--- - Las categorías han sido eliminadas
--- - Los juguetes ahora tienen un campo foto_url opcional
--- 
-
--- ============================================
-
-

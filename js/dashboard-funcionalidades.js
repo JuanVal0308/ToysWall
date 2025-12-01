@@ -68,7 +68,9 @@ async function loadDashboardSummary() {
         }
 
         // Cargar ventas recientes
-        const { data: ventasRecientes } = await window.supabaseClient
+        const ventasList = document.getElementById('ventasRecientes');
+        try {
+            const { data: ventasRecientes, error: ventasError } = await window.supabaseClient
             .from('ventas')
             .select(`
                 *,
@@ -79,19 +81,67 @@ async function loadDashboardSummary() {
             .order('created_at', { ascending: false })
             .limit(5);
 
-        const ventasList = document.getElementById('ventasRecientes');
-        if (ventasRecientes && ventasRecientes.length > 0) {
+            if (ventasError) {
+                console.error('Error al cargar ventas recientes con relaciones:', ventasError);
+                // Fallback: cargar sin relaciones
+                const { data: ventasSimples, error: errorSimple } = await window.supabaseClient
+                    .from('ventas')
+                    .select('*')
+                    .eq('empresa_id', user.empresa_id)
+                    .order('created_at', { ascending: false })
+                    .limit(5);
+                
+                if (errorSimple) {
+                    throw errorSimple;
+                }
+
+                // Cargar juguetes y empleados por separado
+                if (ventasSimples && ventasSimples.length > 0) {
+                    const jugueteIds = [...new Set(ventasSimples.map(v => v.juguete_id))];
+                    const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
+                    
+                    const [juguetesData, empleadosData] = await Promise.all([
+                        jugueteIds.length > 0 ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('id', jugueteIds) : { data: [] },
+                        empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] }
+                    ]);
+
+                    const juguetesMap = new Map((juguetesData.data || []).map(j => [j.id, j]));
+                    const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
+
+                    ventasList.innerHTML = ventasSimples.map(v => {
+                        const juguete = juguetesMap.get(v.juguete_id);
+                        const empleado = empleadosMap.get(v.empleado_id);
+                        return `
+                            <div class="venta-item">
+                                <div class="venta-info">
+                                    <strong>${juguete?.nombre || 'N/A'}</strong>
+                                    <span>${v.codigo_venta}</span>
+                                </div>
+                                <div class="venta-precio">$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    ventasList.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No hay ventas recientes</p>';
+                }
+            } else if (ventasRecientes && ventasRecientes.length > 0) {
             ventasList.innerHTML = ventasRecientes.map(v => `
                 <div class="venta-item">
                     <div class="venta-info">
                         <strong>${v.juguetes?.nombre || 'N/A'}</strong>
                         <span>${v.codigo_venta}</span>
                     </div>
-                    <div class="venta-precio">$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</div>
+                        <div class="venta-precio">$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</div>
                 </div>
             `).join('');
         } else {
             ventasList.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No hay ventas recientes</p>';
+        }
+        } catch (error) {
+            console.error('Error al cargar ventas recientes:', error);
+            if (ventasList) {
+                ventasList.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No hay ventas recientes</p>';
+            }
         }
 
         // Cargar gráfico de ventas del mes en el dashboard
@@ -126,6 +176,62 @@ function initRegistrarVenta() {
     registrarVentaInitialized = true;
     ventaItems = []; // Reiniciar items
 
+    // Configurar formato de precio con separadores de miles
+    const ventaPrecioInput = document.getElementById('ventaPrecio');
+    if (ventaPrecioInput) {
+        // Guardar el valor numérico real en un atributo data
+        ventaPrecioInput.addEventListener('input', function(e) {
+            let value = e.target.value;
+            // Remover todos los caracteres que no sean números
+            const numericValue = value.replace(/[^\d]/g, '');
+            
+            if (numericValue === '') {
+                e.target.value = '';
+                e.target.dataset.numericValue = '';
+                return;
+            }
+            
+            // Guardar el valor numérico
+            const numValue = parseInt(numericValue);
+            e.target.dataset.numericValue = numValue;
+            
+            // Formatear con separadores de miles
+            const formatted = numValue.toLocaleString('es-CO', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            });
+            
+            // Actualizar el valor mostrado
+            e.target.value = formatted;
+        });
+        
+        // Al hacer blur, asegurar que el valor esté formateado
+        ventaPrecioInput.addEventListener('blur', function(e) {
+            const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
+            if (numericValue && numericValue !== '') {
+                const numValue = parseInt(numericValue);
+                e.target.value = numValue.toLocaleString('es-CO', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0
+                });
+                e.target.dataset.numericValue = numValue;
+            }
+        });
+        
+        // Al hacer focus, mantener el valor formateado pero permitir edición
+        ventaPrecioInput.addEventListener('focus', function(e) {
+            const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
+            if (numericValue && numericValue !== '') {
+                // Mantener formateado para mejor visualización
+                const numValue = parseInt(numericValue);
+                e.target.value = numValue.toLocaleString('es-CO', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0
+                });
+            }
+        });
+    }
+
     // Buscar juguete por código
     jugueteCodigoInput.addEventListener('blur', async function() {
         const codigo = this.value.trim();
@@ -153,7 +259,6 @@ function initRegistrarVenta() {
                 const nombreJuguete = juguetePrincipal.nombre;
                 const fotoUrl = juguetePrincipal.foto_url;
                 const precioMin = juguetePrincipal.precio_min;
-                const precioMax = juguetePrincipal.precio_max;
                 
                 // Calcular cantidad total sumando todas las ubicaciones
                 const cantidadTotal = juguetes.reduce((sum, j) => sum + (j.cantidad || 0), 0);
@@ -185,18 +290,40 @@ function initRegistrarVenta() {
                     ubicacionInfo = '<br><small style="color: #ef4444;">✗ Sin stock disponible</small>';
                 }
 
-                // Mostrar rango de precios
+                // Mostrar precio mínimo con formato mejorado
                 let precioInfo = '';
-                if (precioMin !== null && precioMin !== undefined && precioMax !== null && precioMax !== undefined) {
-                    precioInfo = `<br><small style="color: #64748b;">💰 Rango de precios: $${precioMin.toFixed(2)} - $${precioMax.toFixed(2)}</small>`;
+                if (precioMin !== null && precioMin !== undefined) {
+                    const precioFormateado = precioMin.toLocaleString('es-CO', { 
+                        minimumFractionDigits: 0, 
+                        maximumFractionDigits: 0 
+                    });
+                    precioInfo = `<br><small style="color: #64748b; font-size: 14px; font-weight: 600;">💰 Precio mínimo: <span style="color: #ef4444; font-size: 16px; font-weight: bold;">$${precioFormateado}</span></small>`;
                 }
 
                 // Mostrar imagen si existe
                 let imagenHTML = '';
-                if (fotoUrl) {
-                    imagenHTML = `<div style="margin-bottom: 10px;">
-                        <img src="${fotoUrl}" alt="${nombreJuguete}" 
-                             style="max-width: 100px; max-height: 100px; border-radius: 8px; border: 2px solid #e2e8f0; object-fit: cover;">
+                const fotoUrlLimpia = fotoUrl ? fotoUrl.trim() : '';
+                if (fotoUrlLimpia && fotoUrlLimpia !== '') {
+                    // Validar que sea una URL válida
+                    try {
+                        new URL(fotoUrlLimpia);
+                        imagenHTML = `<div style="margin-bottom: 10px; text-align: center;" id="jugueteImagenContainer">
+                            <img src="${fotoUrlLimpia}" alt="${nombreJuguete}" 
+                                 style="max-width: 120px; max-height: 120px; border-radius: 8px; border: 2px solid #e2e8f0; object-fit: cover; display: block; margin: 0 auto; background: #f1f5f9;"
+                                 onerror="const container = document.getElementById('jugueteImagenContainer'); if(container) { container.innerHTML='<div style=\\'padding: 20px; background: #f1f5f9; border-radius: 8px; color: #64748b; border: 2px solid #e2e8f0;\\'><i class=\\'fas fa-image\\' style=\\'font-size: 24px; display: block; margin-bottom: 5px;\\'></i><small>Imagen no disponible</small></div>'; }"
+                                 onload="this.style.background='transparent';">
+                        </div>`;
+                    } catch (e) {
+                        // URL inválida
+                        imagenHTML = `<div style="margin-bottom: 10px; text-align: center; padding: 20px; background: #f1f5f9; border-radius: 8px; border: 2px solid #e2e8f0;">
+                            <i class="fas fa-image" style="font-size: 24px; color: #cbd5e1; display: block; margin-bottom: 5px;"></i>
+                            <small style="color: #64748b;">URL inválida</small>
+                        </div>`;
+                    }
+                } else {
+                    imagenHTML = `<div style="margin-bottom: 10px; text-align: center; padding: 20px; background: #f1f5f9; border-radius: 8px; border: 2px solid #e2e8f0;">
+                        <i class="fas fa-image" style="font-size: 32px; color: #cbd5e1; display: block; margin-bottom: 5px;"></i>
+                        <small style="color: #64748b;">Sin imagen</small>
                     </div>`;
                 }
                 
@@ -298,7 +425,10 @@ function initRegistrarVenta() {
         const jugueteCodigo = jugueteCodigoInput.value.trim();
         const empleadoCodigo = empleadoCodigoInput.value.trim();
         const cantidad = parseInt(document.getElementById('ventaCantidad')?.value || 1);
-        const precio = parseFloat(document.getElementById('ventaPrecio').value);
+        // Obtener el valor numérico real del campo de precio (puede estar formateado)
+        const precioInput = document.getElementById('ventaPrecio');
+        const precioRaw = precioInput?.dataset.numericValue || precioInput?.value.replace(/[^\d]/g, '') || '0';
+        const precio = parseFloat(precioRaw);
         const metodoPago = document.getElementById('ventaMetodoPago').value;
 
         if (!jugueteCodigo || !empleadoCodigo || !precio || !metodoPago || cantidad < 1) {
@@ -359,7 +489,7 @@ function initRegistrarVenta() {
                 // Empleado normal: debe buscar el juguete en su tienda
                 if (!empleado.tienda_id) {
                     showVentaMessage('El empleado no tiene una tienda asignada. No puede realizar ventas.', 'error');
-                    return;
+                return;
                 }
 
                 // Buscar juguete en la tienda del empleado
@@ -386,12 +516,19 @@ function initRegistrarVenta() {
                 return;
             }
 
-            // Validar que el precio esté dentro del rango permitido
-            if (juguete.precio_min !== null && juguete.precio_min !== undefined && 
-                juguete.precio_max !== null && juguete.precio_max !== undefined) {
-                if (precio < juguete.precio_min || precio > juguete.precio_max) {
+            // Validar que el precio sea mayor o igual al precio mínimo
+            if (juguete.precio_min !== null && juguete.precio_min !== undefined) {
+                if (precio < juguete.precio_min) {
+                    const precioMinFormateado = juguete.precio_min.toLocaleString('es-CO', { 
+                        minimumFractionDigits: 0, 
+                        maximumFractionDigits: 0 
+                    });
+                    const precioIngresadoFormateado = precio.toLocaleString('es-CO', { 
+                        minimumFractionDigits: 0, 
+                        maximumFractionDigits: 0 
+                    });
                     showVentaMessage(
-                        `El precio debe estar entre $${juguete.precio_min.toFixed(2)} y $${juguete.precio_max.toFixed(2)}. Precio ingresado: $${precio.toFixed(2)}`, 
+                        `El precio debe ser mayor o igual a $${precioMinFormateado}. Precio ingresado: $${precioIngresadoFormateado}`, 
                         'error'
                     );
                     return;
@@ -403,6 +540,8 @@ function initRegistrarVenta() {
                 juguete_id: juguete.id,
                 juguete_nombre: juguete.nombre,
                 juguete_codigo: juguete.codigo,
+                juguete_item: juguete.item || null,
+                juguete_foto_url: juguete.foto_url || null,
                 empleado_id: empleado.id,
                 empleado_nombre: empleado.nombre,
                 empleado_codigo: empleado.codigo,
@@ -424,7 +563,11 @@ function initRegistrarVenta() {
             jugueteCodigoInput.value = '';
             empleadoCodigoInput.value = '';
             document.getElementById('ventaCantidad').value = '1';
-            document.getElementById('ventaPrecio').value = '';
+            const precioInput = document.getElementById('ventaPrecio');
+            if (precioInput) {
+                precioInput.value = '';
+                precioInput.dataset.numericValue = '';
+            }
             document.getElementById('ventaMetodoPago').value = '';
             const jugueteInfo = document.getElementById('jugueteInfo');
             const empleadoInfo = document.getElementById('empleadoInfo');
@@ -459,8 +602,8 @@ function initRegistrarVenta() {
             const user = JSON.parse(sessionStorage.getItem('user'));
             
             // Generar un solo código de venta para todos los items
-            const codigoVenta = await generarCodigoVenta();
-            
+                const codigoVenta = await generarCodigoVenta();
+                
             // Registrar cada item como parte de la misma venta
             for (const item of ventaItems) {
                 const cantidad = item.cantidad || 1;
@@ -560,14 +703,40 @@ window.updateVentaItemsList = function() {
     itemsList.innerHTML = ventaItems.map((item, index) => {
         const cantidad = item.cantidad || 1;
         const subtotal = item.precio * cantidad;
+        
+        // Generar HTML de imagen
+        let imagenHTML = '';
+        const fotoUrlLimpia = item.juguete_foto_url ? item.juguete_foto_url.trim() : '';
+        if (fotoUrlLimpia && fotoUrlLimpia !== '') {
+            try {
+                new URL(fotoUrlLimpia);
+                imagenHTML = `<div style="flex-shrink: 0; margin-right: 12px;">
+                    <img src="${fotoUrlLimpia}" alt="${item.juguete_nombre}" 
+                         style="width: 60px; height: 60px; border-radius: 6px; border: 2px solid #e2e8f0; object-fit: cover; background: #f1f5f9;"
+                         onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'width: 60px; height: 60px; background: #f1f5f9; border-radius: 6px; border: 2px solid #e2e8f0; display: flex; align-items: center; justify-content: center;\\'><i class=\\'fas fa-image\\' style=\\'color: #cbd5e1; font-size: 20px;\\'></i></div>';"
+                         onload="this.style.background='transparent';">
+                </div>`;
+            } catch (e) {
+                imagenHTML = `<div style="flex-shrink: 0; margin-right: 12px; width: 60px; height: 60px; background: #f1f5f9; border-radius: 6px; border: 2px solid #e2e8f0; display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-image" style="color: #cbd5e1; font-size: 20px;"></i>
+                </div>`;
+            }
+        } else {
+            imagenHTML = `<div style="flex-shrink: 0; margin-right: 12px; width: 60px; height: 60px; background: #f1f5f9; border-radius: 6px; border: 2px solid #e2e8f0; display: flex; align-items: center; justify-content: center;">
+                <i class="fas fa-image" style="color: #cbd5e1; font-size: 20px;"></i>
+            </div>`;
+        }
+        
+        const itemCode = item.juguete_item ? ` | ITEM: ${item.juguete_item}` : '';
         return `
-        <div class="venta-item-card">
-            <div class="item-info">
-                <strong>${item.juguete_nombre}</strong> (${item.juguete_codigo})<br>
-                <small>Precio Unitario: $${item.precio.toLocaleString('es-CO', { minimumFractionDigits: 2 })} | Cantidad: ${cantidad} | Empleado: ${item.empleado_nombre} | Método: ${item.metodo_pago}</small>
+        <div class="venta-item-card" style="display: flex; align-items: center; gap: 12px;">
+            ${imagenHTML}
+            <div class="item-info" style="flex: 1;">
+                <strong>${item.juguete_nombre}</strong> (${item.juguete_codigo})${itemCode}<br>
+                <small>Precio Unitario: $${item.precio.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} | Cantidad: ${cantidad} | Empleado: ${item.empleado_nombre} | Método: ${item.metodo_pago}</small>
             </div>
             <div class="item-actions">
-                <span class="item-precio">$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span>
+                <span class="item-precio">$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
                 <button type="button" class="btn-remove" onclick="removeVentaItem(${index})">
                     <i class="fas fa-times"></i>
                 </button>
@@ -876,16 +1045,17 @@ function showFacturarView() {
     }, 0);
     const ivaTotal = totalConIva - totalBase;
     
-    // Llenar items (sin código)
+    // Llenar items (con código e ITEM)
     const itemsBody = document.getElementById('facturaItemsBody');
     itemsBody.innerHTML = ventaItems.map(item => {
         const cantidad = item.cantidad || 1;
         const precioConIva = item.precio;
         const precioBase = precioConIva / 1.19;
         const subtotal = precioBase * cantidad; // Subtotal = precio sin IVA × cantidad
+        const itemCode = item.juguete_item ? ` (ITEM: ${item.juguete_item})` : '';
         return `
         <tr>
-            <td>${item.juguete_nombre}</td>
+            <td>${item.juguete_nombre} (${item.juguete_codigo})${itemCode}</td>
             <td>$${precioBase.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
             <td>${cantidad}</td>
             <td>$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
@@ -1437,19 +1607,33 @@ let todasLasTiendas = [];
 
 async function loadTiendas() {
     const tiendasList = document.getElementById('tiendasList');
-    if (!tiendasList) return;
+    if (!tiendasList) {
+        console.warn('loadTiendas: No se encontró el elemento tiendasList');
+        return;
+    }
     
+    console.log('loadTiendas: Iniciando carga de tiendas...');
     tiendasList.innerHTML = '<p style="text-align: center; color: #64748b;">Cargando tiendas...</p>';
     
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
+        if (!user || !user.empresa_id) {
+            throw new Error('Usuario no válido o sin empresa_id');
+        }
+        
+        console.log('loadTiendas: Consultando tiendas para empresa_id:', user.empresa_id);
         const { data: tiendas, error } = await window.supabaseClient
             .from('tiendas')
             .select('*')
             .eq('empresa_id', user.empresa_id)
             .order('nombre');
 
-        if (error) throw error;
+        if (error) {
+            console.error('loadTiendas: Error en consulta:', error);
+            throw error;
+        }
+        
+        console.log('loadTiendas: Tiendas encontradas:', tiendas?.length || 0);
 
         // Optimización: Cargar todos los empleados y juguetes de una vez
         const tiendaIds = (tiendas || []).map(t => t.id);
@@ -1481,26 +1665,49 @@ async function loadTiendas() {
                 }
             }
         } else {
-            tiendas.forEach(tienda => {
-                tienda.empleados = [];
-                tienda.juguetes = [];
-            });
+            if (tiendas && tiendas.length > 0) {
+                tiendas.forEach(tienda => {
+                    tienda.empleados = [];
+                    tienda.juguetes = [];
+                });
+            }
         }
 
         todasLasTiendas = tiendas || [];
         paginaActualTiendas = 1;
-        renderizarPaginaTiendas();
+        console.log('loadTiendas: Total tiendas a renderizar:', todasLasTiendas.length);
+        
+        if (tiendas && tiendas.length > 0) {
+            console.log('loadTiendas: Llamando a renderizarPaginaTiendas()');
+            renderizarPaginaTiendas();
+        } else {
+            console.log('loadTiendas: No hay tiendas, mostrando mensaje');
+            tiendasList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay tiendas registradas.</p>';
+            const paginationContainer = document.getElementById('tiendasPagination');
+            if (paginationContainer) {
+                paginationContainer.innerHTML = '';
+            }
+        }
     } catch (error) {
         console.error('Error al cargar tiendas:', error);
-        tiendasList.innerHTML = '<p style="text-align: center; color: #ef4444;">Error al cargar las tiendas</p>';
+        const tiendasList = document.getElementById('tiendasList');
+        if (tiendasList) {
+            tiendasList.innerHTML = `<p style="text-align: center; color: #ef4444;">Error al cargar las tiendas: ${error.message}</p>`;
+        }
     }
 }
 
 function renderizarPaginaTiendas() {
     const tiendasList = document.getElementById('tiendasList');
-    if (!tiendasList) return;
+    if (!tiendasList) {
+        console.warn('renderizarPaginaTiendas: No se encontró el elemento tiendasList');
+        return;
+    }
+    
+    console.log('renderizarPaginaTiendas: Total tiendas:', todasLasTiendas?.length || 0);
     
     if (!todasLasTiendas || todasLasTiendas.length === 0) {
+        console.log('renderizarPaginaTiendas: No hay tiendas para renderizar');
         tiendasList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay tiendas registradas.</p>';
         const paginationContainer = document.getElementById('tiendasPagination');
         if (paginationContainer) paginationContainer.innerHTML = '';
@@ -1513,14 +1720,22 @@ function renderizarPaginaTiendas() {
     const fin = inicio + itemsPorPaginaTiendas;
     const tiendasPagina = todasLasTiendas.slice(inicio, fin);
 
+    console.log('renderizarPaginaTiendas: Renderizando', tiendasPagina.length, 'tiendas de la página', paginaActualTiendas);
+
     // Renderizar tiendas de la página actual
     tiendasList.innerHTML = '';
-    tiendasPagina.forEach(tienda => {
-        const tiendaCard = createTiendaCard(tienda);
-        tiendasList.appendChild(tiendaCard);
+    tiendasPagina.forEach((tienda, index) => {
+        try {
+            const tiendaCard = createTiendaCard(tienda);
+            tiendasList.appendChild(tiendaCard);
+            console.log(`renderizarPaginaTiendas: Tienda ${index + 1} renderizada:`, tienda.nombre);
+        } catch (error) {
+            console.error(`renderizarPaginaTiendas: Error al crear card para tienda ${tienda.id}:`, error);
+        }
     });
 
     renderizarPaginacionTiendas(totalPaginas, todasLasTiendas.length);
+    console.log('renderizarPaginaTiendas: Renderización completada');
 }
 
 function renderizarPaginacionTiendas(totalPaginas, totalTiendas) {
@@ -1729,11 +1944,11 @@ function renderizarPaginaUsuarios() {
     if (!usuariosList) return;
     
     if (!todosLosUsuarios || todosLosUsuarios.length === 0) {
-        usuariosList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay usuarios registrados.</p>';
+            usuariosList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay usuarios registrados.</p>';
         const paginationContainer = document.getElementById('usuariosPagination');
         if (paginationContainer) paginationContainer.innerHTML = '';
-        return;
-    }
+            return;
+        }
 
     // Calcular paginación
     const totalPaginas = Math.ceil(todosLosUsuarios.length / itemsPorPaginaUsuarios);
@@ -1742,11 +1957,11 @@ function renderizarPaginaUsuarios() {
     const usuariosPagina = todosLosUsuarios.slice(inicio, fin);
 
     // Renderizar usuarios de la página actual
-    usuariosList.innerHTML = '';
+        usuariosList.innerHTML = '';
     usuariosPagina.forEach(usuario => {
-        const usuarioCard = createUsuarioCard(usuario);
-        usuariosList.appendChild(usuarioCard);
-    });
+            const usuarioCard = createUsuarioCard(usuario);
+            usuariosList.appendChild(usuarioCard);
+        });
 
     renderizarPaginacionUsuarios(totalPaginas, todosLosUsuarios.length);
 }
@@ -1992,28 +2207,28 @@ function renderizarJuguetesAbastecer(juguetes) {
     
     if (!juguetes || juguetes.length === 0) {
         container.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No se encontraron juguetes</p>';
-        return;
-    }
-    
-    container.innerHTML = juguetes.map(juguete => `
-        <div class="juguete-movimiento-item">
-            <div class="juguete-info">
-                <strong>${juguete.nombre}</strong> (${juguete.codigo})
-                <br><small>Cantidad disponible: ${juguete.cantidad}</small>
+            return;
+        }
+
+        container.innerHTML = juguetes.map(juguete => `
+            <div class="juguete-movimiento-item">
+                <div class="juguete-info">
+                    <strong>${juguete.nombre}</strong> (${juguete.codigo})
+                    <br><small>Cantidad disponible: ${juguete.cantidad}</small>
+                </div>
+                <div class="juguete-cantidad">
+                    <input 
+                        type="number" 
+                        class="cantidad-input" 
+                        data-juguete-id="${juguete.id}"
+                        min="1" 
+                        max="${juguete.cantidad}" 
+                        value="1"
+                        placeholder="Cantidad"
+                    >
+                </div>
             </div>
-            <div class="juguete-cantidad">
-                <input 
-                    type="number" 
-                    class="cantidad-input" 
-                    data-juguete-id="${juguete.id}"
-                    min="1" 
-                    max="${juguete.cantidad}" 
-                    value="1"
-                    placeholder="Cantidad"
-                >
-            </div>
-        </div>
-    `).join('');
+        `).join('');
 }
 
 // Función para filtrar juguetes por nombre o código
@@ -3083,21 +3298,21 @@ if (document.readyState === 'loading') {
 
 // Función para configurar formulario de usuarios
 function setupUsuarioForm() {
-    const nuevoUsuarioForm = document.getElementById('nuevoUsuarioForm');
+const nuevoUsuarioForm = document.getElementById('nuevoUsuarioForm');
     if (nuevoUsuarioForm && !nuevoUsuarioForm.hasAttribute('data-listener-added')) {
         nuevoUsuarioForm.setAttribute('data-listener-added', 'true');
-        nuevoUsuarioForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
+    nuevoUsuarioForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
             const nombre = capitalizarPrimeraLetra(document.getElementById('usuarioNombre').value.trim());
-            const email = document.getElementById('usuarioEmail').value.trim();
-            const password = document.getElementById('usuarioPassword').value;
-            const tipoUsuarioId = parseInt(document.getElementById('usuarioTipo').value);
-            
-            if (!nombre || !email || !password || !tipoUsuarioId) {
-                showUsuarioMessage('Por favor, completa todos los campos', 'error');
-                return;
-            }
+        const email = document.getElementById('usuarioEmail').value.trim();
+        const password = document.getElementById('usuarioPassword').value;
+        const tipoUsuarioId = parseInt(document.getElementById('usuarioTipo').value);
+        
+        if (!nombre || !email || !password || !tipoUsuarioId) {
+            showUsuarioMessage('Por favor, completa todos los campos', 'error');
+            return;
+        }
             
             // Validar que la contraseña tenga al menos 3 caracteres
             if (password.length < 3) {
@@ -3105,30 +3320,30 @@ function setupUsuarioForm() {
                 return;
             }
 
-            try {
-                const user = JSON.parse(sessionStorage.getItem('user'));
-                const { error } = await window.supabaseClient
-                    .from('usuarios')
-                    .insert({
-                        nombre: nombre,
-                        email: email,
-                        password: password,
-                        tipo_usuario_id: tipoUsuarioId,
-                        empresa_id: user.empresa_id
-                    });
+        try {
+            const user = JSON.parse(sessionStorage.getItem('user'));
+            const { error } = await window.supabaseClient
+                .from('usuarios')
+                .insert({
+                    nombre: nombre,
+                    email: email,
+                    password: password,
+                    tipo_usuario_id: tipoUsuarioId,
+                    empresa_id: user.empresa_id
+                });
 
-                if (error) throw error;
+            if (error) throw error;
 
-                showUsuarioMessage('Usuario agregado correctamente', 'success');
-                nuevoUsuarioForm.reset();
+            showUsuarioMessage('Usuario agregado correctamente', 'success');
+            nuevoUsuarioForm.reset();
                 if (typeof loadUsuarios === 'function') {
-                    loadUsuarios();
+            loadUsuarios();
                 }
-            } catch (error) {
-                console.error('Error al agregar usuario:', error);
-                showUsuarioMessage('Error al agregar el usuario: ' + error.message, 'error');
-            }
-        });
+        } catch (error) {
+            console.error('Error al agregar usuario:', error);
+            showUsuarioMessage('Error al agregar el usuario: ' + error.message, 'error');
+        }
+    });
     }
 }
 
@@ -3317,17 +3532,22 @@ async function deleteUsuario(usuarioId) {
 // TIENDAS - CRUD COMPLETO CON EMPLEADOS Y JUGUETES
 // ============================================
 
-// Toggle del acordeón "Agregar Tienda"
-const agregarTiendaHeader = document.getElementById('agregarTiendaHeader');
-const agregarTiendaContent = document.getElementById('agregarTiendaContent');
+// Toggle del acordeón "Agregar Tienda" - Se inicializa cuando se muestra la vista
+function initAgregarTiendaAccordion() {
+    const agregarTiendaHeader = document.getElementById('agregarTiendaHeader');
+    const agregarTiendaContent = document.getElementById('agregarTiendaContent');
 
-if (agregarTiendaHeader && agregarTiendaContent) {
-    agregarTiendaHeader.addEventListener('click', function() {
-        agregarTiendaContent.classList.toggle('active');
-        const icon = agregarTiendaHeader.querySelector('.accordion-icon');
-        icon.classList.toggle('fa-chevron-down');
-        icon.classList.toggle('fa-chevron-up');
-    });
+    if (agregarTiendaHeader && agregarTiendaContent && !agregarTiendaHeader.hasAttribute('data-listener-added')) {
+        agregarTiendaHeader.setAttribute('data-listener-added', 'true');
+        agregarTiendaHeader.addEventListener('click', function() {
+            agregarTiendaContent.classList.toggle('active');
+            const icon = agregarTiendaHeader.querySelector('.accordion-icon');
+            if (icon) {
+                icon.classList.toggle('fa-chevron-down');
+                icon.classList.toggle('fa-chevron-up');
+            }
+        });
+    }
 }
 
 // Toggle del acordeón "Agregar Usuario"
@@ -3757,30 +3977,30 @@ async function aplicarFiltroVentas(filtro) {
         resultsDiv.innerHTML = `
             <h3>Resultados de Ventas (${ventas.length} ${ventas.length === 1 ? 'venta' : 'ventas'})</h3>
             <div class="inventario-table-container">
-                <table class="inventario-table">
-                    <thead>
+            <table class="inventario-table">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Juguete</th>
+                        <th>Empleado</th>
+                        <th>Precio</th>
+                        <th>Método</th>
+                        <th>Fecha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${ventas.map(v => `
                         <tr>
-                            <th>Código</th>
-                            <th>Juguete</th>
-                            <th>Empleado</th>
-                            <th>Precio</th>
-                            <th>Método</th>
-                            <th>Fecha</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${ventas.map(v => `
-                            <tr>
                                 <td>${v.codigo_venta || 'N/A'}</td>
-                                <td>${v.juguetes?.nombre || 'N/A'}</td>
-                                <td>${v.empleados?.nombre || 'N/A'}</td>
+                            <td>${v.juguetes?.nombre || 'N/A'}</td>
+                            <td>${v.empleados?.nombre || 'N/A'}</td>
                                 <td>$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
                                 <td>${v.metodo_pago || 'N/A'}</td>
                                 <td>${new Date(v.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
             </div>
         `;
     } catch (error) {
@@ -3818,9 +4038,9 @@ async function aplicarFiltroGanancias(filtro) {
         if (error) throw error;
 
         if (!ventas || ventas.length === 0) {
-            resultsDiv.innerHTML = `
+        resultsDiv.innerHTML = `
                 <div class="stat-card" style="max-width: 500px; margin: 0 auto; text-align: center;">
-                    <h3>Ganancias ${filtro === 'dia' ? 'del Día' : filtro === 'semana' ? 'de la Semana' : 'Totales'}</h3>
+                <h3>Ganancias ${filtro === 'dia' ? 'del Día' : filtro === 'semana' ? 'de la Semana' : 'Totales'}</h3>
                     <p class="stat-number" style="color: #64748b;">$0.00</p>
                     <p style="color: #64748b; font-size: 14px; margin-top: 8px;">No hay ventas registradas</p>
                 </div>
@@ -3863,6 +4083,8 @@ window.initAbastecer = initAbastecer;
 window.loadTiendasForEmpleados = loadTiendasForEmpleados;
 window.aplicarFiltroVentas = aplicarFiltroVentas;
 window.aplicarFiltroGanancias = aplicarFiltroGanancias;
+window.initAgregarTiendaAccordion = initAgregarTiendaAccordion;
+window.initAgregarTiendaAccordion = initAgregarTiendaAccordion;
 window.setupUsuarioForm = setupUsuarioForm;
 window.setupTiendaForm = setupTiendaForm;
 
@@ -4129,10 +4351,7 @@ window.procesarDevolucion = async function(codigoVenta, idsVentas = null) {
         // Obtener las ventas según si es selectiva o total
         let query = window.supabaseClient
             .from('ventas')
-            .select(`
-                *,
-                juguetes(id, nombre, codigo, cantidad, bodega_id, tienda_id, empresa_id)
-            `)
+            .select('*')
             .eq('empresa_id', user.empresa_id);
         
         // Si hay IDs específicos, filtrar por ellos; si no, por código de venta
@@ -4143,6 +4362,20 @@ window.procesarDevolucion = async function(codigoVenta, idsVentas = null) {
         }
         
         const { data: ventas, error: ventasError } = await query;
+        
+        // Si hay ventas, cargar juguetes por separado
+        if (!ventasError && ventas && ventas.length > 0) {
+            const jugueteIds = [...new Set(ventas.map(v => v.juguete_id))];
+            const { data: juguetesData } = await window.supabaseClient
+                .from('juguetes')
+                .select('id, nombre, codigo, cantidad, bodega_id, tienda_id, empresa_id')
+                .in('id', jugueteIds);
+            
+            const juguetesMap = new Map((juguetesData || []).map(j => [j.id, j]));
+            ventas.forEach(v => {
+                v.juguetes = juguetesMap.get(v.juguete_id) || null;
+            });
+        }
 
         if (ventasError) throw ventasError;
 
@@ -4854,7 +5087,8 @@ async function cargarTodasLasVentas() {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
         
-        const { data: ventas, error } = await window.supabaseClient
+        // Intentar cargar con relaciones primero
+        let { data: ventas, error } = await window.supabaseClient
             .from('ventas')
             .select(`
                 *,
@@ -4864,7 +5098,40 @@ async function cargarTodasLasVentas() {
             .eq('empresa_id', user.empresa_id)
             .order('created_at', { ascending: false });
         
-        if (error) throw error;
+        // Si falla con relaciones, cargar sin relaciones y hacer consultas separadas
+        if (error) {
+            console.warn('Error al cargar ventas con relaciones, usando fallback:', error);
+            const { data: ventasSimples, error: errorSimple } = await window.supabaseClient
+                .from('ventas')
+                .select('*')
+                .eq('empresa_id', user.empresa_id)
+                .order('created_at', { ascending: false });
+            
+            if (errorSimple) throw errorSimple;
+            
+            // Cargar juguetes y empleados por separado
+            if (ventasSimples && ventasSimples.length > 0) {
+                const jugueteIds = [...new Set(ventasSimples.map(v => v.juguete_id))];
+                const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
+                
+                const [juguetesData, empleadosData] = await Promise.all([
+                    jugueteIds.length > 0 ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('id', jugueteIds) : { data: [] },
+                    empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] }
+                ]);
+
+                const juguetesMap = new Map((juguetesData.data || []).map(j => [j.id, j]));
+                const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
+
+                // Combinar datos
+                ventas = ventasSimples.map(v => ({
+                    ...v,
+                    juguetes: juguetesMap.get(v.juguete_id) || null,
+                    empleados: empleadosMap.get(v.empleado_id) || null
+                }));
+            } else {
+                ventas = [];
+            }
+        }
         
         todasLasVentas = ventas || [];
         ventasFiltradas = [...todasLasVentas];
@@ -5102,4 +5369,691 @@ window.filtrarVentasLista = function() {
     renderizarVentasTabla();
     renderizarPaginacionVentas();
 };
+
+
+
+// ============================================
+
+// TIENDAS - CRUD COMPLETO CON EMPLEADOS Y JUGUETES
+
+// ============================================
+
+
+
+// Toggle del acordeón "Agregar Tienda" - Ya está inicializado arriba (línea 3490)
+
+
+
+// Formulario para agregar tienda (se configura en setupTiendaForm)
+
+
+function showTiendaMessage(message, type) {
+
+    const errorMsg = document.getElementById('tiendaErrorMessage');
+
+    const successMsg = document.getElementById('tiendaSuccessMessage');
+
+    
+
+    if (!errorMsg || !successMsg) return;
+
+    
+
+    errorMsg.style.display = 'none';
+
+    successMsg.style.display = 'none';
+
+    
+
+    if (type === 'error') {
+
+        errorMsg.textContent = message;
+
+        errorMsg.style.display = 'flex';
+
+    } else {
+
+        successMsg.textContent = message;
+
+        successMsg.style.display = 'flex';
+
+    }
+
+    
+
+    setTimeout(() => {
+
+        errorMsg.style.display = 'none';
+
+        successMsg.style.display = 'none';
+
+    }, 5000);
+
+}
+
+
+
+// Manejar clicks en el menú de tiendas
+
+document.addEventListener('click', function(e) {
+
+    if (e.target.closest('.menu-toggle[data-tienda-id]')) {
+
+        const menuToggle = e.target.closest('.menu-toggle');
+
+        const tiendaId = menuToggle.getAttribute('data-tienda-id');
+
+        const menu = document.getElementById(`menu-tienda-${tiendaId}`);
+
+        
+
+        document.querySelectorAll('.dropdown-menu').forEach(m => {
+
+            if (m.id !== `menu-tienda-${tiendaId}`) {
+
+                m.style.display = 'none';
+
+            }
+
+        });
+
+        
+
+        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+
+    }
+
+    
+
+    if (e.target.closest('.dropdown-item[data-tienda-id]')) {
+
+        const item = e.target.closest('.dropdown-item');
+
+        const action = item.getAttribute('data-action');
+
+        const tiendaId = item.getAttribute('data-tienda-id');
+
+        
+
+        document.querySelectorAll('.dropdown-menu').forEach(m => {
+
+            m.style.display = 'none';
+
+        });
+
+        
+
+        if (action === 'edit') {
+
+            openEditTiendaModal(tiendaId);
+
+        } else if (action === 'delete') {
+
+            deleteTienda(tiendaId);
+
+        }
+
+    }
+
+});
+
+
+
+// Abrir modal para editar tienda
+
+async function openEditTiendaModal(tiendaId) {
+
+    try {
+
+        const { data: tienda, error } = await window.supabaseClient
+
+            .from('tiendas')
+
+            .select('*')
+
+            .eq('id', tiendaId)
+
+            .single();
+
+
+
+        if (error) throw error;
+
+
+
+        document.getElementById('editTiendaNombre').value = tienda.nombre;
+
+        document.getElementById('editTiendaDireccion').value = tienda.direccion || tienda.ubicacion || '';
+        window.currentTiendaId = tiendaId;
+
+        
+
+        const modal = document.getElementById('editTiendaModal');
+
+        modal.style.display = 'flex';
+
+    } catch (error) {
+
+        console.error('Error al cargar tienda:', error);
+
+        alert('Error al cargar los datos de la tienda');
+
+    }
+
+}
+
+
+
+
+// ============================================
+
+// CORRECCIÓN DE ABASTECER
+
+// ============================================
+
+
+
+// Actualizar función initAbastecer para usar inputs de cantidad
+
+function initAbastecer() {
+
+    const origenTipo = document.getElementById('origenTipo');
+
+    const origenSelect = document.getElementById('origenSelect');
+
+    const destinoTipo = document.getElementById('destinoTipo');
+
+    const destinoSelect = document.getElementById('destinoSelect');
+
+    const form = document.getElementById('abastecerForm');
+
+
+
+    if (!origenTipo || !origenSelect || !destinoTipo || !destinoSelect || !form) return;
+
+
+
+    // Cargar opciones según tipo seleccionado
+
+    origenTipo.addEventListener('change', async function() {
+
+        await loadUbicacionesPorTipo(this.value, origenSelect);
+
+        if (this.value && destinoTipo.value) {
+
+            await loadJuguetesDisponibles();
+
+        }
+
+    });
+
+
+
+    destinoTipo.addEventListener('change', async function() {
+
+        await loadUbicacionesPorTipo(this.value, destinoSelect);
+
+        if (origenTipo.value && this.value) {
+
+            await loadJuguetesDisponibles();
+
+        }
+
+    });
+
+
+
+    origenSelect.addEventListener('change', loadJuguetesDisponibles);
+
+    destinoSelect.addEventListener('change', loadJuguetesDisponibles);
+
+
+
+    form.addEventListener('submit', async function(e) {
+
+        e.preventDefault();
+
+        
+
+        const origenTipoVal = origenTipo.value;
+
+        const origenId = parseInt(origenSelect.value);
+
+        const destinoTipoVal = destinoTipo.value;
+
+        const destinoId = parseInt(destinoSelect.value);
+
+        
+
+        if (!origenTipoVal || !origenId || !destinoTipoVal || !destinoId) {
+
+            showAbastecerMessage('Por favor, completa todos los campos', 'error');
+
+            return;
+
+        }
+
+
+
+        // Obtener juguetes seleccionados con cantidad
+
+        const juguetesSeleccionados = Array.from(document.querySelectorAll('.cantidad-input'))
+
+            .map(input => ({
+
+                id: parseInt(input.dataset.jugueteId),
+
+                cantidad: parseInt(input.value) || 0
+
+            }))
+
+            .filter(j => j.cantidad > 0);
+
+
+
+        if (juguetesSeleccionados.length === 0) {
+
+            showAbastecerMessage('Debes seleccionar al menos un juguete con cantidad mayor a 0', 'error');
+
+            return;
+
+        }
+
+
+
+        try {
+
+            const user = JSON.parse(sessionStorage.getItem('user'));
+
+            
+
+            for (const juguete of juguetesSeleccionados) {
+
+                // Obtener juguete actual
+
+                const { data: jugueteActualData } = await window.supabaseClient
+                    .from('juguetes')
+
+                    .select('*')
+
+                    .eq('id', juguete.id)
+
+                    .limit(1);
+
+
+                if (!jugueteActualData || jugueteActualData.length === 0) {
+                    showAbastecerMessage(`Juguete no encontrado`, 'error');
+                    continue;
+
+                }
+
+
+
+                const jugueteActual = jugueteActualData[0];
+
+                if (jugueteActual.cantidad < juguete.cantidad) {
+                    showAbastecerMessage(`No hay suficiente cantidad del juguete ${jugueteActual.nombre || ''}`, 'error');
+                    continue;
+                }
+
+                // Verificar si ya existe un juguete con el mismo código Y nombre en el destino
+                const campoDestino = destinoTipoVal === 'bodega' ? 'bodega_id' : 'tienda_id';
+                const { data: jugueteExistenteData } = await window.supabaseClient
+                    .from('juguetes')
+                    .select('*')
+                    .eq('codigo', jugueteActual.codigo)
+                    .eq('nombre', jugueteActual.nombre)
+                    .eq('empresa_id', user.empresa_id)
+                    .eq(campoDestino, destinoId)
+                    .limit(1);
+
+                // Crear movimiento
+
+                await window.supabaseClient
+
+                    .from('movimientos')
+
+                    .insert({
+
+                        tipo_origen: origenTipoVal,
+
+                        origen_id: origenId,
+
+                        tipo_destino: destinoTipoVal,
+
+                        destino_id: destinoId,
+
+                        juguete_id: juguete.id,
+
+                        cantidad: juguete.cantidad,
+
+                        empresa_id: user.empresa_id
+
+                    });
+
+
+
+                if (jugueteExistenteData && jugueteExistenteData.length > 0) {
+                    // Si ya existe un juguete con el mismo código en el destino, sumar la cantidad
+                    const jugueteExistente = jugueteExistenteData[0];
+                    const nuevaCantidadDestino = jugueteExistente.cantidad + juguete.cantidad;
+                    
+                    await window.supabaseClient
+
+                        .from('juguetes')
+
+                        .update({ cantidad: nuevaCantidadDestino })
+                        .eq('id', jugueteExistente.id);
+                } else {
+
+                    // Si no existe, crear un nuevo registro en el destino
+                    const nuevoJugueteData = {
+                        nombre: jugueteActual.nombre,
+
+                        codigo: jugueteActual.codigo,
+
+                        cantidad: juguete.cantidad,
+
+                        empresa_id: user.empresa_id,
+                        foto_url: jugueteActual.foto_url || null
+                    };
+
+                    
+                    if (destinoTipoVal === 'bodega') {
+
+                        nuevoJugueteData.bodega_id = destinoId;
+                        nuevoJugueteData.tienda_id = null;
+                    } else {
+
+                        nuevoJugueteData.tienda_id = destinoId;
+                        nuevoJugueteData.bodega_id = null;
+                    }
+
+                    
+                    await window.supabaseClient
+
+                        .from('juguetes')
+
+                        .insert(nuevoJugueteData);
+                }
+
+                // Reducir cantidad en origen
+                const nuevaCantidadOrigen = jugueteActual.cantidad - juguete.cantidad;
+                
+                if (nuevaCantidadOrigen <= 0) {
+                    // Si la cantidad llega a 0 o menos, eliminar el registro del origen
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .delete()
+                        .eq('id', juguete.id);
+                } else {
+                    // Actualizar cantidad en origen
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .update({ cantidad: nuevaCantidadOrigen })
+                        .eq('id', juguete.id);
+                }
+
+            }
+
+
+
+            showAbastecerMessage('Movimiento realizado correctamente', 'success');
+
+            form.reset();
+
+            document.getElementById('juguetesDisponiblesList').innerHTML = '';
+
+        } catch (error) {
+
+            console.error('Error al realizar movimiento:', error);
+
+            showAbastecerMessage('Error al realizar el movimiento: ' + error.message, 'error');
+
+        }
+
+    });
+
+}
+
+
+
+// ============================================
+
+// ANÁLISIS - COMPLETAR FUNCIONES
+
+// ============================================
+
+
+
+async function aplicarFiltroVentas(filtro) {
+
+    const resultsDiv = document.getElementById('analisisResults');
+
+    if (!resultsDiv) return;
+
+    
+
+    try {
+
+        const user = JSON.parse(sessionStorage.getItem('user'));
+
+        let query = window.supabaseClient
+
+            .from('ventas')
+
+            .select(`
+
+                *,
+
+                juguetes(nombre, codigo),
+
+                empleados(nombre, codigo)
+
+            `)
+
+            .eq('empresa_id', user.empresa_id);
+
+
+
+        switch(filtro) {
+
+            case 'dia':
+
+                const hoy = new Date();
+
+                hoy.setHours(0, 0, 0, 0);
+
+                query = query.gte('created_at', hoy.toISOString());
+
+                break;
+
+            case 'semana':
+
+                const semana = new Date();
+
+                semana.setDate(semana.getDate() - 7);
+
+                query = query.gte('created_at', semana.toISOString());
+
+                break;
+
+        }
+
+
+
+        const { data: ventas, error } = await query.order('created_at', { ascending: false });
+
+
+
+        if (error) throw error;
+
+
+
+        if (!ventas || ventas.length === 0) {
+
+            resultsDiv.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No hay ventas para mostrar</p>';
+
+            return;
+
+        }
+
+
+
+        resultsDiv.innerHTML = `
+
+            <h3>Resultados de Ventas</h3>
+
+            <table class="inventario-table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>Código</th>
+
+                        <th>Juguete</th>
+
+                        <th>Empleado</th>
+
+                        <th>Precio</th>
+
+                        <th>Método</th>
+
+                        <th>Fecha</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                    ${ventas.map(v => `
+
+                        <tr>
+
+                            <td>${v.codigo_venta}</td>
+
+                            <td>${v.juguetes?.nombre || 'N/A'}</td>
+
+                            <td>${v.empleados?.nombre || 'N/A'}</td>
+
+                            <td>$${parseFloat(v.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+
+                            <td>${v.metodo_pago}</td>
+
+                            <td>${new Date(v.created_at).toLocaleDateString('es-CO')}</td>
+
+                        </tr>
+
+                    `).join('')}
+
+                </tbody>
+
+            </table>
+
+        `;
+
+    } catch (error) {
+
+        console.error('Error al aplicar filtro:', error);
+
+        resultsDiv.innerHTML = '<p style="text-align: center; color: #ef4444; padding: 20px;">Error al cargar los datos</p>';
+
+    }
+
+}
+
+
+
+async function aplicarFiltroGanancias(filtro) {
+
+    const resultsDiv = document.getElementById('analisisResults');
+
+    if (!resultsDiv) return;
+
+    
+
+    try {
+
+        const user = JSON.parse(sessionStorage.getItem('user'));
+
+        let query = window.supabaseClient
+
+            .from('ventas')
+
+            .select('precio_venta, created_at, empleado_id')
+
+            .eq('empresa_id', user.empresa_id);
+
+
+
+        switch(filtro) {
+
+            case 'dia':
+
+                const hoy = new Date();
+
+                hoy.setHours(0, 0, 0, 0);
+
+                query = query.gte('created_at', hoy.toISOString());
+
+                break;
+
+            case 'semana':
+
+                const semana = new Date();
+
+                semana.setDate(semana.getDate() - 7);
+
+                query = query.gte('created_at', semana.toISOString());
+
+                break;
+
+        }
+
+
+
+        const { data: ventas, error } = await query;
+
+
+
+        if (error) throw error;
+
+
+
+        const total = ventas?.reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0) || 0;
+
+
+
+        resultsDiv.innerHTML = `
+
+            <div class="stat-card" style="max-width: 400px; margin: 0 auto;">
+
+                <h3>Ganancias ${filtro === 'dia' ? 'del Día' : filtro === 'semana' ? 'de la Semana' : 'Totales'}</h3>
+
+                <p class="stat-number">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</p>
+
+            </div>
+
+        `;
+
+    } catch (error) {
+
+        console.error('Error al aplicar filtro de ganancias:', error);
+
+        resultsDiv.innerHTML = '<p style="text-align: center; color: #ef4444; padding: 20px;">Error al cargar los datos</p>';
+
+    }
+
+}
+
+
+
+// Exportar funciones globales
+
+
+window.setupUsuarioForm = setupUsuarioForm;
+window.setupTiendaForm = setupTiendaForm;
+
 
