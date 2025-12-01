@@ -833,6 +833,14 @@ body {
         padding: 16px;
     }
 
+    /* Secciones de bultos y precios apiladas en móviles */
+    .bultos-section,
+    .precios-section {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
     /* Tablas responsive */
     .inventario-table-container {
         overflow-x: auto;
@@ -1545,6 +1553,24 @@ body {
 .bodega-form .btn-primary:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* Secciones de bultos y precios - responsive */
+.bultos-section,
+.precios-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* En pantallas medianas y grandes, usar grid de 2 columnas */
+@media (min-width: 768px) {
+    .bultos-section,
+    .precios-section {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
 }
 
 /* Mensajes de error y éxito */
