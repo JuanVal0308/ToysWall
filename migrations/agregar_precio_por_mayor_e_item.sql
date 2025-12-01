@@ -34,3 +34,5 @@ CREATE INDEX IF NOT EXISTS idx_juguetes_precio_por_mayor ON juguetes(precio_por_
 
 
 
+
+

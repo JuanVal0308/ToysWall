@@ -72,3 +72,5 @@ CREATE TRIGGER update_planes_movimiento_updated_at
 
 
 
+
+

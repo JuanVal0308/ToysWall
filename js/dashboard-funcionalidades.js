@@ -3409,7 +3409,16 @@ const nuevoUsuarioForm = document.getElementById('nuevoUsuarioForm');
                 }
         } catch (error) {
             console.error('Error al agregar usuario:', error);
-            showUsuarioMessage('Error al agregar el usuario: ' + error.message, 'error');
+            
+            // Manejar error de email duplicado (409 Conflict o código PostgreSQL 23505)
+            if (error.status === 409 || error.code === '23505' || 
+                (error.message && (error.message.includes('duplicate key') || 
+                                   error.message.includes('email') || 
+                                   error.message.includes('unique constraint')))) {
+                showUsuarioMessage('El email ingresado ya está registrado. Por favor, use otro email.', 'error');
+            } else {
+                showUsuarioMessage('Error al agregar el usuario: ' + (error.message || 'Error desconocido'), 'error');
+            }
         }
     });
     }
@@ -3634,6 +3643,29 @@ if (agregarUsuarioHeader && agregarUsuarioContent) {
 }
 
 // Formulario para agregar tienda (se configura en setupTiendaForm)
+
+function showUsuarioMessage(message, type) {
+    const errorMsg = document.getElementById('usuarioErrorMessage');
+    const successMsg = document.getElementById('usuarioSuccessMessage');
+    
+    if (!errorMsg || !successMsg) return;
+    
+    errorMsg.style.display = 'none';
+    successMsg.style.display = 'none';
+    
+    if (type === 'error') {
+        errorMsg.textContent = message;
+        errorMsg.style.display = 'flex';
+    } else {
+        successMsg.textContent = message;
+        successMsg.style.display = 'flex';
+    }
+    
+    setTimeout(() => {
+        errorMsg.style.display = 'none';
+        successMsg.style.display = 'none';
+    }, 5000);
+}
 
 function showTiendaMessage(message, type) {
     const errorMsg = document.getElementById('tiendaErrorMessage');
