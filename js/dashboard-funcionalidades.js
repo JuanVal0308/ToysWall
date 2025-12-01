@@ -3660,10 +3660,15 @@ function showTiendaMessage(message, type) {
 
 // Manejar clicks en el menú de tiendas
 document.addEventListener('click', function(e) {
+    // Manejar toggle del menú
     if (e.target.closest('.menu-toggle[data-tienda-id]')) {
+        e.preventDefault();
+        e.stopPropagation();
         const menuToggle = e.target.closest('.menu-toggle');
         const tiendaId = menuToggle.getAttribute('data-tienda-id');
         const menu = document.getElementById(`menu-tienda-${tiendaId}`);
+        
+        if (!menu) return;
         
         document.querySelectorAll('.dropdown-menu').forEach(m => {
             if (m.id !== `menu-tienda-${tiendaId}`) {
@@ -3672,13 +3677,20 @@ document.addEventListener('click', function(e) {
         });
         
         menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        return;
     }
     
-    if (e.target.closest('.dropdown-item[data-tienda-id]')) {
-        const item = e.target.closest('.dropdown-item');
-        const action = item.getAttribute('data-action');
-        const tiendaId = item.getAttribute('data-tienda-id');
+    // Manejar clicks en los botones del menú (Actualizar/Eliminar)
+    const dropdownItem = e.target.closest('.dropdown-item[data-tienda-id]');
+    if (dropdownItem) {
+        e.preventDefault();
+        e.stopPropagation();
+        const action = dropdownItem.getAttribute('data-action');
+        const tiendaId = dropdownItem.getAttribute('data-tienda-id');
         
+        if (!tiendaId || !action) return;
+        
+        // Cerrar todos los menús
         document.querySelectorAll('.dropdown-menu').forEach(m => {
             m.style.display = 'none';
         });
@@ -3688,6 +3700,14 @@ document.addEventListener('click', function(e) {
         } else if (action === 'delete') {
             deleteTienda(tiendaId);
         }
+        return;
+    }
+    
+    // Cerrar menús al hacer click fuera
+    if (!e.target.closest('.bodega-actions')) {
+        document.querySelectorAll('.dropdown-menu').forEach(m => {
+            m.style.display = 'none';
+        });
     }
 });
 
@@ -5546,115 +5566,6 @@ function showTiendaMessage(message, type) {
 }
 
 
-
-// Manejar clicks en el menú de tiendas
-
-document.addEventListener('click', function(e) {
-
-    if (e.target.closest('.menu-toggle[data-tienda-id]')) {
-
-        const menuToggle = e.target.closest('.menu-toggle');
-
-        const tiendaId = menuToggle.getAttribute('data-tienda-id');
-
-        const menu = document.getElementById(`menu-tienda-${tiendaId}`);
-
-        
-
-        document.querySelectorAll('.dropdown-menu').forEach(m => {
-
-            if (m.id !== `menu-tienda-${tiendaId}`) {
-
-                m.style.display = 'none';
-
-            }
-
-        });
-
-        
-
-        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-
-    }
-
-    
-
-    if (e.target.closest('.dropdown-item[data-tienda-id]')) {
-
-        const item = e.target.closest('.dropdown-item');
-
-        const action = item.getAttribute('data-action');
-
-        const tiendaId = item.getAttribute('data-tienda-id');
-
-        
-
-        document.querySelectorAll('.dropdown-menu').forEach(m => {
-
-            m.style.display = 'none';
-
-        });
-
-        
-
-        if (action === 'edit') {
-
-            openEditTiendaModal(tiendaId);
-
-        } else if (action === 'delete') {
-
-            deleteTienda(tiendaId);
-
-        }
-
-    }
-
-});
-
-
-
-// Abrir modal para editar tienda
-
-async function openEditTiendaModal(tiendaId) {
-
-    try {
-
-        const { data: tienda, error } = await window.supabaseClient
-
-            .from('tiendas')
-
-            .select('*')
-
-            .eq('id', tiendaId)
-
-            .single();
-
-
-
-        if (error) throw error;
-
-
-
-        document.getElementById('editTiendaNombre').value = tienda.nombre;
-
-        document.getElementById('editTiendaDireccion').value = tienda.direccion || tienda.ubicacion || '';
-        window.currentTiendaId = tiendaId;
-
-        
-
-        const modal = document.getElementById('editTiendaModal');
-
-        modal.style.display = 'flex';
-
-    } catch (error) {
-
-        console.error('Error al cargar tienda:', error);
-
-        alert('Error al cargar los datos de la tienda');
-
-    }
-
-}
 
 
 
