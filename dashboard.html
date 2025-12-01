@@ -83,6 +83,10 @@
                     <i class="fas fa-users"></i>
                     <span>Usuarios</span>
                 </button>
+                <button class="sidebar-btn" data-page="clientes">
+                    <i class="fas fa-user-friends"></i>
+                    <span>Clientes</span>
+                </button>
                 <button class="sidebar-btn" data-page="abastecer">
                     <i class="fas fa-truck-loading"></i>
                     <span>Abastecer Tiendas</span>
@@ -179,6 +183,18 @@
                                     autocomplete="off"
                                 >
                                 <div id="jugueteInfo" class="juguete-info" style="display: none;"></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="ventaJugueteItem">
+                                    <i class="fas fa-tag"></i> ITEM del Juguete
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="ventaJugueteItem" 
+                                    name="juguete_item" 
+                                    placeholder="Ej: ITEM-001"
+                                    autocomplete="off"
+                                >
                             </div>
                             <div class="form-group">
                                 <label for="ventaEmpleadoCodigo">
@@ -529,11 +545,11 @@
                     <h1>Inventario</h1>
                     <div class="inventario-filters" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
                         <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                            <input 
-                                type="text" 
-                                id="inventarioSearch" 
+                        <input 
+                            type="text" 
+                            id="inventarioSearch" 
                                 placeholder="Buscar: nombre, ubicación o ITEM..."
-                                class="search-input"
+                            class="search-input"
                                 style="flex: 1; min-width: 200px;"
                             >
                             <input 
@@ -573,9 +589,9 @@
                     <!-- Controles de paginación -->
                     <div id="inventarioPagination" style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
                         <!-- Las pestañas se generarán dinámicamente -->
-                    </div>
                 </div>
-
+                            </div>
+                            
                 <!-- Vista de Inventario Detalle -->
                 <div id="inventarioDetalleView" style="display: none;">
                     <h1><i class="fas fa-clipboard-list"></i> Inventario Detalle</h1>
@@ -587,8 +603,8 @@
                     <!-- Filtros -->
                     <div class="inventario-filters" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
                         <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                            <input 
-                                type="text" 
+                                        <input 
+                                            type="text" 
                                 id="inventarioDetalleSearch" 
                                 placeholder="Buscar: nombre, ubicación o ITEM..."
                                 class="search-input"
@@ -604,9 +620,9 @@
                             <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 10px 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
                                 <span style="color: #64748b; font-size: 14px;">Total Juguetes:</span>
                                 <span style="font-size: 18px; font-weight: bold; color: #3b82f6;" id="totalJuguetesDetalle">0</span>
+                                    </div>
                             </div>
                         </div>
-                    </div>
                     
                     <!-- Tabla de inventario detalle -->
                     <div class="inventario-table-container" style="overflow-x: auto;">
@@ -955,6 +971,101 @@
                             <div id="usuariosPagination" style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
                                 <!-- Las pestañas se generarán dinámicamente -->
                             </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Vista de Clientes -->
+                <div id="clientesView" style="display: none;">
+                    <h1><i class="fas fa-user-friends"></i> Clientes</h1>
+                    
+                    <!-- Desplegable Agregar Cliente -->
+                    <div class="accordion-section">
+                        <button class="accordion-header" id="agregarClienteHeader">
+                            <i class="fas fa-user-plus"></i>
+                            <span>Agregar Cliente</span>
+                            <i class="fas fa-chevron-down accordion-icon"></i>
+                        </button>
+                        <div class="accordion-content" id="agregarClienteContent">
+                            <!-- Formulario para agregar nuevo cliente -->
+                            <div class="form-section">
+                                <h3>Nuevo Cliente</h3>
+                                <form id="nuevoClienteForm" class="bodega-form">
+                                    <div class="form-group">
+                                        <label for="clienteNombre">
+                                            <i class="fas fa-user"></i> Nombre *
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            id="clienteNombre" 
+                                            name="nombre" 
+                                            placeholder="Ej: Juan Pérez"
+                                            required
+                                        >
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="clienteTelefono">
+                                                <i class="fas fa-phone"></i> Teléfono
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                id="clienteTelefono" 
+                                                name="telefono" 
+                                                placeholder="Ej: 3001234567"
+                                            >
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="clienteCorreo">
+                                                <i class="fas fa-envelope"></i> Correo
+                                            </label>
+                                            <input 
+                                                type="email" 
+                                                id="clienteCorreo" 
+                                                name="correo" 
+                                                placeholder="cliente@ejemplo.com"
+                                            >
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="clienteDireccion">
+                                            <i class="fas fa-map-marker-alt"></i> Dirección
+                                        </label>
+                                        <textarea 
+                                            id="clienteDireccion" 
+                                            name="direccion" 
+                                            placeholder="Ej: Calle 123 #45-67"
+                                            rows="3"
+                                        ></textarea>
+                                    </div>
+                                    <div id="clienteErrorMessage" class="error-message" style="display: none;"></div>
+                                    <div id="clienteSuccessMessage" class="success-message" style="display: none;"></div>
+                                    <button type="submit" class="btn-primary">
+                                        <i class="fas fa-plus"></i> Agregar Cliente
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Lista de clientes -->
+                    <div style="margin-top: 30px;">
+                        <h2 style="color: #1e293b; margin-bottom: 20px;">Clientes Registrados</h2>
+                        <div class="search-box" style="margin-bottom: 20px;">
+                            <input 
+                                type="text" 
+                                id="buscarCliente" 
+                                placeholder="Buscar por nombre, teléfono o correo..."
+                                class="search-input"
+                                style="width: 100%;"
+                            >
+                        </div>
+                        <div class="clientes-list" id="clientesList">
+                            <!-- Los clientes se cargarán aquí dinámicamente -->
+                        </div>
+                        <!-- Controles de paginación -->
+                        <div id="clientesPagination" style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <!-- Las pestañas se generarán dinámicamente -->
                         </div>
                     </div>
                 </div>
@@ -1358,6 +1469,18 @@
                                 <div id="juguetePorMayorInfo" class="juguete-info" style="display: none;"></div>
                             </div>
                             <div class="form-group">
+                                <label for="ventaPorMayorJugueteItem">
+                                    <i class="fas fa-tag"></i> ITEM del Juguete
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="ventaPorMayorJugueteItem" 
+                                    name="juguete_item" 
+                                    placeholder="Ej: ITEM-001"
+                                    autocomplete="off"
+                                >
+                            </div>
+                            <div class="form-group">
                                 <label for="ventaPorMayorEmpleadoCodigo">
                                     <i class="fas fa-id-card"></i> Código del Empleado *
                                 </label>
@@ -1388,6 +1511,24 @@
                                 >
                             </div>
                             <div class="form-group">
+                                <label for="ventaPorMayorCliente">
+                                    <i class="fas fa-user"></i> Cliente
+                                </label>
+                                <div style="display: flex; gap: 8px;">
+                                    <select 
+                                        id="ventaPorMayorCliente" 
+                                        name="cliente_id" 
+                                        class="form-select"
+                                        style="flex: 1;"
+                                    >
+                                        <option value="">Seleccionar cliente...</option>
+                                    </select>
+                                    <button type="button" class="btn-secondary" id="agregarClientePorMayorBtn" style="white-space: nowrap;">
+                                        <i class="fas fa-plus"></i> Nuevo
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="form-group">
                                 <label for="ventaPorMayorMetodoPago">
                                     <i class="fas fa-credit-card"></i> Método de Pago *
                                 </label>
@@ -1401,7 +1542,25 @@
                                     <option value="efectivo">Efectivo</option>
                                     <option value="transferencia">Transferencia</option>
                                     <option value="tarjeta">Tarjeta</option>
+                                    <option value="credito">Crédito</option>
                                 </select>
+                            </div>
+                        </div>
+                        <div class="form-row" id="ventaPorMayorAbonoRow" style="display: none;">
+                            <div class="form-group">
+                                <label for="ventaPorMayorAbono">
+                                    <i class="fas fa-money-bill-wave"></i> Abono (Efectivo/Transferencia)
+                                </label>
+                                <input 
+                                    type="number" 
+                                    id="ventaPorMayorAbono" 
+                                    name="abono" 
+                                    placeholder="0.00"
+                                    min="0"
+                                    step="0.01"
+                                    value="0"
+                                >
+                                <small style="color: #64748b;">Monto abonado en efectivo o transferencia</small>
                             </div>
                         </div>
                         <div id="ventaPorMayorItems" class="venta-items">
@@ -1881,12 +2040,161 @@
         </div>
     </div>
 
+    <!-- Modal para agregar/editar cliente -->
+    <div class="modal-overlay" id="clienteModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="clienteModalTitle">Agregar Cliente</h3>
+                <button class="modal-close" id="closeClienteModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="clienteModalForm" class="modal-body">
+                <input type="hidden" id="clienteModalId" name="id">
+                <div class="form-group">
+                    <label for="clienteModalNombre">
+                        <i class="fas fa-user"></i> Nombre *
+                    </label>
+                    <input 
+                        type="text" 
+                        id="clienteModalNombre" 
+                        name="nombre" 
+                        required
+                    >
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="clienteModalTelefono">
+                            <i class="fas fa-phone"></i> Teléfono
+                        </label>
+                        <input 
+                            type="text" 
+                            id="clienteModalTelefono" 
+                            name="telefono"
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label for="clienteModalCorreo">
+                            <i class="fas fa-envelope"></i> Correo
+                        </label>
+                        <input 
+                            type="email" 
+                            id="clienteModalCorreo" 
+                            name="correo"
+                        >
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="clienteModalDireccion">
+                        <i class="fas fa-map-marker-alt"></i> Dirección
+                    </label>
+                    <textarea 
+                        id="clienteModalDireccion" 
+                        name="direccion" 
+                        rows="3"
+                    ></textarea>
+                </div>
+                <div id="clienteModalErrorMessage" class="error-message" style="display: none;"></div>
+                <div id="clienteModalSuccessMessage" class="success-message" style="display: none;"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="cancelClienteModalBtn">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para agregar pago -->
+    <div class="modal-overlay" id="pagoModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Registrar Pago</h3>
+                <button class="modal-close" id="closePagoModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="pagoModalForm" class="modal-body">
+                <input type="hidden" id="pagoModalVentaId" name="venta_id">
+                <input type="hidden" id="pagoModalClienteId" name="cliente_id">
+                <div class="form-group">
+                    <label>
+                        <i class="fas fa-dollar-sign"></i> Total de la Venta
+                    </label>
+                    <input 
+                        type="text" 
+                        id="pagoModalTotal" 
+                        readonly
+                        style="background: #f1f5f9;"
+                    >
+                </div>
+                <div class="form-group">
+                    <label>
+                        <i class="fas fa-dollar-sign"></i> Pagado Hasta Ahora
+                    </label>
+                    <input 
+                        type="text" 
+                        id="pagoModalPagado" 
+                        readonly
+                        style="background: #f1f5f9;"
+                    >
+                </div>
+                <div class="form-group">
+                    <label>
+                        <i class="fas fa-dollar-sign"></i> Saldo Pendiente
+                    </label>
+                    <input 
+                        type="text" 
+                        id="pagoModalPendiente" 
+                        readonly
+                        style="background: #f1f5f9; color: #ef4444; font-weight: bold;"
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="pagoModalMonto">
+                        <i class="fas fa-money-bill-wave"></i> Monto a Pagar *
+                    </label>
+                    <input 
+                        type="number" 
+                        id="pagoModalMonto" 
+                        name="monto" 
+                        placeholder="0.00"
+                        min="0.01"
+                        step="0.01"
+                        required
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="pagoModalMetodo">
+                        <i class="fas fa-credit-card"></i> Método de Pago *
+                    </label>
+                    <select 
+                        id="pagoModalMetodo" 
+                        name="metodo_pago" 
+                        required
+                        class="form-select"
+                    >
+                        <option value="">Selecciona método de pago</option>
+                        <option value="efectivo">Efectivo</option>
+                        <option value="transferencia">Transferencia</option>
+                    </select>
+                </div>
+                <div id="pagoModalErrorMessage" class="error-message" style="display: none;"></div>
+                <div id="pagoModalSuccessMessage" class="success-message" style="display: none;"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="cancelPagoModalBtn">Cancelar</button>
+                    <button type="submit" class="btn-primary">Registrar Pago</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="js/email-config.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/dashboard-funcionalidades.js"></script>
     <script src="js/ventas-por-mayor.js"></script>
     <script src="js/inventario-detalle.js"></script>
     <script src="js/analisis-tiendas-empleados.js"></script>
+    <script src="js/clientes.js"></script>
 </body>
 </html>
 

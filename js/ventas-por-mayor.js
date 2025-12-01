@@ -8,8 +8,14 @@ let registrarVentaPorMayorInitialized = false;
 function initVentaPorMayor() {
     const form = document.getElementById('registrarVentaPorMayorForm');
     const jugueteCodigoInput = document.getElementById('ventaPorMayorJugueteCodigo');
+    const jugueteItemInput = document.getElementById('ventaPorMayorJugueteItem');
     const empleadoCodigoInput = document.getElementById('ventaPorMayorEmpleadoCodigo');
+    const clienteSelect = document.getElementById('ventaPorMayorCliente');
+    const metodoPagoSelect = document.getElementById('ventaPorMayorMetodoPago');
+    const abonoRow = document.getElementById('ventaPorMayorAbonoRow');
+    const abonoInput = document.getElementById('ventaPorMayorAbono');
     const agregarItemBtn = document.getElementById('agregarItemPorMayorBtn');
+    const agregarClienteBtn = document.getElementById('agregarClientePorMayorBtn');
     
     if (!form || !jugueteCodigoInput || !empleadoCodigoInput || !agregarItemBtn) {
         return; // Elementos no disponibles aún
@@ -50,6 +56,11 @@ function initVentaPorMayor() {
                 const fotoUrl = juguetePrincipal.foto_url;
                 const precioPorMayor = juguetePrincipal.precio_por_mayor;
                 const item = juguetePrincipal.item;
+                
+                // Autocompletar ITEM si existe
+                if (jugueteItemInput && item) {
+                    jugueteItemInput.value = item;
+                }
                 
                 // Calcular cantidad total
                 const cantidadTotal = juguetes.reduce((sum, j) => sum + (j.cantidad || 0), 0);
@@ -130,6 +141,65 @@ function initVentaPorMayor() {
         }
     });
 
+    // Buscar juguete por ITEM (autocompletar código)
+    if (jugueteItemInput) {
+        jugueteItemInput.addEventListener('blur', async function() {
+            const item = this.value.trim();
+            if (!item) return;
+
+            try {
+                const user = JSON.parse(sessionStorage.getItem('user'));
+                const { data: juguetes, error } = await window.supabaseClient
+                    .from('juguetes')
+                    .select('codigo, item')
+                    .eq('item', item)
+                    .eq('empresa_id', user.empresa_id)
+                    .limit(1);
+
+                if (error) throw error;
+
+                if (juguetes && juguetes.length > 0) {
+                    const juguete = juguetes[0];
+                    // Autocompletar código
+                    if (jugueteCodigoInput && juguete.codigo) {
+                        jugueteCodigoInput.value = juguete.codigo;
+                        // Disparar evento blur para buscar el juguete completo
+                        jugueteCodigoInput.dispatchEvent(new Event('blur'));
+                    }
+                }
+            } catch (error) {
+                console.error('Error al buscar juguete por ITEM:', error);
+            }
+        });
+    }
+
+    // Cargar clientes en el select
+    if (clienteSelect) {
+        loadClientesParaVenta();
+    }
+
+    // Mostrar/ocultar campo de abono según método de pago
+    if (metodoPagoSelect && abonoRow) {
+        metodoPagoSelect.addEventListener('change', function() {
+            const metodo = this.value;
+            if (metodo === 'efectivo' || metodo === 'transferencia') {
+                abonoRow.style.display = 'flex';
+            } else {
+                abonoRow.style.display = 'none';
+                if (abonoInput) abonoInput.value = '0';
+            }
+        });
+    }
+
+    // Botón agregar cliente
+    if (agregarClienteBtn) {
+        agregarClienteBtn.addEventListener('click', function() {
+            if (typeof abrirClienteModal === 'function') {
+                abrirClienteModal(null);
+            }
+        });
+    }
+
     // Buscar empleado por código
     empleadoCodigoInput.addEventListener('blur', async function() {
         const codigo = this.value.trim();
@@ -192,13 +262,12 @@ function initVentaPorMayor() {
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
             
-            // Buscar juguete
+            // Buscar TODOS los juguetes con ese código (pueden estar en múltiples ubicaciones)
             const { data: juguetes, error: jugueteError } = await window.supabaseClient
                 .from('juguetes')
                 .select('*')
                 .eq('codigo', codigoJuguete)
-                .eq('empresa_id', user.empresa_id)
-                .limit(1);
+                .eq('empresa_id', user.empresa_id);
 
             if (jugueteError) throw jugueteError;
             if (!juguetes || juguetes.length === 0) {
@@ -231,18 +300,17 @@ function initVentaPorMayor() {
             const empleado = empleados[0];
             const precio = juguete.precio_por_mayor;
 
-            // Verificar cantidad disponible
+            // Verificar cantidad disponible (suma de todas las ubicaciones)
             const cantidadTotal = juguetes.reduce((sum, j) => sum + (j.cantidad || 0), 0);
             if (cantidad > cantidadTotal) {
                 showVentaPorMayorMessage(`Cantidad insuficiente. Disponible: ${cantidadTotal}`, 'error');
                 return;
             }
 
-            // Agregar item
+            // Agregar item (guardamos el código para poder buscar todos los juguetes al procesar)
             ventaPorMayorItems.push({
-                juguete_id: juguete.id,
+                juguete_codigo: juguete.codigo, // Guardamos código para buscar todos los juguetes
                 juguete_nombre: juguete.nombre,
-                juguete_codigo: juguete.codigo,
                 juguete_item: juguete.item || null,
                 juguete_foto_url: juguete.foto_url || null,
                 empleado_id: empleado.id,
@@ -252,6 +320,11 @@ function initVentaPorMayor() {
                 precio: precio,
                 metodo_pago: metodoPago
             });
+
+            // Limpiar campo ITEM también
+            if (jugueteItemInput) {
+                jugueteItemInput.value = '';
+            }
 
             updateVentaPorMayorItemsList();
             
@@ -285,41 +358,115 @@ function initVentaPorMayor() {
             // Generar código de venta
             const codigoVenta = await generarCodigoVenta();
             
+            // Obtener cliente y abono
+            const clienteId = clienteSelect ? clienteSelect.value : null;
+            const metodoPago = metodoPagoSelect ? metodoPagoSelect.value : '';
+            const abono = (abonoInput && (metodoPago === 'efectivo' || metodoPago === 'transferencia')) 
+                ? parseFloat(abonoInput.value) || 0 
+                : 0;
+
             // Registrar cada item
             for (const item of ventaPorMayorItems) {
-                const { error } = await window.supabaseClient
-                    .from('ventas')
-                    .insert({
-                        codigo_venta: codigoVenta,
-                        juguete_id: item.juguete_id,
-                        empleado_id: item.empleado_id,
-                        cantidad: item.cantidad,
-                        precio_venta: item.precio,
-                        metodo_pago: item.metodo_pago,
-                        empresa_id: user.empresa_id,
-                        es_por_mayor: true // Marcar como venta al por mayor
-                    });
-
-                if (error) throw error;
-
-                // Reducir cantidad del juguete
-                const { data: jugueteData, error: jugueteError } = await window.supabaseClient
+                // Buscar TODOS los juguetes con este código (pueden estar en múltiples ubicaciones)
+                const { data: juguetesDisponibles, error: juguetesError } = await window.supabaseClient
                     .from('juguetes')
-                    .select('cantidad, bodega_id, tienda_id')
-                    .eq('id', item.juguete_id)
-                    .single();
+                    .select('id, cantidad, bodega_id, tienda_id')
+                    .eq('codigo', item.juguete_codigo)
+                    .eq('empresa_id', user.empresa_id)
+                    .gt('cantidad', 0); // Solo los que tienen cantidad > 0
 
-                if (jugueteError) throw jugueteError;
+                if (juguetesError) throw juguetesError;
+                if (!juguetesDisponibles || juguetesDisponibles.length === 0) {
+                    throw new Error(`No hay juguetes disponibles con código ${item.juguete_codigo}`);
+                }
 
-                const nuevaCantidad = Math.max(0, (jugueteData.cantidad || 0) - item.cantidad);
+                // Ordenar: primero tiendas (tienda_id IS NOT NULL), luego bodegas, y por cantidad descendente
+                juguetesDisponibles.sort((a, b) => {
+                    // Priorizar tiendas sobre bodegas
+                    const aEsTienda = a.tienda_id !== null;
+                    const bEsTienda = b.tienda_id !== null;
+                    if (aEsTienda !== bEsTienda) {
+                        return bEsTienda ? 1 : -1; // Tiendas primero
+                    }
+                    // Si ambos son del mismo tipo, ordenar por cantidad descendente
+                    return (b.cantidad || 0) - (a.cantidad || 0);
+                });
+
+                // Distribuir la cantidad a descontar entre todas las ubicaciones disponibles
+                let cantidadRestante = item.cantidad;
                 
-                const updateData = { cantidad: nuevaCantidad };
-                const { error: updateError } = await window.supabaseClient
-                    .from('juguetes')
-                    .update(updateData)
-                    .eq('id', item.juguete_id);
+                for (const juguete of juguetesDisponibles) {
+                    if (cantidadRestante <= 0) break;
 
-                if (updateError) throw updateError;
+                    const cantidadDisponible = juguete.cantidad || 0;
+                    const cantidadADescontar = Math.min(cantidadRestante, cantidadDisponible);
+                    
+                    if (cantidadADescontar > 0) {
+                        // Calcular abono proporcional para este item
+                        const totalItem = item.precio * cantidadADescontar;
+                        const totalVenta = ventaPorMayorItems.reduce((sum, i) => sum + (i.precio * i.cantidad), 0);
+                        const abonoProporcional = totalVenta > 0 ? (abono * totalItem / totalVenta) : 0;
+
+                        // Registrar venta para este juguete específico
+                        const { data: ventaInsertada, error: ventaError } = await window.supabaseClient
+                            .from('ventas')
+                            .insert({
+                                codigo_venta: codigoVenta,
+                                juguete_id: juguete.id,
+                                empleado_id: item.empleado_id,
+                                cantidad: cantidadADescontar,
+                                precio_venta: item.precio * cantidadADescontar, // Precio total para esta cantidad
+                                metodo_pago: item.metodo_pago,
+                                empresa_id: user.empresa_id,
+                                es_por_mayor: true, // Marcar como venta al por mayor
+                                cliente_id: clienteId || null,
+                                abono: abonoProporcional
+                            })
+                            .select()
+                            .single();
+
+                        if (ventaError) throw ventaError;
+
+                        // Si es crédito y hay abono, registrar pago
+                        if (metodoPago === 'credito' && abonoProporcional > 0 && ventaInsertada) {
+                            await window.supabaseClient
+                                .from('pagos')
+                                .insert({
+                                    venta_id: ventaInsertada.id,
+                                    cliente_id: clienteId || null,
+                                    monto: abonoProporcional,
+                                    metodo_pago: 'efectivo', // El abono inicial siempre es efectivo/transferencia
+                                    empresa_id: user.empresa_id
+                                });
+                        }
+
+                        // Reducir cantidad del juguete
+                        const nuevaCantidad = Math.max(0, cantidadDisponible - cantidadADescontar);
+                        
+                        if (nuevaCantidad === 0) {
+                            // Si la cantidad llega a 0, eliminar el registro
+                            const { error: deleteError } = await window.supabaseClient
+                                .from('juguetes')
+                                .delete()
+                                .eq('id', juguete.id);
+                            if (deleteError) throw deleteError;
+                        } else {
+                            // Actualizar cantidad
+                            const { error: updateError } = await window.supabaseClient
+                                .from('juguetes')
+                                .update({ cantidad: nuevaCantidad })
+                                .eq('id', juguete.id);
+                            if (updateError) throw updateError;
+                        }
+
+                        cantidadRestante -= cantidadADescontar;
+                    }
+                }
+
+                // Verificar que se haya descontado toda la cantidad
+                if (cantidadRestante > 0) {
+                    throw new Error(`No se pudo descontar toda la cantidad solicitada. Faltan ${cantidadRestante} unidades del juguete ${item.juguete_nombre}`);
+                }
             }
 
             showVentaPorMayorMessage('Venta al por mayor registrada correctamente', 'success');
@@ -435,5 +582,36 @@ function showVentaPorMayorMessage(message, type) {
         if (errorMsg) errorMsg.style.display = 'none';
         if (successMsg) successMsg.style.display = 'none';
     }, 5000);
+}
+
+// Función para cargar clientes en el select
+async function loadClientesParaVenta() {
+    const clienteSelect = document.getElementById('ventaPorMayorCliente');
+    if (!clienteSelect) return;
+
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        const { data: clientes, error } = await window.supabaseClient
+            .from('clientes')
+            .select('id, nombre')
+            .eq('empresa_id', user.empresa_id)
+            .order('nombre', { ascending: true });
+
+        if (error) throw error;
+
+        // Limpiar opciones existentes excepto la primera
+        clienteSelect.innerHTML = '<option value="">Seleccionar cliente...</option>';
+
+        if (clientes && clientes.length > 0) {
+            clientes.forEach(cliente => {
+                const option = document.createElement('option');
+                option.value = cliente.id;
+                option.textContent = cliente.nombre;
+                clienteSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error al cargar clientes:', error);
+    }
 }
 

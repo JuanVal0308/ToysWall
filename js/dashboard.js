@@ -370,6 +370,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (ventaPorMayorView) ventaPorMayorView.style.display = 'none';
         const inventarioDetalleView = document.getElementById('inventarioDetalleView');
         if (inventarioDetalleView) inventarioDetalleView.style.display = 'none';
+        const clientesView = document.getElementById('clientesView');
+        if (clientesView) clientesView.style.display = 'none';
         
         // Verificar permisos para empleados (pueden acceder a Dashboard, Registrar Venta, Inventario, Ajustes y Análisis)
         if (isEmpleado && viewName !== 'default' && viewName !== 'venta' && viewName !== 'facturar' && viewName !== 'inventario' && viewName !== 'ajustes' && viewName !== 'analisis') {
@@ -475,6 +477,17 @@ document.addEventListener('DOMContentLoaded', async function() {
                     }
                     if (typeof setupUsuarioForm === 'function') {
                         setupUsuarioForm();
+                    }
+                }
+                break;
+            case 'clientes':
+                if (isAdmin) {
+                    const clientesView = document.getElementById('clientesView');
+                    if (clientesView) {
+                        clientesView.style.display = 'block';
+                        if (typeof initClientes === 'function') {
+                            initClientes();
+                        }
                     }
                 }
                 break;

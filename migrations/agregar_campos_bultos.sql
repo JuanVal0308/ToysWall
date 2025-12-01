@@ -18,3 +18,4 @@ COMMENT ON COLUMN juguetes.cantidad_por_bulto IS 'Cantidad de unidades por bulto
 CREATE INDEX IF NOT EXISTS idx_juguetes_numero_bultos ON juguetes(numero_bultos) WHERE numero_bultos IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_juguetes_cantidad_por_bulto ON juguetes(cantidad_por_bulto) WHERE cantidad_por_bulto IS NOT NULL;
 
+

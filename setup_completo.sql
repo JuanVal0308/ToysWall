@@ -198,6 +198,47 @@ CREATE TABLE IF NOT EXISTS planes_movimiento (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Tabla: clientes
+CREATE TABLE IF NOT EXISTS clientes (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    telefono VARCHAR(20),
+    correo VARCHAR(255),
+    direccion TEXT,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Tabla: pagos (para pagos parciales de ventas a crédito)
+CREATE TABLE IF NOT EXISTS pagos (
+    id SERIAL PRIMARY KEY,
+    venta_id INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
+    cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+    monto DECIMAL(10, 2) NOT NULL,
+    metodo_pago VARCHAR(50) NOT NULL,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Agregar cliente_id y abono a ventas si no existen
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'ventas' AND column_name = 'cliente_id'
+    ) THEN
+        ALTER TABLE ventas ADD COLUMN cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL;
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'ventas' AND column_name = 'abono'
+    ) THEN
+        ALTER TABLE ventas ADD COLUMN abono DECIMAL(10, 2) DEFAULT 0;
+    END IF;
+END $$;
+
 -- ============================================
 -- 2. CREAR ÍNDICES
 -- ============================================
@@ -225,6 +266,11 @@ CREATE INDEX IF NOT EXISTS idx_movimientos_empresa_id ON movimientos(empresa_id)
 CREATE INDEX IF NOT EXISTS idx_planes_movimiento_empresa_id ON planes_movimiento(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_planes_movimiento_estado ON planes_movimiento(estado);
 CREATE INDEX IF NOT EXISTS idx_planes_movimiento_created_at ON planes_movimiento(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_clientes_empresa_id ON clientes(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_clientes_correo ON clientes(correo);
+CREATE INDEX IF NOT EXISTS idx_pagos_venta_id ON pagos(venta_id);
+CREATE INDEX IF NOT EXISTS idx_pagos_cliente_id ON pagos(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_ventas_cliente_id ON ventas(cliente_id);
 
 -- ============================================
 -- 3. INSERTAR TIPOS DE USUARIO
@@ -374,6 +420,8 @@ ALTER TABLE facturas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE facturas_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE movimientos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE planes_movimiento ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pagos ENABLE ROW LEVEL SECURITY;
 
 -- Eliminar políticas existentes si existen (para evitar conflictos)
 DROP POLICY IF EXISTS "tipo_usuarios_select_policy" ON tipo_usuarios;
@@ -607,6 +655,88 @@ DROP POLICY IF EXISTS "planes_movimiento_delete_policy" ON planes_movimiento;
 CREATE POLICY "planes_movimiento_delete_policy"
     ON planes_movimiento FOR DELETE
     USING (true);
+
+-- Políticas RLS para clientes
+DROP POLICY IF EXISTS "clientes_select_policy" ON clientes;
+CREATE POLICY "clientes_select_policy" ON clientes
+    FOR SELECT
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM usuarios 
+            WHERE id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "clientes_insert_policy" ON clientes;
+CREATE POLICY "clientes_insert_policy" ON clientes
+    FOR INSERT
+    WITH CHECK (
+        empresa_id IN (
+            SELECT empresa_id FROM usuarios 
+            WHERE id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "clientes_update_policy" ON clientes;
+CREATE POLICY "clientes_update_policy" ON clientes
+    FOR UPDATE
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM usuarios 
+            WHERE id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "clientes_delete_policy" ON clientes;
+CREATE POLICY "clientes_delete_policy" ON clientes
+    FOR DELETE
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM usuarios 
+            WHERE id = auth.uid()
+        )
+    );
+
+-- Políticas RLS para pagos
+DROP POLICY IF EXISTS "pagos_select_policy" ON pagos;
+CREATE POLICY "pagos_select_policy" ON pagos
+    FOR SELECT
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM usuarios 
+            WHERE id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "pagos_insert_policy" ON pagos;
+CREATE POLICY "pagos_insert_policy" ON pagos
+    FOR INSERT
+    WITH CHECK (
+        empresa_id IN (
+            SELECT empresa_id FROM usuarios 
+            WHERE id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "pagos_update_policy" ON pagos;
+CREATE POLICY "pagos_update_policy" ON pagos
+    FOR UPDATE
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM usuarios 
+            WHERE id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "pagos_delete_policy" ON pagos;
+CREATE POLICY "pagos_delete_policy" ON pagos
+    FOR DELETE
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM usuarios 
+            WHERE id = auth.uid()
+        )
+    );
 
 -- ============================================
 -- 7. FUNCIONES AUXILIARES

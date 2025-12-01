@@ -160,6 +160,7 @@ let registrarVentaInitialized = false;
 function initRegistrarVenta() {
     const form = document.getElementById('registrarVentaForm');
     const jugueteCodigoInput = document.getElementById('ventaJugueteCodigo');
+    const jugueteItemInput = document.getElementById('ventaJugueteItem');
     const empleadoCodigoInput = document.getElementById('ventaEmpleadoCodigo');
     const agregarItemBtn = document.getElementById('agregarItemBtn');
     const facturarBtn = document.getElementById('facturarBtn');
@@ -259,6 +260,12 @@ function initRegistrarVenta() {
                 const nombreJuguete = juguetePrincipal.nombre;
                 const fotoUrl = juguetePrincipal.foto_url;
                 const precioMin = juguetePrincipal.precio_min;
+                const item = juguetePrincipal.item;
+                
+                // Autocompletar ITEM si existe
+                if (jugueteItemInput && item) {
+                    jugueteItemInput.value = item;
+                }
                 
                 // Calcular cantidad total sumando todas las ubicaciones
                 const cantidadTotal = juguetes.reduce((sum, j) => sum + (j.cantidad || 0), 0);
@@ -351,6 +358,38 @@ function initRegistrarVenta() {
             console.error('Error al buscar juguete:', error);
         }
     });
+
+    // Buscar juguete por ITEM (autocompletar código)
+    if (jugueteItemInput) {
+        jugueteItemInput.addEventListener('blur', async function() {
+            const item = this.value.trim();
+            if (!item) return;
+
+            try {
+                const user = JSON.parse(sessionStorage.getItem('user'));
+                const { data: juguetes, error } = await window.supabaseClient
+                    .from('juguetes')
+                    .select('codigo, item')
+                    .eq('item', item)
+                    .eq('empresa_id', user.empresa_id)
+                    .limit(1);
+
+                if (error) throw error;
+
+                if (juguetes && juguetes.length > 0) {
+                    const juguete = juguetes[0];
+                    // Autocompletar código
+                    if (jugueteCodigoInput && juguete.codigo) {
+                        jugueteCodigoInput.value = juguete.codigo;
+                        // Disparar evento blur para buscar el juguete completo
+                        jugueteCodigoInput.dispatchEvent(new Event('blur'));
+                    }
+                }
+            } catch (error) {
+                console.error('Error al buscar juguete por ITEM:', error);
+            }
+        });
+    }
 
     // Buscar empleado por código
     empleadoCodigoInput.addEventListener('blur', async function() {

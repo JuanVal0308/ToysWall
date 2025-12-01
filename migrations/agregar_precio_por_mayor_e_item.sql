@@ -32,3 +32,4 @@ CREATE INDEX IF NOT EXISTS idx_juguetes_item ON juguetes(item) WHERE item IS NOT
 CREATE INDEX IF NOT EXISTS idx_juguetes_precio_por_mayor ON juguetes(precio_por_mayor) WHERE precio_por_mayor IS NOT NULL;
 
 
+

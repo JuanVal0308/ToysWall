@@ -17,3 +17,4 @@ CREATE INDEX IF NOT EXISTS idx_juguetes_precio_min ON juguetes(precio_min) WHERE
 
 
 
+
