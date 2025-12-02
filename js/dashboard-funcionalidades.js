@@ -777,7 +777,7 @@ function initRegistrarVenta() {
                     .update({ cantidad: nuevaCantidad })
                     .eq('id', juguete.id);
                 
-                // Guardar información de la venta registrada (para deshacer)
+                // Guardar información de la venta registrada (para deshacer y logging)
                 ventasRegistradas.push({
                     venta_id: ventaInsertada.id,
                     codigo_venta: codigoVenta,
@@ -785,6 +785,7 @@ function initRegistrarVenta() {
                     cantidad_vendida: cantidad,
                     precio_venta: item.precio * cantidad,
                     empleado_id: item.empleado_id,
+                    empleado_codigo: item.empleado_codigo,
                     metodo_pago: item.metodo_pago,
                     juguete_eliminado: nuevaCantidad === 0 // Si la cantidad llegó a 0, el juguete fue eliminado
                 });
@@ -870,7 +871,53 @@ async function deshacerUltimaVenta() {
         for (let i = ultimaVenta.ventas.length - 1; i >= 0; i--) {
             const ventaInfo = ultimaVenta.ventas[i];
             
-            // 1. Restaurar cantidad del juguete
+            // 1. Registrar log de deshacer antes de revertir cambios
+            try {
+                // Obtener código del empleado si no está en ventaInfo
+                let codigoVendedor = ventaInfo.empleado_codigo;
+                if (!codigoVendedor && ventaInfo.empleado_id) {
+                    const { data: empleadoData } = await window.supabaseClient
+                        .from('empleados')
+                        .select('codigo')
+                        .eq('id', ventaInfo.empleado_id)
+                        .eq('empresa_id', user.empresa_id)
+                        .limit(1)
+                        .single();
+                    if (empleadoData) {
+                        codigoVendedor = empleadoData.codigo;
+                    }
+                }
+                
+                // Registrar en logs_deshacer_ventas
+                const { data: logInsertado, error: logError } = await window.supabaseClient
+                    .from('logs_deshacer_ventas')
+                    .insert({
+                        empresa_id: user.empresa_id,
+                        usuario_id: user.id || null,
+                        codigo_venta: ultimaVenta.codigo_venta,
+                        codigo_vendedor: codigoVendedor || null,
+                        empleado_id: ventaInfo.empleado_id || null,
+                        juguete_codigo: ventaInfo.juguete_info?.juguete_codigo || null,
+                        juguete_nombre: ventaInfo.juguete_info?.juguete_nombre || null,
+                        precio_venta: ventaInfo.precio_venta || 0,
+                        cantidad: ventaInfo.cantidad_vendida || 1
+                    })
+                    .select()
+                    .single();
+                
+                if (logError) {
+                    console.error('Error al registrar log de deshacer venta:', logError);
+                    // Mostrar advertencia pero no bloquear el deshacer
+                    console.warn('El deshacer se completó pero no se pudo registrar el log:', logError.message);
+                } else {
+                    console.log('Log de deshacer registrado correctamente:', logInsertado);
+                }
+            } catch (logError) {
+                console.error('Error inesperado al registrar log de deshacer venta:', logError);
+                // No bloquear el deshacer por un error de log
+            }
+
+            // 2. Restaurar cantidad del juguete
             if (ventaInfo.juguete_eliminado) {
                 // Si el juguete fue eliminado (cantidad llegó a 0), recrearlo
                 const nuevoJuguete = {
@@ -899,7 +946,7 @@ async function deshacerUltimaVenta() {
                     .eq('id', ventaInfo.juguete_info.juguete_id);
             }
             
-            // 2. Eliminar registro de venta
+            // 3. Eliminar registro de venta
             await window.supabaseClient
                 .from('ventas')
                 .delete()
