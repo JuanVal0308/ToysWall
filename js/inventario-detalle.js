@@ -41,10 +41,10 @@ async function loadInventarioDetalle() {
 
         if (juguetesError) throw juguetesError;
 
-        // Obtener ventas por juguete
+        // Obtener ventas por juguete (usando código)
         const { data: ventas, error: ventasError } = await window.supabaseClient
             .from('ventas')
-            .select('juguete_id, cantidad')
+            .select('juguete_codigo, cantidad')
             .eq('empresa_id', user.empresa_id);
 
         if (ventasError) throw ventasError;
@@ -65,7 +65,7 @@ async function loadInventarioDetalle() {
                     precio_por_mayor: juguete.precio_por_mayor,
                     cantidad_total: 0,
                     cantidad_vendida: 0,
-                    ubicaciones: []
+                    ubicaciones: new Map() // Usar Map para evitar duplicados
                 };
             }
             
@@ -79,31 +79,50 @@ async function loadInventarioDetalle() {
             const bultosUbicacion = Math.floor(cantidadJuguete / cantidadPorBultoJuguete);
             const unidadesSuelta = cantidadJuguete % cantidadPorBultoJuguete;
             
-            // Agregar ubicación con información de bultos
+            // Determinar clave de ubicación
+            let ubicacionKey = null;
+            let ubicacionNombre = null;
+            let tipoUbicacion = null;
+            
             if (juguete.bodega_id && juguete.bodegas) {
-                juguetesAgrupados[codigo].ubicaciones.push({
-                    tipo: 'Bodega',
-                    nombre: juguete.bodegas.nombre,
-                    cantidad: cantidadJuguete,
-                    bultos: bultosUbicacion,
-                    unidades_sueltas: unidadesSuelta
-                });
+                ubicacionKey = `bodega-${juguete.bodega_id}`;
+                ubicacionNombre = juguete.bodegas.nombre;
+                tipoUbicacion = 'Bodega';
             } else if (juguete.tienda_id && juguete.tiendas) {
-                juguetesAgrupados[codigo].ubicaciones.push({
-                    tipo: 'Tienda',
-                    nombre: juguete.tiendas.nombre,
+                ubicacionKey = `tienda-${juguete.tienda_id}`;
+                ubicacionNombre = juguete.tiendas.nombre;
+                tipoUbicacion = 'Tienda';
+            }
+            
+            // Si ya existe esta ubicación, consolidar cantidades y bultos
+            if (ubicacionKey && juguetesAgrupados[codigo].ubicaciones.has(ubicacionKey)) {
+                const ubicacionExistente = juguetesAgrupados[codigo].ubicaciones.get(ubicacionKey);
+                ubicacionExistente.cantidad += cantidadJuguete;
+                // Recalcular bultos con la cantidad total
+                ubicacionExistente.bultos = Math.floor(ubicacionExistente.cantidad / cantidadPorBultoJuguete);
+                ubicacionExistente.unidades_sueltas = ubicacionExistente.cantidad % cantidadPorBultoJuguete;
+            } else if (ubicacionKey) {
+                // Crear nueva ubicación
+                juguetesAgrupados[codigo].ubicaciones.set(ubicacionKey, {
+                    tipo: tipoUbicacion,
+                    nombre: ubicacionNombre,
                     cantidad: cantidadJuguete,
                     bultos: bultosUbicacion,
                     unidades_sueltas: unidadesSuelta
                 });
             }
         });
+        
+        // Convertir Maps de ubicaciones a arrays
+        Object.keys(juguetesAgrupados).forEach(codigo => {
+            juguetesAgrupados[codigo].ubicaciones = Array.from(juguetesAgrupados[codigo].ubicaciones.values());
+        });
 
-        // Calcular cantidad vendida por juguete
+        // Calcular cantidad vendida por juguete (usando código)
         if (ventas) {
             ventas.forEach(venta => {
-                // Buscar el juguete por ID
-                const jugueteEncontrado = juguetes.find(j => j.id === venta.juguete_id);
+                // Buscar el juguete por código
+                const jugueteEncontrado = juguetes.find(j => j.codigo === venta.juguete_codigo);
                 if (jugueteEncontrado && juguetesAgrupados[jugueteEncontrado.codigo]) {
                     juguetesAgrupados[jugueteEncontrado.codigo].cantidad_vendida += venta.cantidad || 0;
                 }

@@ -263,9 +263,14 @@
                             <button type="button" class="btn-secondary" id="agregarItemBtn">
                                 <i class="fas fa-plus"></i> Agregar Item
                             </button>
-                            <button type="submit" class="btn-primary">
-                                <i class="fas fa-save"></i> Registrar Venta
-                            </button>
+                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                <button type="submit" class="btn-primary">
+                                    <i class="fas fa-save"></i> Registrar Venta
+                                </button>
+                                <button type="button" id="deshacerVentaBtn" class="btn-secondary" style="display: none; background: #ef4444; color: white;">
+                                    <i class="fas fa-undo"></i> Deshacer Última Venta
+                                </button>
+                            </div>
                             <button type="button" class="btn-primary" id="facturarBtn">
                                 <i class="fas fa-file-invoice"></i> Facturar
                             </button>
@@ -1177,9 +1182,14 @@
                         
                         <div id="abastecerErrorMessage" class="error-message" style="display: none;"></div>
                         <div id="abastecerSuccessMessage" class="success-message" style="display: none;"></div>
-                        <button type="submit" class="btn-primary">
-                            <i class="fas fa-truck"></i> Realizar Movimiento
-                        </button>
+                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            <button type="submit" class="btn-primary">
+                                <i class="fas fa-truck"></i> Realizar Movimiento
+                            </button>
+                            <button type="button" id="deshacerMovimientoBtn" class="btn-secondary" style="display: none; background: #ef4444; color: white;">
+                                <i class="fas fa-undo"></i> Deshacer Último Movimiento
+                            </button>
+                        </div>
                     </form>
                 </div>
                 
@@ -1569,6 +1579,9 @@
                             </button>
                             <button type="submit" class="btn-primary">
                                 <i class="fas fa-save"></i> Registrar Venta al por Mayor
+                            </button>
+                            <button type="button" id="deshacerVentaPorMayorBtn" class="btn-secondary" style="display: none; background: #ef4444; color: white;">
+                                <i class="fas fa-undo"></i> Deshacer Última Venta
                             </button>
                         </div>
                         <div id="ventaPorMayorErrorMessage" class="error-message" style="display: none;"></div>

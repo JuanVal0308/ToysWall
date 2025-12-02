@@ -6,6 +6,9 @@
 let ventaItems = []; // Array para almacenar items de la venta actual
 let currentFacturaData = null; // Datos de la factura actual
 
+// Variables para deshacer operaciones
+let ultimaVenta = null; // Última venta registrada (para deshacer)
+
 // Función para capitalizar la primera letra
 function capitalizarPrimeraLetra(texto) {
     if (!texto || typeof texto !== 'string') return texto;
@@ -67,76 +70,50 @@ async function loadDashboardSummary() {
             totalGananciasEl.textContent = '$' + totalGanancias.toLocaleString('es-CO', { minimumFractionDigits: 2 });
         }
 
-        // Cargar ventas recientes
+        // Cargar ventas recientes (cargar sin relaciones automáticas, usar juguete_codigo)
         const ventasList = document.getElementById('ventasRecientes');
         try {
-            const { data: ventasRecientes, error: ventasError } = await window.supabaseClient
-            .from('ventas')
-            .select(`
-                *,
-                juguetes(nombre, codigo),
-                empleados(nombre, codigo)
-            `)
-            .eq('empresa_id', user.empresa_id)
-            .order('created_at', { ascending: false })
-            .limit(5);
+            // Cargar ventas sin relaciones (ya no hay foreign key)
+            const { data: ventasSimples, error: errorSimple } = await window.supabaseClient
+                .from('ventas')
+                .select('*')
+                .eq('empresa_id', user.empresa_id)
+                .order('created_at', { ascending: false })
+                .limit(5);
+            
+            if (errorSimple) {
+                throw errorSimple;
+            }
 
-            if (ventasError) {
-                console.error('Error al cargar ventas recientes con relaciones:', ventasError);
-                // Fallback: cargar sin relaciones
-                const { data: ventasSimples, error: errorSimple } = await window.supabaseClient
-                    .from('ventas')
-                    .select('*')
-                    .eq('empresa_id', user.empresa_id)
-                    .order('created_at', { ascending: false })
-                    .limit(5);
+            // Cargar juguetes y empleados por separado (usando código)
+            if (ventasSimples && ventasSimples.length > 0) {
+                const jugueteCodigos = [...new Set(ventasSimples.map(v => v.juguete_codigo).filter(c => c))];
+                const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
                 
-                if (errorSimple) {
-                    throw errorSimple;
-                }
+                const [juguetesData, empleadosData] = await Promise.all([
+                    jugueteCodigos.length > 0 ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('codigo', jugueteCodigos).eq('empresa_id', user.empresa_id) : { data: [] },
+                    empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] }
+                ]);
 
-                // Cargar juguetes y empleados por separado
-                if (ventasSimples && ventasSimples.length > 0) {
-                    const jugueteIds = [...new Set(ventasSimples.map(v => v.juguete_id))];
-                    const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
-                    
-                    const [juguetesData, empleadosData] = await Promise.all([
-                        jugueteIds.length > 0 ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('id', jugueteIds) : { data: [] },
-                        empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] }
-                    ]);
+                const juguetesMap = new Map((juguetesData.data || []).map(j => [j.codigo, j]));
+                const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
 
-                    const juguetesMap = new Map((juguetesData.data || []).map(j => [j.id, j]));
-                    const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
-
-                    ventasList.innerHTML = ventasSimples.map(v => {
-                        const juguete = juguetesMap.get(v.juguete_id);
-                        const empleado = empleadosMap.get(v.empleado_id);
-                        return `
-                            <div class="venta-item">
-                                <div class="venta-info">
-                                    <strong>${juguete?.nombre || 'N/A'}</strong>
-                                    <span>${v.codigo_venta}</span>
-                                </div>
-                                <div class="venta-precio">$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</div>
+                ventasList.innerHTML = ventasSimples.map(v => {
+                    const juguete = juguetesMap.get(v.juguete_codigo);
+                    const empleado = empleadosMap.get(v.empleado_id);
+                    return `
+                        <div class="venta-item">
+                            <div class="venta-info">
+                                <strong>${juguete?.nombre || 'N/A'}</strong>
+                                <span>${v.codigo_venta}</span>
                             </div>
-                        `;
-                    }).join('');
-                } else {
-                    ventasList.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No hay ventas recientes</p>';
-                }
-            } else if (ventasRecientes && ventasRecientes.length > 0) {
-            ventasList.innerHTML = ventasRecientes.map(v => `
-                <div class="venta-item">
-                    <div class="venta-info">
-                        <strong>${v.juguetes?.nombre || 'N/A'}</strong>
-                        <span>${v.codigo_venta}</span>
-                    </div>
-                        <div class="venta-precio">$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</div>
-                </div>
-            `).join('');
-        } else {
-            ventasList.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No hay ventas recientes</p>';
-        }
+                            <div class="venta-precio">$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</div>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                ventasList.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">No hay ventas recientes</p>';
+            }
         } catch (error) {
             console.error('Error al cargar ventas recientes:', error);
             if (ventasList) {
@@ -150,6 +127,110 @@ async function loadDashboardSummary() {
         console.error('Error al cargar resumen del dashboard:', error);
     }
 }
+
+// ============================================
+// UTILIDADES: PREVENIR CLICS MÚLTIPLES
+// ============================================
+
+/**
+ * Función utilitaria para prevenir clics múltiples en botones críticos
+ * @param {HTMLElement|string} button - El botón o selector del botón
+ * @param {Function} asyncFunction - La función async a ejecutar
+ * @param {Object} options - Opciones de configuración
+ */
+async function preventDoubleClick(button, asyncFunction, options = {}) {
+    const {
+        loadingText = 'Procesando...',
+        disabledClass = 'btn-disabled',
+        showSpinner = true,
+        spinnerHTML = '<i class="fas fa-spinner fa-spin"></i>'
+    } = options;
+    
+    // Obtener el elemento del botón
+    const btnElement = typeof button === 'string' 
+        ? document.querySelector(button) 
+        : button;
+    
+    if (!btnElement) {
+        console.error('Botón no encontrado:', button);
+        return;
+    }
+    
+    // Si ya está procesando, ignorar el clic
+    if (btnElement.dataset.processing === 'true') {
+        return;
+    }
+    
+    // Marcar como procesando
+    btnElement.dataset.processing = 'true';
+    btnElement.disabled = true;
+    btnElement.classList.add(disabledClass);
+    
+    // Guardar el contenido original
+    const originalHTML = btnElement.innerHTML;
+    const originalText = btnElement.textContent || btnElement.innerText;
+    
+    // Mostrar estado de carga
+    if (showSpinner) {
+        btnElement.innerHTML = `${spinnerHTML} ${loadingText}`;
+    } else {
+        btnElement.textContent = loadingText;
+    }
+    
+    try {
+        // Ejecutar la función
+        await asyncFunction();
+    } catch (error) {
+        console.error('Error en función protegida:', error);
+        throw error; // Re-lanzar el error para que el código que llama pueda manejarlo
+    } finally {
+        // Restaurar el botón
+        btnElement.dataset.processing = 'false';
+        btnElement.disabled = false;
+        btnElement.classList.remove(disabledClass);
+        btnElement.innerHTML = originalHTML;
+    }
+}
+
+/**
+ * Wrapper para formularios que previene envíos múltiples
+ */
+function preventFormDoubleSubmit(form, submitHandler) {
+    if (!form) return;
+    
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // Si ya está procesando, ignorar
+        if (form.dataset.processing === 'true') {
+            return;
+        }
+        
+        // Obtener el botón de submit
+        const submitButton = form.querySelector('button[type="submit"], input[type="submit"]');
+        
+        if (submitButton) {
+            await preventDoubleClick(submitButton, async () => {
+                await submitHandler(e);
+            }, {
+                loadingText: 'Procesando...',
+                showSpinner: true
+            });
+        } else {
+            // Si no hay botón de submit, marcar el formulario directamente
+            form.dataset.processing = 'true';
+            try {
+                await submitHandler(e);
+            } finally {
+                form.dataset.processing = 'false';
+            }
+        }
+    });
+}
+
+// Hacer funciones disponibles globalmente
+window.preventDoubleClick = preventDoubleClick;
+window.preventFormDoubleSubmit = preventFormDoubleSubmit;
 
 // ============================================
 // REGISTRAR VENTA
@@ -576,9 +657,8 @@ function initRegistrarVenta() {
 
             // Agregar item
             ventaItems.push({
-                juguete_id: juguete.id,
-                juguete_nombre: juguete.nombre,
                 juguete_codigo: juguete.codigo,
+                juguete_nombre: juguete.nombre,
                 juguete_item: juguete.item || null,
                 juguete_foto_url: juguete.foto_url || null,
                 empleado_id: empleado.id,
@@ -621,10 +701,8 @@ function initRegistrarVenta() {
     });
 
 
-    // Registrar venta
-    form.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
+    // Registrar venta - con protección contra clics múltiples
+    preventFormDoubleSubmit(form, async function(e) {
         if (ventaItems.length === 0) {
             showVentaMessage('Debes agregar al menos un item a la venta', 'error');
             return;
@@ -641,44 +719,85 @@ function initRegistrarVenta() {
             const user = JSON.parse(sessionStorage.getItem('user'));
             
             // Generar un solo código de venta para todos los items
-                const codigoVenta = await generarCodigoVenta();
-                
+            const codigoVenta = await generarCodigoVenta();
+            
+            // Array para almacenar información de cada venta registrada (para deshacer)
+            const ventasRegistradas = [];
+            
             // Registrar cada item como parte de la misma venta
             for (const item of ventaItems) {
                 const cantidad = item.cantidad || 1;
                 
-                // Obtener juguete actual para verificar cantidad
-                const { data: juguete, error: jugueteError } = await window.supabaseClient
+                // Obtener juguete actual para verificar cantidad (buscar por código)
+                const { data: juguetes, error: jugueteError } = await window.supabaseClient
                     .from('juguetes')
-                    .select('cantidad')
-                    .eq('id', item.juguete_id)
+                    .select('id, cantidad, codigo, nombre, bodega_id, tienda_id')
+                    .eq('codigo', item.juguete_codigo)
+                    .eq('empresa_id', user.empresa_id)
                     .limit(1);
 
                 if (jugueteError) throw jugueteError;
-                if (!juguete || juguete.length === 0 || juguete[0].cantidad < cantidad) {
+                if (!juguetes || juguetes.length === 0 || juguetes[0].cantidad < cantidad) {
                     throw new Error(`No hay suficiente cantidad del juguete ${item.juguete_nombre}`);
                 }
 
+                const juguete = juguetes[0];
+                
+                // Guardar información del juguete antes de modificar (para deshacer)
+                const infoJugueteOriginal = {
+                    juguete_id: juguete.id,
+                    juguete_codigo: juguete.codigo,
+                    juguete_nombre: juguete.nombre,
+                    cantidad_original: juguete.cantidad,
+                    bodega_id: juguete.bodega_id,
+                    tienda_id: juguete.tienda_id
+                };
+
                 // Registrar venta
-                const { error } = await window.supabaseClient
+                const { data: ventaInsertada, error } = await window.supabaseClient
                     .from('ventas')
                     .insert({
                         codigo_venta: codigoVenta,
-                        juguete_id: item.juguete_id,
+                        juguete_codigo: item.juguete_codigo,
                         empleado_id: item.empleado_id,
                         precio_venta: item.precio * cantidad,
                         cantidad: cantidad,
                         metodo_pago: item.metodo_pago,
                         empresa_id: user.empresa_id
-                    });
+                    })
+                    .select()
+                    .single();
 
                 if (error) throw error;
 
                 // Reducir cantidad del juguete
-                    await window.supabaseClient
-                        .from('juguetes')
-                    .update({ cantidad: juguete[0].cantidad - cantidad })
-                        .eq('id', item.juguete_id);
+                const nuevaCantidad = juguete.cantidad - cantidad;
+                await window.supabaseClient
+                    .from('juguetes')
+                    .update({ cantidad: nuevaCantidad })
+                    .eq('id', juguete.id);
+                
+                // Guardar información de la venta registrada (para deshacer)
+                ventasRegistradas.push({
+                    venta_id: ventaInsertada.id,
+                    codigo_venta: codigoVenta,
+                    juguete_info: infoJugueteOriginal,
+                    cantidad_vendida: cantidad,
+                    precio_venta: item.precio * cantidad,
+                    empleado_id: item.empleado_id,
+                    metodo_pago: item.metodo_pago,
+                    juguete_eliminado: nuevaCantidad === 0 // Si la cantidad llegó a 0, el juguete fue eliminado
+                });
+            }
+            
+            // Guardar información de la última venta para poder deshacerla
+            if (ventasRegistradas.length > 0) {
+                ultimaVenta = {
+                    codigo_venta: codigoVenta,
+                    ventas: ventasRegistradas,
+                    timestamp: new Date().toISOString()
+                };
+                actualizarBotonDeshacerVenta(true);
             }
 
             showVentaMessage('Venta registrada correctamente', 'success');
@@ -693,6 +812,9 @@ function initRegistrarVenta() {
         } catch (error) {
             console.error('Error al registrar venta:', error);
             showVentaMessage('Error al registrar la venta: ' + error.message, 'error');
+            // Limpiar última venta en caso de error
+            ultimaVenta = null;
+            actualizarBotonDeshacerVenta(false);
         }
     });
 
@@ -707,6 +829,9 @@ function initRegistrarVenta() {
         // Si no hay items, mostrar lista de ventas registradas para facturar
         await showVentasParaFacturar();
     });
+    
+    // Inicializar botón deshacer
+    inicializarBotonDeshacerVenta();
 }
 
 // Función global para remover item
@@ -714,6 +839,105 @@ window.removeVentaItem = function(index) {
     ventaItems.splice(index, 1);
     updateVentaItemsList();
 };
+
+// ============================================
+// FUNCIONES PARA DESHACER VENTA
+// ============================================
+
+// Función para actualizar la visibilidad del botón deshacer venta
+function actualizarBotonDeshacerVenta(mostrar) {
+    const botonDeshacer = document.getElementById('deshacerVentaBtn');
+    if (botonDeshacer) {
+        botonDeshacer.style.display = mostrar ? 'inline-flex' : 'none';
+    }
+}
+
+// Función para deshacer la última venta
+async function deshacerUltimaVenta() {
+    if (!ultimaVenta) {
+        showVentaMessage('No hay venta para deshacer', 'error');
+        return;
+    }
+    
+    if (!confirm('¿Estás seguro de que deseas deshacer la última venta? Esta acción revertirá todos los cambios realizados.')) {
+        return;
+    }
+    
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        
+        // Revertir cada venta en orden inverso
+        for (let i = ultimaVenta.ventas.length - 1; i >= 0; i--) {
+            const ventaInfo = ultimaVenta.ventas[i];
+            
+            // 1. Restaurar cantidad del juguete
+            if (ventaInfo.juguete_eliminado) {
+                // Si el juguete fue eliminado (cantidad llegó a 0), recrearlo
+                const nuevoJuguete = {
+                    nombre: ventaInfo.juguete_info.juguete_nombre,
+                    codigo: ventaInfo.juguete_info.juguete_codigo,
+                    cantidad: ventaInfo.juguete_info.cantidad_original,
+                    empresa_id: user.empresa_id
+                };
+                
+                if (ventaInfo.juguete_info.bodega_id) {
+                    nuevoJuguete.bodega_id = ventaInfo.juguete_info.bodega_id;
+                    nuevoJuguete.tienda_id = null;
+                } else if (ventaInfo.juguete_info.tienda_id) {
+                    nuevoJuguete.tienda_id = ventaInfo.juguete_info.tienda_id;
+                    nuevoJuguete.bodega_id = null;
+                }
+                
+                await window.supabaseClient
+                    .from('juguetes')
+                    .insert(nuevoJuguete);
+            } else {
+                // Si solo se redujo la cantidad, restaurarla
+                await window.supabaseClient
+                    .from('juguetes')
+                    .update({ cantidad: ventaInfo.juguete_info.cantidad_original })
+                    .eq('id', ventaInfo.juguete_info.juguete_id);
+            }
+            
+            // 2. Eliminar registro de venta
+            await window.supabaseClient
+                .from('ventas')
+                .delete()
+                .eq('id', ventaInfo.venta_id);
+        }
+        
+        // Limpiar última venta
+        ultimaVenta = null;
+        actualizarBotonDeshacerVenta(false);
+        
+        showVentaMessage('Venta deshecha correctamente', 'success');
+        
+        // Recargar resumen
+        if (typeof loadDashboardSummary === 'function') {
+            await loadDashboardSummary();
+        }
+    } catch (error) {
+        console.error('Error al deshacer venta:', error);
+        showVentaMessage('Error al deshacer la venta: ' + error.message, 'error');
+    }
+}
+
+// Función para inicializar el botón deshacer venta
+function inicializarBotonDeshacerVenta() {
+    const botonDeshacer = document.getElementById('deshacerVentaBtn');
+    if (botonDeshacer) {
+        // Remover listeners anteriores si existen (clonar y reemplazar)
+        const nuevoBtn = botonDeshacer.cloneNode(true);
+        botonDeshacer.parentNode.replaceChild(nuevoBtn, botonDeshacer);
+        
+        // Agregar event listener
+        nuevoBtn.addEventListener('click', async function() {
+            await deshacerUltimaVenta();
+        });
+        // Ocultar inicialmente
+        nuevoBtn.style.display = ultimaVenta ? 'inline-flex' : 'none';
+    }
+}
 
 // Función para actualizar lista de items (debe ser global)
 window.updateVentaItemsList = function() {
@@ -840,19 +1064,37 @@ async function showVentasParaFacturar() {
         const user = JSON.parse(sessionStorage.getItem('user'));
         
         // Buscar ventas que NO han sido facturadas
-        const { data: ventas, error } = await window.supabaseClient
+        // Cargar ventas sin relaciones automáticas (usar juguete_codigo)
+        const { data: ventasSimples, error: errorSimple } = await window.supabaseClient
             .from('ventas')
-            .select(`
-                *,
-                juguetes(nombre, codigo),
-                empleados(nombre, codigo)
-            `)
+            .select('*')
             .eq('empresa_id', user.empresa_id)
             .eq('facturada', false) // Solo ventas no facturadas
             .order('created_at', { ascending: false })
             .limit(50); // Últimas 50 ventas
 
-        if (error) throw error;
+        if (errorSimple) throw errorSimple;
+        
+        // Cargar juguetes y empleados por separado
+        let ventas = [];
+        if (ventasSimples && ventasSimples.length > 0) {
+            const jugueteCodigos = [...new Set(ventasSimples.map(v => v.juguete_codigo).filter(c => c))];
+            const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
+            
+            const [juguetesData, empleadosData] = await Promise.all([
+                jugueteCodigos.length > 0 ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('codigo', jugueteCodigos).eq('empresa_id', user.empresa_id) : { data: [] },
+                empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] }
+            ]);
+
+            const juguetesMap = new Map((juguetesData.data || []).map(j => [j.codigo, j]));
+            const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
+
+            ventas = ventasSimples.map(v => ({
+                ...v,
+                juguetes: juguetesMap.get(v.juguete_codigo) || null,
+                empleados: empleadosMap.get(v.empleado_id) || null
+            }));
+        }
 
         // Crear modal o vista para seleccionar ventas
         const ventaView = document.getElementById('ventaView');
@@ -939,18 +1181,36 @@ async function facturarVentaRegistrada(codigoVenta) {
         const user = JSON.parse(sessionStorage.getItem('user'));
         
         // Obtener todas las ventas con ese código que NO estén facturadas
-        const { data: ventas, error } = await window.supabaseClient
+        // Cargar ventas sin relaciones automáticas (usar juguete_codigo)
+        const { data: ventasSimples, error: errorSimple } = await window.supabaseClient
             .from('ventas')
-            .select(`
-                *,
-                juguetes(nombre, codigo),
-                empleados(nombre, codigo)
-            `)
+            .select('*')
             .eq('codigo_venta', codigoVenta)
             .eq('empresa_id', user.empresa_id)
             .eq('facturada', false); // Solo ventas no facturadas
 
-        if (error) throw error;
+        if (errorSimple) throw errorSimple;
+        
+        // Cargar juguetes y empleados por separado
+        let ventas = [];
+        if (ventasSimples && ventasSimples.length > 0) {
+            const jugueteCodigos = [...new Set(ventasSimples.map(v => v.juguete_codigo).filter(c => c))];
+            const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
+            
+            const [juguetesData, empleadosData] = await Promise.all([
+                jugueteCodigos.length > 0 ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('codigo', jugueteCodigos).eq('empresa_id', user.empresa_id) : { data: [] },
+                empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] }
+            ]);
+
+            const juguetesMap = new Map((juguetesData.data || []).map(j => [j.codigo, j]));
+            const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
+
+            ventas = ventasSimples.map(v => ({
+                ...v,
+                juguetes: juguetesMap.get(v.juguete_codigo) || null,
+                empleados: empleadosMap.get(v.empleado_id) || null
+            }));
+        }
 
         if (!ventas || ventas.length === 0) {
             // Verificar si la venta existe pero ya fue facturada
@@ -1137,9 +1397,8 @@ function initFacturar() {
         if (ventaView) ventaView.style.display = 'block';
     });
     
-    form.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
+    // Facturar - con protección contra clics múltiples
+    preventFormDoubleSubmit(form, async function(e) {
         if (!currentFacturaData) {
             showFacturaMessage('No hay datos de factura', 'error');
             return;
@@ -2349,7 +2608,7 @@ window.generarPlanMovimiento = function() {
             const juguete = juguetesDisponiblesAbastecer.find(j => j.id == jugueteId);
             if (juguete) {
                 juguetesSeleccionados.push({
-                    juguete_id: juguete.id,
+                    juguete_codigo: juguete.codigo,
                     nombre: juguete.nombre,
                     codigo: juguete.codigo,
                     cantidad: cantidad
@@ -2779,12 +3038,42 @@ window.filtrarHistorialMovimientos = function() {
     cargarHistorialMovimientos();
 };
 
-// Función para ejecutar un plan de movimiento
+// Función para ejecutar un plan de movimiento - con protección contra clics múltiples
 window.ejecutarPlanMovimiento = async function(planId) {
     if (!confirm('¿Estás seguro de que deseas ejecutar este plan de movimiento?\n\nEsto moverá los juguetes del origen al destino en el sistema.')) {
         return;
     }
     
+    // Obtener el botón que ejecutó la acción (si se llama desde onclick)
+    let button = null;
+    try {
+        // Intentar obtener el botón desde el evento
+        const event = window.event || (arguments.length > 1 ? arguments[1] : null);
+        if (event && event.target) {
+            button = event.target.closest('button');
+        }
+    } catch (e) {
+        // Si no se puede obtener, buscar el botón por el planId
+        const buttonSelector = `button[onclick*="ejecutarPlanMovimiento(${planId})"]`;
+        button = document.querySelector(buttonSelector);
+    }
+    
+    // Si hay un botón, proteger contra clics múltiples
+    if (button) {
+        await preventDoubleClick(button, async () => {
+            await ejecutarPlanMovimientoInterno(planId);
+        }, {
+            loadingText: 'Ejecutando plan...',
+            showSpinner: true
+        });
+    } else {
+        // Si no hay botón, ejecutar directamente
+        await ejecutarPlanMovimientoInterno(planId);
+    }
+};
+
+// Función interna para ejecutar el plan
+async function ejecutarPlanMovimientoInterno(planId) {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
         
@@ -2809,15 +3098,22 @@ window.ejecutarPlanMovimiento = async function(planId) {
         // Procesar cada item del plan
         for (const item of items) {
             try {
-                // Obtener juguete actual del origen
+                // Obtener juguete actual del origen (buscar por código)
+                const jugueteCodigo = item.juguete_codigo || item.codigo;
+                if (!jugueteCodigo) {
+                    console.warn(`Item sin código de juguete, saltando...`);
+                    continue;
+                }
+                
                 const { data: jugueteActualData } = await window.supabaseClient
                     .from('juguetes')
                     .select('*')
-                    .eq('id', item.juguete_id)
+                    .eq('codigo', jugueteCodigo)
+                    .eq('empresa_id', user.empresa_id)
                     .limit(1);
 
                 if (!jugueteActualData || jugueteActualData.length === 0) {
-                    console.warn(`Juguete ${item.nombre} no encontrado, saltando...`);
+                    console.warn(`Juguete con código ${jugueteCodigo} no encontrado, saltando...`);
                     continue;
                 }
 
@@ -2891,7 +3187,7 @@ window.ejecutarPlanMovimiento = async function(planId) {
                         origen_id: plan.origen_id,
                         tipo_destino: plan.tipo_destino,
                         destino_id: plan.destino_id,
-                        juguete_id: item.juguete_id,
+                        juguete_codigo: item.juguete_codigo || item.codigo,
                         cantidad: item.cantidad,
                         empresa_id: user.empresa_id
                     });
@@ -3242,20 +3538,34 @@ async function exportarAExcel(tipo) {
                 filename = 'facturas.xlsx';
                 break;
             case 'ventas':
-                const { data: ventas, error: errorVentas } = await window.supabaseClient
+                // Cargar ventas sin relaciones automáticas
+                const { data: ventasSimples, error: errorVentas } = await window.supabaseClient
                     .from('ventas')
-                    .select(`
-                        codigo_venta, 
-                        precio_venta, 
-                        cantidad,
-                        metodo_pago, 
-                        created_at,
-                        juguetes(nombre, codigo),
-                        empleados(nombre, codigo)
-                    `)
+                    .select('codigo_venta, precio_venta, cantidad, metodo_pago, created_at, juguete_codigo, empleado_id')
                     .eq('empresa_id', user.empresa_id);
                 
                 if (errorVentas) throw errorVentas;
+                
+                // Cargar juguetes y empleados por separado
+                let ventas = [];
+                if (ventasSimples && ventasSimples.length > 0) {
+                    const jugueteCodigos = [...new Set(ventasSimples.map(v => v.juguete_codigo).filter(c => c))];
+                    const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
+                    
+                    const [juguetesData, empleadosData] = await Promise.all([
+                        jugueteCodigos.length > 0 ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('codigo', jugueteCodigos).eq('empresa_id', user.empresa_id) : { data: [] },
+                        empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] }
+                    ]);
+
+                    const juguetesMap = new Map((juguetesData.data || []).map(j => [j.codigo, j]));
+                    const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
+
+                    ventas = ventasSimples.map(v => ({
+                        ...v,
+                        juguetes: juguetesMap.get(v.juguete_codigo) || null,
+                        empleados: empleadosMap.get(v.empleado_id) || null
+                    }));
+                }
                 
                 // Formatear datos para Excel
                 data = (ventas || []).map(v => ({
@@ -3272,20 +3582,30 @@ async function exportarAExcel(tipo) {
                 filename = 'ventas.xlsx';
                 break;
             case 'movimientos':
-                const { data: movimientos, error: errorMovimientos } = await window.supabaseClient
+                // Cargar movimientos sin relaciones automáticas
+                const { data: movimientosSimples, error: errorMovimientos } = await window.supabaseClient
                     .from('movimientos')
-                    .select(`
-                        tipo_origen, 
-                        origen_id, 
-                        tipo_destino, 
-                        destino_id, 
-                        cantidad, 
-                        created_at,
-                        juguetes(nombre, codigo)
-                    `)
+                    .select('tipo_origen, origen_id, tipo_destino, destino_id, cantidad, created_at, juguete_codigo')
                     .eq('empresa_id', user.empresa_id);
                 
                 if (errorMovimientos) throw errorMovimientos;
+                
+                // Cargar juguetes por separado
+                let movimientos = [];
+                if (movimientosSimples && movimientosSimples.length > 0) {
+                    const jugueteCodigos = [...new Set(movimientosSimples.map(m => m.juguete_codigo).filter(c => c))];
+                    
+                    const { data: juguetesData } = await jugueteCodigos.length > 0 
+                        ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('codigo', jugueteCodigos).eq('empresa_id', user.empresa_id)
+                        : { data: [] };
+
+                    const juguetesMap = new Map((juguetesData || []).map(j => [j.codigo, j]));
+
+                    movimientos = movimientosSimples.map(m => ({
+                        ...m,
+                        juguetes: juguetesMap.get(m.juguete_codigo) || null
+                    }));
+                }
                 
                 // Formatear datos para Excel
                 data = (movimientos || []).map(m => ({
@@ -3877,6 +4197,9 @@ async function deleteTienda(tiendaId) {
 // CORRECCIÓN DE ABASTECER
 // ============================================
 
+// Variable global para almacenar el último movimiento realizado (para deshacer)
+let ultimoMovimientoAbastecer = null;
+
 // Actualizar función initAbastecer para usar inputs de cantidad
 function initAbastecer() {
     const origenTipo = document.getElementById('origenTipo');
@@ -3905,9 +4228,19 @@ function initAbastecer() {
     origenSelect.addEventListener('change', loadJuguetesDisponibles);
     destinoSelect.addEventListener('change', loadJuguetesDisponibles);
 
-    form.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
+    // Limpiar último movimiento cuando se cambian los campos del formulario
+    const limpiarUltimoMovimiento = () => {
+        ultimoMovimientoAbastecer = null;
+        actualizarBotonDeshacerAbastecer(false);
+    };
+    
+    origenTipo.addEventListener('change', limpiarUltimoMovimiento);
+    origenSelect.addEventListener('change', limpiarUltimoMovimiento);
+    destinoTipo.addEventListener('change', limpiarUltimoMovimiento);
+    destinoSelect.addEventListener('change', limpiarUltimoMovimiento);
+
+    // Realizar movimiento - con protección contra clics múltiples
+    preventFormDoubleSubmit(form, async function(e) {
         const origenTipoVal = origenTipo.value;
         const origenId = parseInt(origenSelect.value);
         const destinoTipoVal = destinoTipo.value;
@@ -3933,6 +4266,9 @@ function initAbastecer() {
 
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
+            
+            // Guardar información del movimiento para poder deshacerlo
+            const movimientosDetalle = [];
             
             for (const juguete of juguetesSeleccionados) {
                 // Obtener juguete actual del origen
@@ -3965,11 +4301,31 @@ function initAbastecer() {
                     .eq(campoDestino, destinoId)
                     .limit(1);
 
+                // Guardar información para deshacer
+                const movimientoDetalle = {
+                    juguete_id_origen: juguete.id,
+                    juguete_codigo: jugueteActual.codigo,
+                    juguete_nombre: jugueteActual.nombre,
+                    cantidad_movida: juguete.cantidad,
+                    cantidad_origen_original: jugueteActual.cantidad,
+                    origen_tipo: origenTipoVal,
+                    origen_id: origenId,
+                    destino_tipo: destinoTipoVal,
+                    destino_id: destinoId,
+                    juguete_existia_en_destino: jugueteExistenteData && jugueteExistenteData.length > 0,
+                    juguete_id_destino: jugueteExistenteData && jugueteExistenteData.length > 0 ? jugueteExistenteData[0].id : null,
+                    cantidad_destino_original: jugueteExistenteData && jugueteExistenteData.length > 0 ? jugueteExistenteData[0].cantidad : 0,
+                    juguete_eliminado_origen: false,
+                    juguete_creado_destino: false,
+                    foto_url: jugueteActual.foto_url || null
+                };
+
                 // PRIMERO: Reducir cantidad en origen (o eliminar si llega a 0)
                 const nuevaCantidadOrigen = jugueteActual.cantidad - juguete.cantidad;
                 
                 if (nuevaCantidadOrigen <= 0) {
                     // Si la cantidad llega a 0 o menos, eliminar el registro del origen
+                    movimientoDetalle.juguete_eliminado_origen = true;
                     await window.supabaseClient
                         .from('juguetes')
                         .delete()
@@ -3994,6 +4350,7 @@ function initAbastecer() {
                         .eq('id', jugueteExistente.id);
                 } else {
                     // Si no existe, crear un nuevo registro en el destino
+                    movimientoDetalle.juguete_creado_destino = true;
                     const nuevoJugueteData = {
                         nombre: jugueteActual.nombre,
                         codigo: jugueteActual.codigo,
@@ -4010,23 +4367,52 @@ function initAbastecer() {
                         nuevoJugueteData.bodega_id = null;
                     }
                     
-                    await window.supabaseClient
+                    const { data: nuevoJugueteInsertado } = await window.supabaseClient
                         .from('juguetes')
-                        .insert(nuevoJugueteData);
+                        .insert(nuevoJugueteData)
+                        .select()
+                        .single();
+                    
+                    if (nuevoJugueteInsertado) {
+                        movimientoDetalle.juguete_id_destino = nuevoJugueteInsertado.id;
+                    }
                 }
 
                 // TERCERO: Crear registro de movimiento (solo para auditoría)
-                await window.supabaseClient
+                const { data: movimientoInsertado } = await window.supabaseClient
                     .from('movimientos')
                     .insert({
                         tipo_origen: origenTipoVal,
                         origen_id: origenId,
                         tipo_destino: destinoTipoVal,
                         destino_id: destinoId,
-                        juguete_id: juguete.id,
+                        juguete_codigo: jugueteActual.codigo,
                         cantidad: juguete.cantidad,
                         empresa_id: user.empresa_id
-                    });
+                    })
+                    .select()
+                    .single();
+                
+                if (movimientoInsertado) {
+                    movimientoDetalle.movimiento_id = movimientoInsertado.id;
+                }
+                
+                movimientosDetalle.push(movimientoDetalle);
+            }
+            
+            // Guardar el último movimiento para poder deshacerlo
+            if (movimientosDetalle.length > 0) {
+                ultimoMovimientoAbastecer = {
+                    origen_tipo: origenTipoVal,
+                    origen_id: origenId,
+                    destino_tipo: destinoTipoVal,
+                    destino_id: destinoId,
+                    movimientos: movimientosDetalle,
+                    timestamp: new Date().toISOString()
+                };
+                
+                // Mostrar botón deshacer
+                actualizarBotonDeshacerAbastecer(true);
             }
 
             showAbastecerMessage('Movimiento realizado correctamente', 'success');
@@ -4049,8 +4435,140 @@ function initAbastecer() {
         } catch (error) {
             console.error('Error al realizar movimiento:', error);
             showAbastecerMessage('Error al realizar el movimiento: ' + error.message, 'error');
+            // Limpiar último movimiento si hubo error
+            ultimoMovimientoAbastecer = null;
+            actualizarBotonDeshacerAbastecer(false);
         }
     });
+    
+    // Inicializar botón deshacer
+    inicializarBotonDeshacerAbastecer();
+}
+
+// Función para actualizar la visibilidad del botón deshacer
+function actualizarBotonDeshacerAbastecer(mostrar) {
+    const botonDeshacer = document.getElementById('deshacerMovimientoBtn');
+    if (botonDeshacer) {
+        botonDeshacer.style.display = mostrar ? 'inline-flex' : 'none';
+    }
+}
+
+// Función para inicializar el botón deshacer
+function inicializarBotonDeshacerAbastecer() {
+    const botonDeshacer = document.getElementById('deshacerMovimientoBtn');
+    if (botonDeshacer) {
+        // Remover listeners anteriores si existen (clonar y reemplazar)
+        const nuevoBtn = botonDeshacer.cloneNode(true);
+        botonDeshacer.parentNode.replaceChild(nuevoBtn, botonDeshacer);
+        
+        // Agregar event listener
+        nuevoBtn.addEventListener('click', async function() {
+            await deshacerUltimoMovimientoAbastecer();
+        });
+        // Ocultar inicialmente
+        nuevoBtn.style.display = ultimoMovimientoAbastecer ? 'inline-flex' : 'none';
+    }
+}
+
+// Función para deshacer el último movimiento
+async function deshacerUltimoMovimientoAbastecer() {
+    if (!ultimoMovimientoAbastecer) {
+        showAbastecerMessage('No hay movimiento para deshacer', 'error');
+        return;
+    }
+    
+    if (!confirm('¿Estás seguro de que deseas deshacer el último movimiento? Esta acción revertirá todos los cambios realizados.')) {
+        return;
+    }
+    
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        
+        // Revertir cada movimiento en orden inverso
+        for (let i = ultimoMovimientoAbastecer.movimientos.length - 1; i >= 0; i--) {
+            const movimiento = ultimoMovimientoAbastecer.movimientos[i];
+            
+            // 1. Restaurar origen
+            if (movimiento.juguete_eliminado_origen) {
+                // Si se eliminó el registro, recrearlo
+                const nuevoJugueteOrigen = {
+                    nombre: movimiento.juguete_nombre,
+                    codigo: movimiento.juguete_codigo,
+                    cantidad: movimiento.cantidad_origen_original,
+                    empresa_id: user.empresa_id,
+                    foto_url: movimiento.foto_url
+                };
+                
+                if (movimiento.origen_tipo === 'bodega') {
+                    nuevoJugueteOrigen.bodega_id = movimiento.origen_id;
+                    nuevoJugueteOrigen.tienda_id = null;
+                } else {
+                    nuevoJugueteOrigen.tienda_id = movimiento.origen_id;
+                    nuevoJugueteOrigen.bodega_id = null;
+                }
+                
+                await window.supabaseClient
+                    .from('juguetes')
+                    .insert(nuevoJugueteOrigen);
+            } else {
+                // Si solo se actualizó la cantidad, restaurarla
+                await window.supabaseClient
+                    .from('juguetes')
+                    .update({ cantidad: movimiento.cantidad_origen_original })
+                    .eq('id', movimiento.juguete_id_origen);
+            }
+            
+            // 2. Revertir destino
+            if (movimiento.juguete_creado_destino) {
+                // Si se creó un nuevo registro, eliminarlo
+                if (movimiento.juguete_id_destino) {
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .delete()
+                        .eq('id', movimiento.juguete_id_destino);
+                }
+            } else if (movimiento.juguete_existia_en_destino) {
+                // Si existía, restaurar la cantidad original
+                if (movimiento.juguete_id_destino) {
+                    await window.supabaseClient
+                        .from('juguetes')
+                        .update({ cantidad: movimiento.cantidad_destino_original })
+                        .eq('id', movimiento.juguete_id_destino);
+                }
+            }
+            
+            // 3. Eliminar registro de movimiento de auditoría
+            if (movimiento.movimiento_id) {
+                await window.supabaseClient
+                    .from('movimientos')
+                    .delete()
+                    .eq('id', movimiento.movimiento_id);
+            }
+        }
+        
+        // Limpiar último movimiento
+        ultimoMovimientoAbastecer = null;
+        actualizarBotonDeshacerAbastecer(false);
+        
+        showAbastecerMessage('Movimiento deshecho correctamente', 'success');
+        
+        // Recargar datos
+        if (typeof loadTiendas === 'function') {
+            await loadTiendas();
+        }
+        if (typeof loadBodegas === 'function') {
+            await loadBodegas();
+        }
+        if (typeof loadInventario === 'function') {
+            await loadInventario();
+        }
+        if (typeof loadDashboardSummary === 'function') {
+            await loadDashboardSummary();
+        }
+    } catch (error) {
+        console.error('Error al deshacer movimiento:', error);
+        showAbastecerMessage('Error al deshacer el movimiento: ' + error.message, 'error');
+    }
 }
 
 // ============================================
@@ -4065,11 +4583,7 @@ async function aplicarFiltroVentas(filtro) {
         const user = JSON.parse(sessionStorage.getItem('user'));
         let query = window.supabaseClient
             .from('ventas')
-            .select(`
-                *,
-                juguetes(nombre, codigo),
-                empleados(nombre, codigo)
-            `)
+            .select('*')
             .eq('empresa_id', user.empresa_id);
 
         switch(filtro) {
@@ -4085,7 +4599,28 @@ async function aplicarFiltroVentas(filtro) {
                 break;
         }
 
-        const { data: ventas, error } = await query.order('created_at', { ascending: false });
+        const { data: ventasSimples, error } = await query.order('created_at', { ascending: false });
+        
+        // Cargar juguetes y empleados por separado
+        let ventas = [];
+        if (ventasSimples && ventasSimples.length > 0) {
+            const jugueteCodigos = [...new Set(ventasSimples.map(v => v.juguete_codigo).filter(c => c))];
+            const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
+            
+            const [juguetesData, empleadosData] = await Promise.all([
+                jugueteCodigos.length > 0 ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('codigo', jugueteCodigos).eq('empresa_id', user.empresa_id) : { data: [] },
+                empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] }
+            ]);
+
+            const juguetesMap = new Map((juguetesData.data || []).map(j => [j.codigo, j]));
+            const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
+
+            ventas = ventasSimples.map(v => ({
+                ...v,
+                juguetes: juguetesMap.get(v.juguete_codigo) || null,
+                empleados: empleadosMap.get(v.empleado_id) || null
+            }));
+        }
 
         if (error) throw error;
 
@@ -4244,17 +4779,34 @@ async function cargarVentasRecientesAjustes() {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
         
-        // Cargar ventas recientes
-        const { data: ventasRecientes } = await window.supabaseClient
+        // Cargar ventas recientes (sin relaciones automáticas, usar juguete_codigo)
+        const { data: ventasSimples } = await window.supabaseClient
             .from('ventas')
-            .select(`
-                *,
-                juguetes(nombre, codigo),
-                empleados(nombre, codigo)
-            `)
+            .select('*')
             .eq('empresa_id', user.empresa_id)
             .order('created_at', { ascending: false })
             .limit(10);
+        
+        // Cargar juguetes por código
+        let ventasRecientes = [];
+        if (ventasSimples && ventasSimples.length > 0) {
+            const jugueteCodigos = [...new Set(ventasSimples.map(v => v.juguete_codigo).filter(c => c))];
+            const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
+            
+            const [juguetesData, empleadosData] = await Promise.all([
+                jugueteCodigos.length > 0 ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('codigo', jugueteCodigos).eq('empresa_id', user.empresa_id) : { data: [] },
+                empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] }
+            ]);
+
+            const juguetesMap = new Map((juguetesData.data || []).map(j => [j.codigo, j]));
+            const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
+
+            ventasRecientes = ventasSimples.map(v => ({
+                ...v,
+                juguetes: juguetesMap.get(v.juguete_codigo) || null,
+                empleados: empleadosMap.get(v.empleado_id) || null
+            }));
+        }
 
         const ventasList = document.getElementById('ajustesVentasRecientes');
         if (ventasList) {
@@ -4528,17 +5080,18 @@ window.procesarDevolucion = async function(codigoVenta, itemsSeleccionados = nul
         
         const { data: ventas, error: ventasError } = await query;
         
-        // Si hay ventas, cargar juguetes por separado
+        // Si hay ventas, cargar juguetes por separado (usando código)
         if (!ventasError && ventas && ventas.length > 0) {
-            const jugueteIds = [...new Set(ventas.map(v => v.juguete_id))];
+            const jugueteCodigos = [...new Set(ventas.map(v => v.juguete_codigo).filter(c => c))];
             const { data: juguetesData } = await window.supabaseClient
                 .from('juguetes')
                 .select('id, nombre, codigo, cantidad, bodega_id, tienda_id, empresa_id')
-                .in('id', jugueteIds);
+                .in('codigo', jugueteCodigos)
+                .eq('empresa_id', user.empresa_id);
             
-            const juguetesMap = new Map((juguetesData || []).map(j => [j.id, j]));
+            const juguetesMap = new Map((juguetesData || []).map(j => [j.codigo, j]));
             ventas.forEach(v => {
-                v.juguetes = juguetesMap.get(v.juguete_id) || null;
+                v.juguetes = juguetesMap.get(v.juguete_codigo) || null;
             });
         }
 
@@ -5253,50 +5806,35 @@ async function cargarTodasLasVentas() {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
         
-        // Intentar cargar con relaciones primero
-        let { data: ventas, error } = await window.supabaseClient
+        // Cargar ventas sin relaciones automáticas (ya no hay foreign key, usar juguete_codigo)
+        const { data: ventasSimples, error: errorSimple } = await window.supabaseClient
             .from('ventas')
-            .select(`
-                *,
-                juguetes(nombre, codigo),
-                empleados(nombre, codigo)
-            `)
+            .select('*')
             .eq('empresa_id', user.empresa_id)
             .order('created_at', { ascending: false });
         
-        // Si falla con relaciones, cargar sin relaciones y hacer consultas separadas
-        if (error) {
-            console.warn('Error al cargar ventas con relaciones, usando fallback:', error);
-            const { data: ventasSimples, error: errorSimple } = await window.supabaseClient
-                .from('ventas')
-                .select('*')
-                .eq('empresa_id', user.empresa_id)
-                .order('created_at', { ascending: false });
+        if (errorSimple) throw errorSimple;
+        
+        // Cargar juguetes y empleados por separado (usando código)
+        let ventas = [];
+        if (ventasSimples && ventasSimples.length > 0) {
+            const jugueteCodigos = [...new Set(ventasSimples.map(v => v.juguete_codigo).filter(c => c))];
+            const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
             
-            if (errorSimple) throw errorSimple;
-            
-            // Cargar juguetes y empleados por separado
-            if (ventasSimples && ventasSimples.length > 0) {
-                const jugueteIds = [...new Set(ventasSimples.map(v => v.juguete_id))];
-                const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
-                
-                const [juguetesData, empleadosData] = await Promise.all([
-                    jugueteIds.length > 0 ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('id', jugueteIds) : { data: [] },
-                    empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] }
-                ]);
+            const [juguetesData, empleadosData] = await Promise.all([
+                jugueteCodigos.length > 0 ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('codigo', jugueteCodigos).eq('empresa_id', user.empresa_id) : { data: [] },
+                empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] }
+            ]);
 
-                const juguetesMap = new Map((juguetesData.data || []).map(j => [j.id, j]));
-                const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
+            const juguetesMap = new Map((juguetesData.data || []).map(j => [j.codigo, j]));
+            const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
 
-                // Combinar datos
-                ventas = ventasSimples.map(v => ({
-                    ...v,
-                    juguetes: juguetesMap.get(v.juguete_id) || null,
-                    empleados: empleadosMap.get(v.empleado_id) || null
-                }));
-            } else {
-                ventas = [];
-            }
+            // Combinar datos
+            ventas = ventasSimples.map(v => ({
+                ...v,
+                juguetes: juguetesMap.get(v.juguete_codigo) || null,
+                empleados: empleadosMap.get(v.empleado_id) || null
+            }));
         }
         
         todasLasVentas = ventas || [];
@@ -5896,19 +6434,8 @@ async function aplicarFiltroVentas(filtro) {
         const user = JSON.parse(sessionStorage.getItem('user'));
 
         let query = window.supabaseClient
-
             .from('ventas')
-
-            .select(`
-
-                *,
-
-                juguetes(nombre, codigo),
-
-                empleados(nombre, codigo)
-
-            `)
-
+            .select('*')
             .eq('empresa_id', user.empresa_id);
 
 

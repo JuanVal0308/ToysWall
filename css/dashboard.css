@@ -1308,8 +1308,37 @@ body {
         padding: 12px;
     }
 
-    .btn-primary,
-    .btn-secondary {
+/* Estilos para botones deshabilitados durante procesamiento */
+.btn-disabled,
+button:disabled,
+button[data-processing="true"] {
+    opacity: 0.6 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    position: relative;
+}
+
+.btn-disabled::after,
+button[data-processing="true"]::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 16px;
+    height: 16px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.btn-primary,
+.btn-secondary {
         padding: 10px 12px;
         font-size: 13px;
     }

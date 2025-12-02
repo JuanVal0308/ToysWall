@@ -383,7 +383,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         switch(viewName) {
             case 'venta':
                 ventaView.style.display = 'block';
-                // initRegistrarVenta ya se inicializa al cargar la página
+                // Inicializar venta y botón deshacer
+                if (typeof initRegistrarVenta === 'function') {
+                    initRegistrarVenta();
+                }
                 if (typeof updateVentaItemsList === 'function') {
                     updateVentaItemsList();
                 }
@@ -2183,6 +2186,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             const user = JSON.parse(sessionStorage.getItem('user'));
             
             // Cargar juguetes, tiendas y bodegas en paralelo
+            // Ordenar juguetes para que los que tienen ITEM aparezcan primero
             const [juguetesResult, tiendasResult, bodegasResult] = await Promise.all([
                 window.supabaseClient
                 .from('juguetes')
@@ -2209,7 +2213,16 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (tiendasResult.error) throw tiendasResult.error;
             if (bodegasResult.error) throw bodegasResult.error;
 
-            const juguetes = juguetesResult.data || [];
+            let juguetes = juguetesResult.data || [];
+            // Ordenar juguetes para que los que tienen ITEM aparezcan primero (así se prioriza el ITEM al agrupar)
+            juguetes.sort((a, b) => {
+                const aTieneItem = a.item && a.item.trim() !== '';
+                const bTieneItem = b.item && b.item.trim() !== '';
+                if (aTieneItem && !bTieneItem) return -1;
+                if (!aTieneItem && bTieneItem) return 1;
+                return 0; // Mantener orden original si ambos tienen o no tienen ITEM
+            });
+            
             const todasLasTiendas = tiendasResult.data || [];
             const todasLasBodegas = bodegasResult.data || [];
 
@@ -2227,22 +2240,52 @@ document.addEventListener('DOMContentLoaded', async function() {
                     juguetesAgrupados.set(key, {
                         codigo: juguete.codigo,
                         nombre: juguete.nombre,
-                        item: juguete.item,
+                        item: (juguete.item && juguete.item.trim() !== '') ? juguete.item : null, // Inicializar con el item del primer registro (solo si tiene valor)
                         foto_url: juguete.foto_url,
-                        ubicaciones: []
+                        ubicaciones: new Map() // Usar Map para evitar duplicados
                     });
+                } else {
+                    // Si el juguete agrupado no tiene ITEM pero este registro sí lo tiene, actualizarlo
+                    const jugueteAgrupado = juguetesAgrupados.get(key);
+                    const itemActual = juguete.item ? juguete.item.trim() : '';
+                    const itemAgrupado = jugueteAgrupado.item ? jugueteAgrupado.item.trim() : '';
+                    
+                    // Si el agrupado no tiene ITEM (o está vacío) pero este registro sí lo tiene, actualizarlo
+                    if ((!itemAgrupado || itemAgrupado === '') && itemActual && itemActual !== '') {
+                        jugueteAgrupado.item = juguete.item;
+                    }
+                    // También actualizar foto_url si no existe
+                    if (!jugueteAgrupado.foto_url && juguete.foto_url) {
+                        jugueteAgrupado.foto_url = juguete.foto_url;
+                    }
                 }
                 
-                const ubicacion = {
-                    tipo: juguete.bodega_id ? 'bodega' : 'tienda',
-                    id: juguete.bodega_id || juguete.tienda_id,
-                    nombre: juguete.bodega_id 
-                        ? (juguete.bodegas?.nombre || 'N/A')
-                        : (juguete.tiendas?.nombre || 'N/A'),
-                    cantidad: juguete.cantidad
-                };
+                const ubicacionKey = juguete.bodega_id 
+                    ? `bodega-${juguete.bodega_id}`
+                    : `tienda-${juguete.tienda_id}`;
                 
-                juguetesAgrupados.get(key).ubicaciones.push(ubicacion);
+                const ubicacionNombre = juguete.bodega_id 
+                    ? (juguete.bodegas?.nombre || 'N/A')
+                    : (juguete.tiendas?.nombre || 'N/A');
+                
+                // Si ya existe esta ubicación, sumar la cantidad
+                if (juguetesAgrupados.get(key).ubicaciones.has(ubicacionKey)) {
+                    const ubicacionExistente = juguetesAgrupados.get(key).ubicaciones.get(ubicacionKey);
+                    ubicacionExistente.cantidad += juguete.cantidad;
+                } else {
+                    // Crear nueva ubicación
+                    juguetesAgrupados.get(key).ubicaciones.set(ubicacionKey, {
+                        tipo: juguete.bodega_id ? 'bodega' : 'tienda',
+                        id: juguete.bodega_id || juguete.tienda_id,
+                        nombre: ubicacionNombre,
+                        cantidad: juguete.cantidad
+                    });
+                }
+            });
+            
+            // Convertir Maps de ubicaciones a arrays
+            juguetesAgrupados.forEach((juguete, key) => {
+                juguete.ubicaciones = Array.from(juguete.ubicaciones.values());
             });
 
             // Convertir a array y agregar todas las ubicaciones (incluso las que no tienen cantidad)
