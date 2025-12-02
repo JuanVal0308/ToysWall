@@ -793,6 +793,12 @@ document.addEventListener('DOMContentLoaded', async function() {
             const action = item.getAttribute('data-action');
             const bodegaId = item.getAttribute('data-bodega-id');
             
+            // Validar que bodegaId existe
+            if (!bodegaId) {
+                console.warn('No se encontró bodegaId en el elemento');
+                return;
+            }
+            
             // Cerrar el menú
             document.querySelectorAll('.dropdown-menu').forEach(m => {
                 m.style.display = 'none';
@@ -865,11 +871,23 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Abrir modal para editar bodega
     async function openEditBodegaModal(bodegaId) {
+        // Validar que bodegaId existe y es válido
+        if (!bodegaId || bodegaId === 'null' || bodegaId === 'undefined') {
+            console.error('Error: bodegaId inválido:', bodegaId);
+            alert('Error: No se pudo identificar la bodega a editar');
+            return;
+        }
+        
         try {
+            const bodegaIdNum = parseInt(bodegaId, 10);
+            if (isNaN(bodegaIdNum)) {
+                throw new Error('ID de bodega inválido');
+            }
+            
             const { data: bodega, error } = await window.supabaseClient
                 .from('bodegas')
                 .select('*')
-                .eq('id', bodegaId)
+                .eq('id', bodegaIdNum)
                 .single();
 
             if (error) throw error;
@@ -958,15 +976,27 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Eliminar bodega
     async function deleteBodega(bodegaId) {
+        // Validar que bodegaId existe y es válido
+        if (!bodegaId || bodegaId === 'null' || bodegaId === 'undefined') {
+            console.error('Error: bodegaId inválido:', bodegaId);
+            alert('Error: No se pudo identificar la bodega a eliminar');
+            return;
+        }
+        
         if (!confirm('¿Estás seguro de que deseas eliminar esta bodega? Esta acción no se puede deshacer.')) {
             return;
         }
 
         try {
+            const bodegaIdNum = parseInt(bodegaId, 10);
+            if (isNaN(bodegaIdNum)) {
+                throw new Error('ID de bodega inválido');
+            }
+            
             const { error } = await window.supabaseClient
                 .from('bodegas')
                 .delete()
-                .eq('id', bodegaId);
+                .eq('id', bodegaIdNum);
 
             if (error) throw error;
 
@@ -980,6 +1010,13 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Abrir modal para agregar juguetes (si existe)
     function openAgregarJuguetesModal(bodegaId) {
+        // Validar que bodegaId existe y es válido
+        if (!bodegaId || bodegaId === 'null' || bodegaId === 'undefined') {
+            console.error('Error: bodegaId inválido:', bodegaId);
+            alert('Error: No se pudo identificar la bodega');
+            return;
+        }
+        
         currentBodegaId = bodegaId;
         const modal = document.getElementById('agregarJuguetesModal');
         if (modal) {
@@ -3219,6 +3256,12 @@ document.addEventListener('DOMContentLoaded', async function() {
             const action = item.getAttribute('data-action');
             const empleadoId = item.getAttribute('data-empleado-id');
             
+            // Validar que empleadoId existe
+            if (!empleadoId) {
+                console.warn('No se encontró empleadoId en el elemento');
+                return;
+            }
+            
             document.querySelectorAll('.dropdown-menu').forEach(m => {
                 m.style.display = 'none';
             });
@@ -3308,11 +3351,23 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Abrir modal para editar empleado
     async function openEditEmpleadoModal(empleadoId) {
+        // Validar que empleadoId existe y es válido
+        if (!empleadoId || empleadoId === 'null' || empleadoId === 'undefined') {
+            console.error('Error: empleadoId inválido:', empleadoId);
+            alert('Error: No se pudo identificar el empleado a editar');
+            return;
+        }
+        
         try {
+            const empleadoIdNum = parseInt(empleadoId, 10);
+            if (isNaN(empleadoIdNum)) {
+                throw new Error('ID de empleado inválido');
+            }
+            
             const { data: empleado, error } = await window.supabaseClient
                 .from('empleados')
                 .select('*')
-                .eq('id', empleadoId)
+                .eq('id', empleadoIdNum)
                 .single();
 
             if (error) throw error;
@@ -3425,15 +3480,27 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Eliminar empleado
     async function deleteEmpleado(empleadoId) {
+        // Validar que empleadoId existe y es válido
+        if (!empleadoId || empleadoId === 'null' || empleadoId === 'undefined') {
+            console.error('Error: empleadoId inválido:', empleadoId);
+            alert('Error: No se pudo identificar el empleado a eliminar');
+            return;
+        }
+        
         if (!confirm('¿Estás seguro de que deseas eliminar este empleado? Esta acción no se puede deshacer.')) {
             return;
         }
 
         try {
+            const empleadoIdNum = parseInt(empleadoId, 10);
+            if (isNaN(empleadoIdNum)) {
+                throw new Error('ID de empleado inválido');
+            }
+            
             const { error } = await window.supabaseClient
                 .from('empleados')
                 .delete()
-                .eq('id', empleadoId);
+                .eq('id', empleadoIdNum);
 
             if (error) throw error;
 

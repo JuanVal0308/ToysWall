@@ -4365,11 +4365,23 @@ document.addEventListener('click', function(e) {
 
 // Abrir modal para editar tienda
 async function openEditTiendaModal(tiendaId) {
+    // Validar que tiendaId existe y es válido
+    if (!tiendaId || tiendaId === 'null' || tiendaId === 'undefined') {
+        console.error('Error: tiendaId inválido:', tiendaId);
+        alert('Error: No se pudo identificar la tienda a editar');
+        return;
+    }
+    
     try {
+        const tiendaIdNum = parseInt(tiendaId, 10);
+        if (isNaN(tiendaIdNum)) {
+            throw new Error('ID de tienda inválido');
+        }
+        
         const { data: tienda, error } = await window.supabaseClient
             .from('tiendas')
             .select('*')
-            .eq('id', tiendaId)
+            .eq('id', tiendaIdNum)
             .single();
 
         if (error) throw error;
@@ -4473,15 +4485,27 @@ if (editTiendaModal) {
 
 // Eliminar tienda
 async function deleteTienda(tiendaId) {
+    // Validar que tiendaId existe y es válido
+    if (!tiendaId || tiendaId === 'null' || tiendaId === 'undefined') {
+        console.error('Error: tiendaId inválido:', tiendaId);
+        alert('Error: No se pudo identificar la tienda a eliminar');
+        return;
+    }
+    
     if (!confirm('¿Estás seguro de que deseas eliminar esta tienda? Esta acción no se puede deshacer.')) {
         return;
     }
 
     try {
+        const tiendaIdNum = parseInt(tiendaId, 10);
+        if (isNaN(tiendaIdNum)) {
+            throw new Error('ID de tienda inválido');
+        }
+        
         const { error } = await window.supabaseClient
             .from('tiendas')
             .delete()
-            .eq('id', tiendaId);
+            .eq('id', tiendaIdNum);
 
         if (error) throw error;
 
