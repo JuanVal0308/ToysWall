@@ -205,29 +205,36 @@ function aplicarFiltrosDetalle() {
             const codigo = String(juguete.codigo || '').toLowerCase().replace(/\s+/g, '');
             const item = String(juguete.item || '').toLowerCase().replace(/\s+/g, '');
             
-            // Buscar en ubicaciones (nombre de bodega/tienda)
-            let ubicacionesTexto = '';
-            if (juguete.ubicaciones && juguete.ubicaciones.length > 0) {
-                ubicacionesTexto = juguete.ubicaciones.map(u => {
-                    const nombreUbicacion = (u.nombre || '').toLowerCase();
-                    const tipoUbicacion = (u.tipo || '').toLowerCase();
-                    return `${nombreUbicacion} ${tipoUbicacion}`;
-                }).join(' ');
-            }
+            const ubicaciones = juguete.ubicaciones || [];
             
             if (tieneLetras) {
-                // Si tiene letras, buscar en nombre, ubicaciones e ITEM (puede tener letras y números)
-                return nombre.includes(terminoLower) || 
-                       ubicacionesTexto.includes(terminoLower) ||
-                       item.includes(terminoLower) ||
-                       item.includes(terminoNormal);
+                // Búsqueda por texto:
+                // - nombre de juguete
+                // - ubicaciones con cantidad > 0
+                // - ITEM
+                const coincideNombre = nombre.includes(terminoLower);
+                
+                const coincideUbicacionConStock = ubicaciones.some(u => {
+                    const nombreUbicacion = (u.nombre || '').toLowerCase();
+                    const tipoUbicacion = (u.tipo || '').toLowerCase();
+                    if (!u.cantidad || u.cantidad <= 0) return false;
+                    const textoUbicacion = `${nombreUbicacion} ${tipoUbicacion}`;
+                    return textoUbicacion.includes(terminoLower);
+                });
+                
+                const coincideItem = item.includes(terminoLower) || item.includes(terminoNormal);
+                
+                // Además, asegurarnos de que tenga cantidad disponible > 0 si se filtra por ubicación
+                const tieneStock = (juguete.cantidad_disponible || 0) > 0;
+                
+                return (coincideNombre || coincideUbicacionConStock || coincideItem) && tieneStock;
             } else {
                 // Si es solo números
                 if (esUnSoloDigito) {
                     // Para un solo dígito, buscar que el código o ITEM:
-                    // 1. Comience con ese dígito (ej: "4" encuentra "4", "41", "42", etc.)
+                    // 1. Comience con ese dígito
                     // 2. Sea exactamente ese dígito
-                    // 3. Tenga ese dígito al inicio después de letras/separadores (ej: "A4", "ITM-4")
+                    // 3. Tenga ese dígito al inicio después de letras/separadores
                     const codigoComienzaConDigito = codigo.startsWith(terminoNormal) || 
                                                      codigo === terminoNormal ||
                                                      (/^[a-z]*[^a-z0-9]*/.test(codigo) && codigo.replace(/^[a-z]*[^a-z0-9]*/, '').startsWith(terminoNormal));
@@ -244,12 +251,12 @@ function aplicarFiltrosDetalle() {
         });
     }
     
-    // Aplicar filtro específico por código
+    // Aplicar filtro específico por código (búsqueda exacta)
     if (codigoFilter) {
         const codigoFilterNormal = codigoFilter.toLowerCase().replace(/\s+/g, '');
         filtrados = filtrados.filter(juguete => {
             const codigo = String(juguete.codigo || '').toLowerCase().replace(/\s+/g, '');
-            return codigo.includes(codigoFilterNormal);
+            return codigo === codigoFilterNormal;
         });
     }
     

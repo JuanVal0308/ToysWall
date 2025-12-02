@@ -22,16 +22,26 @@ document.addEventListener('DOMContentLoaded', async function() {
         return;
     }
     
-    // Ocultar botones del sidebar para empleados (solo mostrar Dashboard, Registrar Venta, Inventario, Ajustes y Análisis)
+    // Ocultar botones del sidebar para empleados
     if (isEmpleado) {
         const sidebarButtons = document.querySelectorAll('.sidebar-btn');
         sidebarButtons.forEach(btn => {
             const page = btn.getAttribute('data-page');
-            // Permitir: Dashboard (default), Registrar Venta (venta), Inventario (inventario), Ajustes (ajustes), Análisis (analisis)
-            if (page !== 'default' && page !== 'venta' && page !== 'facturar' && page !== 'inventario' && page !== 'ajustes' && page !== 'analisis') {
+            // Permitir: Dashboard (default), Registrar Venta (venta), Inventario (inventario), Ajustes (ajustes)
+            // No permitir la sección de análisis para empleados
+            if (page === 'analisis' || (page !== 'default' && page !== 'venta' && page !== 'facturar' && page !== 'inventario' && page !== 'ajustes')) {
                 btn.style.display = 'none';
             }
         });
+
+        // Ocultar tarjeta de "Ganancias Totales" en el dashboard para empleados
+        const gananciasCardIcon = document.querySelector('.summary-card .card-icon i.fas.fa-dollar-sign');
+        if (gananciasCardIcon) {
+            const gananciasCard = gananciasCardIcon.closest('.summary-card');
+            if (gananciasCard) {
+                gananciasCard.style.display = 'none';
+            }
+        }
     }
 
     // Elementos del DOM
@@ -513,10 +523,19 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
                 break;
             case 'analisis':
+                // Solo administradores y super administradores pueden ver análisis
+                if (isAdmin && analisisView) {
                     analisisView.style.display = 'block';
                     if (typeof loadAnalisis === 'function') {
                         loadAnalisis();
                     }
+                } else {
+                    // Si un empleado intenta abrir 'analisis', mostrar vista por defecto
+                    defaultView.style.display = 'block';
+                    if (typeof loadDashboardSummary === 'function') {
+                        loadDashboardSummary();
+                    }
+                }
                 break;
             case 'ajustes':
                 ajustesView.style.display = 'block';
@@ -1311,13 +1330,13 @@ document.addEventListener('DOMContentLoaded', async function() {
             }, 300);
         });
         
-        // Autocompletar nombre cuando se ingresa código
-        codigoInput.addEventListener('input', async function() {
+        // Autocompletar nombre y demás campos cuando se ingresa un código (solo al salir del input)
+        codigoInput.addEventListener('blur', async function() {
             clearTimeout(timeoutCodigo);
             const codigo = this.value.trim();
             
             if (codigo.length < 1) {
-                nombreInput.value = '';
+                // Si se borra el código, no tocamos el nombre ni otros campos
                 return;
             }
             
@@ -1344,7 +1363,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 } catch (error) {
                     console.error('Error en autocompletado por código:', error);
                 }
-            }, 300);
+            }, 0);
         });
     }
 
@@ -2593,20 +2612,27 @@ document.addEventListener('DOMContentLoaded', async function() {
                     const item = juguete.item?.toLowerCase().replace(/\s+/g, '') || '';
                     
                     // Buscar en todas las ubicaciones (nombre de bodega/tienda)
-                    const ubicacionesTexto = juguete.ubicaciones 
-                        ? juguete.ubicaciones.map(u => {
-                            const nombreUbicacion = u.nombre?.toLowerCase() || '';
-                            const tipoUbicacion = u.tipo?.toLowerCase() || '';
-                            return `${nombreUbicacion} ${tipoUbicacion}`;
-                        }).join(' ')
-                        : '';
+                    const ubicaciones = juguete.ubicaciones || [];
                     
                     if (tieneLetras) {
-                        // Si tiene letras, buscar en nombre, ubicaciones e ITEM (puede tener letras y números)
-                        return nombre.includes(searchTermLower) || 
-                               ubicacionesTexto.includes(searchTermLower) ||
-                               item.includes(searchTermLower) ||
-                               item.includes(searchTermNormal);
+                        // Búsqueda por texto:
+                        // - nombre de juguete
+                        // - ubicaciones con cantidad > 0
+                        // - ITEM
+                        const coincideNombre = nombre.includes(searchTermLower);
+                        
+                        const coincideUbicacionConStock = ubicaciones.some(u => {
+                            const nombreUbicacion = u.nombre?.toLowerCase() || '';
+                            const tipoUbicacion = u.tipo?.toLowerCase() || '';
+                            // Solo considerar ubicaciones con cantidad > 0
+                            if (!u.cantidad || u.cantidad <= 0) return false;
+                            const textoUbicacion = `${nombreUbicacion} ${tipoUbicacion}`;
+                            return textoUbicacion.includes(searchTermLower);
+                        });
+                        
+                        const coincideItem = item.includes(searchTermLower) || item.includes(searchTermNormal);
+                        
+                        return coincideNombre || coincideUbicacionConStock || coincideItem;
                     } else {
                         // Si es solo números
                         if (esUnSoloDigito) {
@@ -2616,10 +2642,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                             // 3. Tenga ese dígito al inicio después de letras (ej: "A4", "ITM-4")
                             const codigoComienzaConDigito = codigo.startsWith(searchTermNormal) || 
                                                              codigo === searchTermNormal ||
-                                                             /^[a-z]*[^a-z0-9]*/.test(codigo) && codigo.replace(/^[a-z]*[^a-z0-9]*/, '').startsWith(searchTermNormal);
+                                                             (/^[a-z]*[^a-z0-9]*/.test(codigo) && codigo.replace(/^[a-z]*[^a-z0-9]*/, '').startsWith(searchTermNormal));
                             const itemComienzaConDigito = item.startsWith(searchTermNormal) || 
                                                            item === searchTermNormal ||
-                                                           /^[a-z]*[^a-z0-9]*/.test(item) && item.replace(/^[a-z]*[^a-z0-9]*/, '').startsWith(searchTermNormal);
+                                                           (/^[a-z]*[^a-z0-9]*/.test(item) && item.replace(/^[a-z]*[^a-z0-9]*/, '').startsWith(searchTermNormal));
                             return codigoComienzaConDigito || itemComienzaConDigito;
                         } else {
                             // Si es más de un dígito, buscar en cualquier parte del código e ITEM
@@ -2630,12 +2656,12 @@ document.addEventListener('DOMContentLoaded', async function() {
                 });
             }
             
-            // Aplicar filtro específico por código
+            // Aplicar filtro específico por código (búsqueda exacta)
             if (codigoFilter !== '') {
                 const codigoFilterNormal = codigoFilter.toLowerCase().replace(/\s+/g, '');
                 juguetesFiltrados = juguetesFiltrados.filter(juguete => {
                     const codigo = juguete.codigo?.toLowerCase().replace(/\s+/g, '') || '';
-                    return codigo.includes(codigoFilterNormal);
+                    return codigo === codigoFilterNormal;
                 });
             }
 
