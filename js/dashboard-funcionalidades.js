@@ -2496,14 +2496,24 @@ async function loadUbicacionesPorTipo(tipo, selectElement) {
     }
 }
 
-// Variable global para almacenar juguetes disponibles en abastecer
+// Variables globales para abastecer
+// - juguetesDisponiblesAbastecer: lista de juguetes en el origen seleccionado
+// - itemsMovimientoAbastecer: lista de juguetes que el usuario decidió mover (tabla inferior)
 let juguetesDisponiblesAbastecer = [];
+let itemsMovimientoAbastecer = [];
 
 async function loadJuguetesDisponibles() {
     const origenTipo = document.getElementById('origenTipo').value;
     const origenId = document.getElementById('origenSelect').value;
     const container = document.getElementById('juguetesDisponiblesList');
     const buscarInput = document.getElementById('buscarJugueteAbastecer');
+    const movimientoContainer = document.getElementById('movimientoAbastecerItems');
+
+    // Reiniciar tabla de movimientos cuando cambia el origen
+    itemsMovimientoAbastecer = [];
+    if (movimientoContainer) {
+        movimientoContainer.innerHTML = '<p style="text-align: center; color: #64748b; padding: 12px;">Agrega juguetes desde la lista superior para preparar el movimiento.</p>';
+    }
 
     // Limpiar búsqueda al cambiar origen
     if (buscarInput) {
@@ -2598,13 +2608,22 @@ function renderizarJuguetesAbastecer(juguetes) {
                         value="0"
                         placeholder="0"
                     >
+                    <button 
+                        type="button" 
+                        class="btn-secondary" 
+                        style="margin-left: 8px; padding: 6px 10px;" 
+                        onclick="agregarItemMovimientoAbastecer(${juguete.id})"
+                        title="Agregar a movimiento"
+                    >
+                        <i class="fas fa-arrow-down"></i>
+                    </button>
                 </div>
             </div>
         `;
         }).join('');
 }
 
-// Función para filtrar juguetes por nombre o código
+// Función para filtrar juguetes por nombre, código o ITEM (código/ITEM exactos si coinciden)
 window.filtrarJuguetesAbastecer = function() {
     const buscarInput = document.getElementById('buscarJugueteAbastecer');
     const termino = buscarInput ? buscarInput.value.toLowerCase().trim() : '';
@@ -2615,16 +2634,154 @@ window.filtrarJuguetesAbastecer = function() {
         return;
     }
     
-    // Filtrar por nombre, código o ITEM
-    const juguetesFiltrados = juguetesDisponiblesAbastecer.filter(juguete => {
-        const nombre = (juguete.nombre || '').toLowerCase();
-        const codigo = (juguete.codigo || '').toLowerCase();
-        const item = (juguete.item || '').toLowerCase();
-        return nombre.includes(termino) || codigo.includes(termino) || item.includes(termino);
+    const terminoNormalizado = termino.replace(/\s+/g, '');
+
+    // Buscar coincidencias exactas por código o ITEM
+    const exactMatches = juguetesDisponiblesAbastecer.filter(juguete => {
+        const codigo = (juguete.codigo || '').toLowerCase().replace(/\s+/g, '');
+        const item = (juguete.item || '').toLowerCase().replace(/\s+/g, '');
+        return codigo === terminoNormalizado || item === terminoNormalizado;
     });
+
+    let juguetesFiltrados;
+    if (exactMatches.length > 0) {
+        // Si hay coincidencias exactas, mostrar solo esas
+        juguetesFiltrados = exactMatches;
+    } else {
+        // Si no, filtrar por nombre, código o ITEM que contengan el término
+        juguetesFiltrados = juguetesDisponiblesAbastecer.filter(juguete => {
+            const nombre = (juguete.nombre || '').toLowerCase();
+            const codigo = (juguete.codigo || '').toLowerCase();
+            const item = (juguete.item || '').toLowerCase();
+            return nombre.includes(termino) || codigo.includes(termino) || item.includes(termino);
+        });
+    }
     
     renderizarJuguetesAbastecer(juguetesFiltrados);
 }
+
+// Agregar un juguete desde la lista superior a la tabla de movimiento
+window.agregarItemMovimientoAbastecer = function(jugueteId) {
+    const input = document.querySelector(`.cantidad-input[data-juguete-id="${jugueteId}"]`);
+    if (!input) return;
+
+    const cantidad = parseInt(input.value, 10) || 0;
+    const juguete = juguetesDisponiblesAbastecer.find(j => j.id === jugueteId);
+
+    if (!juguete) {
+        showAbastecerMessage('Juguete no encontrado en la lista de origen', 'error');
+        return;
+    }
+
+    if (cantidad <= 0) {
+        showAbastecerMessage('Ingresa una cantidad mayor a 0 para agregar el juguete al movimiento', 'error');
+        return;
+    }
+
+    if (cantidad > (juguete.cantidad || 0)) {
+        showAbastecerMessage(`No puedes mover más de la cantidad disponible (${juguete.cantidad}) para el juguete ${juguete.nombre}`, 'error');
+        return;
+    }
+
+    // Agregar o actualizar en la tabla de movimiento
+    const existente = itemsMovimientoAbastecer.find(i => i.juguete_id === jugueteId);
+    if (existente) {
+        existente.cantidad = cantidad;
+    } else {
+        itemsMovimientoAbastecer.push({
+            juguete_id: juguete.id,
+            codigo: juguete.codigo,
+            item: juguete.item || null,
+            nombre: juguete.nombre,
+            cantidad: cantidad
+        });
+    }
+
+    renderMovimientoAbastecerTabla();
+};
+
+// Renderizar la tabla inferior con los juguetes a mover
+window.renderMovimientoAbastecerTabla = function() {
+    const container = document.getElementById('movimientoAbastecerItems');
+    if (!container) return;
+
+    if (!itemsMovimientoAbastecer.length) {
+        container.innerHTML = '<p style="text-align: center; color: #64748b; padding: 12px;">Agrega juguetes desde la lista superior para preparar el movimiento.</p>';
+        return;
+    }
+
+    const totalUnidades = itemsMovimientoAbastecer.reduce((sum, it) => sum + (it.cantidad || 0), 0);
+
+    container.innerHTML = `
+        <table class="inventario-table">
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>ITEM</th>
+                    <th>Juguete</th>
+                    <th style="width: 120px; text-align: center;">Cantidad a Mover</th>
+                    <th style="width: 60px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                ${itemsMovimientoAbastecer.map((it, index) => `
+                    <tr>
+                        <td>${it.codigo}</td>
+                        <td>${it.item || '-'}</td>
+                        <td>${it.nombre}</td>
+                        <td style="text-align: center;">
+                            <input 
+                                type="number" 
+                                min="1" 
+                                value="${it.cantidad}" 
+                                style="width: 80px; text-align: center;" 
+                                onchange="actualizarCantidadMovimientoAbastecer(${it.juguete_id}, this.value)"
+                            >
+                        </td>
+                        <td style="text-align: center;">
+                            <button type="button" class="btn-secondary" style="padding: 4px 8px;" onclick="eliminarItemMovimientoAbastecer(${index})" title="Quitar">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="3" style="text-align: right; font-weight: bold;">Total unidades:</td>
+                    <td colspan="2" style="text-align: left; font-weight: bold; color: #10b981;">${totalUnidades}</td>
+                </tr>
+            </tfoot>
+        </table>
+    `;
+};
+
+// Actualizar cantidad desde la tabla inferior
+window.actualizarCantidadMovimientoAbastecer = function(jugueteId, valor) {
+    const cantidad = parseInt(valor, 10) || 0;
+    const item = itemsMovimientoAbastecer.find(i => i.juguete_id === jugueteId);
+    const juguete = juguetesDisponiblesAbastecer.find(j => j.id === jugueteId);
+
+    if (!item || !juguete) return;
+
+    if (cantidad <= 0) {
+        showAbastecerMessage('La cantidad debe ser mayor a 0', 'error');
+        item.cantidad = 1;
+    } else if (cantidad > (juguete.cantidad || 0)) {
+        showAbastecerMessage(`No puedes mover más de la cantidad disponible (${juguete.cantidad}) para el juguete ${juguete.nombre}`, 'error');
+        item.cantidad = juguete.cantidad;
+    } else {
+        item.cantidad = cantidad;
+    }
+
+    renderMovimientoAbastecerTabla();
+};
+
+// Eliminar item de la tabla de movimiento
+window.eliminarItemMovimientoAbastecer = function(index) {
+    itemsMovimientoAbastecer.splice(index, 1);
+    renderMovimientoAbastecerTabla();
+};
 
 // Variable global para el plan actual
 let planActualData = null;
@@ -2644,25 +2801,14 @@ window.generarPlanMovimiento = function() {
         return;
     }
     
-    // Obtener juguetes con cantidad > 0
-    const inputs = document.querySelectorAll('.cantidad-input');
-    const juguetesSeleccionados = [];
-    
-    inputs.forEach(input => {
-        const cantidad = parseInt(input.value) || 0;
-        if (cantidad > 0) {
-            const jugueteId = input.dataset.jugueteId;
-            const juguete = juguetesDisponiblesAbastecer.find(j => j.id == jugueteId);
-            if (juguete) {
-                juguetesSeleccionados.push({
-                    juguete_codigo: juguete.codigo,
-                    nombre: juguete.nombre,
-                    codigo: juguete.codigo,
-                    cantidad: cantidad
-                });
-            }
-        }
-    });
+    // Obtener juguetes desde la tabla de movimiento (itemsMovimientoAbastecer)
+    const juguetesSeleccionados = (itemsMovimientoAbastecer || []).map(it => ({
+        juguete_codigo: it.codigo,
+        nombre: it.nombre,
+        codigo: it.codigo,
+        item: it.item || null,
+        cantidad: it.cantidad || 0
+    })).filter(j => j.cantidad > 0);
     
     if (juguetesSeleccionados.length === 0) {
         showAbastecerMessage('Ingresa cantidad en al menos un juguete para generar el plan', 'error');
@@ -2697,80 +2843,28 @@ window.generarPlanMovimiento = function() {
         minute: '2-digit'
     });
     
-    // Generar HTML del plan
+    // Generar HTML del plan (formato simple para guardar)
     const planHTML = `
         <div id="planParaImprimir" style="background: white; padding: 20px; border-radius: 8px;">
-            <div style="text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #e2e8f0;">
-                <h2 style="margin: 0 0 5px 0; color: #1e293b;">📦 Plan de Movimiento de Inventario</h2>
-                <p style="margin: 0; color: #64748b; font-size: 14px;">${fechaActual}</p>
+            <h3 style="color: #6366f1; margin-bottom: 20px;">Plan de Movimiento</h3>
+            <p><strong>Fecha:</strong> ${fechaActual}</p>
+            <p><strong>Estado:</strong> PENDIENTE</p>
+            
+            <div style="margin: 20px 0; padding: 15px; background: #f8fafc; border-radius: 8px;">
+                <p><strong>Origen:</strong> ${origenNombre} (${origenTipoTexto})</p>
+                <p><strong>Destino:</strong> ${destinoNombre} (${destinoTipoTexto})</p>
             </div>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                <div style="background: #fef3c7; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
-                    <p style="margin: 0 0 5px 0; color: #92400e; font-weight: bold; font-size: 12px; text-transform: uppercase;">
-                        <i class="fas fa-arrow-right"></i> ORIGEN
-                    </p>
-                    <p style="margin: 0; color: #1e293b; font-size: 16px; font-weight: bold;">${origenNombre}</p>
-                    <p style="margin: 0; color: #64748b; font-size: 12px;">${origenTipoTexto}</p>
-                </div>
-                <div style="background: #d1fae5; padding: 15px; border-radius: 8px; border-left: 4px solid #10b981;">
-                    <p style="margin: 0 0 5px 0; color: #065f46; font-weight: bold; font-size: 12px; text-transform: uppercase;">
-                        <i class="fas fa-arrow-left"></i> DESTINO
-                    </p>
-                    <p style="margin: 0; color: #1e293b; font-size: 16px; font-weight: bold;">${destinoNombre}</p>
-                    <p style="margin: 0; color: #64748b; font-size: 12px;">${destinoTipoTexto}</p>
-                </div>
-            </div>
+            <h4>Items (${juguetesSeleccionados.length}):</h4>
+            <ul style="list-style: none; padding: 0;">
+                ${juguetesSeleccionados.map(i => `
+                    <li style="padding: 8px; border-bottom: 1px solid #e2e8f0;">
+                        <strong>${i.nombre}</strong> (${i.codigo}${i.item ? `, ITEM: ${i.item}` : ''}) - ${i.cantidad} unidades
+                    </li>
+                `).join('')}
+            </ul>
             
-            <h4 style="margin: 0 0 10px 0; color: #1e293b;">
-                <i class="fas fa-list"></i> Juguetes a Mover (${juguetesSeleccionados.length})
-            </h4>
-            
-            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-                <thead>
-                    <tr style="background: #f1f5f9;">
-                        <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #475569;">✓</th>
-                        <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #475569;">Código</th>
-                        <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #475569;">Juguete</th>
-                        <th style="padding: 12px 8px; text-align: center; border-bottom: 2px solid #e2e8f0; color: #475569;">Cantidad</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${juguetesSeleccionados.map((j, index) => `
-                        <tr style="border-bottom: 1px solid #e2e8f0; ${index % 2 === 0 ? 'background: #fafafa;' : ''}">
-                            <td style="padding: 12px 8px;">
-                                <div style="width: 20px; height: 20px; border: 2px solid #cbd5e1; border-radius: 4px;"></div>
-                            </td>
-                            <td style="padding: 12px 8px; font-family: monospace; color: #6366f1; font-weight: bold;">${j.codigo}</td>
-                            <td style="padding: 12px 8px; color: #1e293b;">${j.nombre}</td>
-                            <td style="padding: 12px 8px; text-align: center; font-weight: bold; font-size: 16px; color: #059669;">${j.cantidad}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-                <tfoot>
-                    <tr style="background: #f1f5f9;">
-                        <td colspan="3" style="padding: 12px 8px; text-align: right; font-weight: bold; color: #1e293b;">Total de unidades:</td>
-                        <td style="padding: 12px 8px; text-align: center; font-weight: bold; font-size: 18px; color: #6366f1;">
-                            ${planActualData.total_unidades}
-                        </td>
-                    </tr>
-                </tfoot>
-            </table>
-            
-            <div style="margin-top: 30px; padding-top: 20px; border-top: 2px dashed #e2e8f0;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
-                    <div>
-                        <p style="margin: 0 0 30px 0; color: #64748b; font-size: 12px;">Firma de quien entrega:</p>
-                        <div style="border-bottom: 1px solid #1e293b; margin-bottom: 5px;"></div>
-                        <p style="margin: 0; color: #64748b; font-size: 11px;">Nombre: _______________________</p>
-                    </div>
-                    <div>
-                        <p style="margin: 0 0 30px 0; color: #64748b; font-size: 12px;">Firma de quien recibe:</p>
-                        <div style="border-bottom: 1px solid #1e293b; margin-bottom: 5px;"></div>
-                        <p style="margin: 0; color: #64748b; font-size: 11px;">Nombre: _______________________</p>
-                    </div>
-                </div>
-            </div>
+            <p style="margin-top: 15px;"><strong>Total:</strong> ${planActualData.total_unidades} unidades</p>
         </div>
         
         <!-- Botones de acción -->
@@ -3152,10 +3246,13 @@ async function ejecutarPlanMovimientoInterno(planId) {
                     continue;
                 }
                 
+                // Filtrar juguete por código y por ubicación de origen del plan
+                const campoOrigen = plan.tipo_origen === 'bodega' ? 'bodega_id' : 'tienda_id';
                 const { data: jugueteActualData } = await window.supabaseClient
                     .from('juguetes')
                     .select('*')
                     .eq('codigo', jugueteCodigo)
+                    .eq(campoOrigen, plan.origen_id)
                     .eq('empresa_id', user.empresa_id)
                     .limit(1);
 
@@ -3257,6 +3354,17 @@ async function ejecutarPlanMovimientoInterno(planId) {
         
         alert(`Plan ejecutado correctamente. ${itemsProcesados} de ${items.length} items procesados.`);
         
+        // Limpiar tabla de juguetes a mover en la vista de abastecer
+        itemsMovimientoAbastecer = [];
+        const containerTabla = document.getElementById('movimientoAbastecerItems');
+        if (containerTabla) {
+            containerTabla.innerHTML = '<p style="text-align: center; color: #64748b; padding: 12px;">Agrega juguetes desde la lista superior para preparar el movimiento.</p>';
+        }
+        // También llamar a la función de renderizado si está disponible
+        if (typeof window.renderMovimientoAbastecerTabla === 'function') {
+            window.renderMovimientoAbastecerTabla();
+        }
+        
         // Actualizar vistas
         await actualizarBadgePlanesPendientes();
         cargarPlanesPendientes();
@@ -3294,7 +3402,7 @@ window.cancelarPlan = async function(planId) {
     }
 };
 
-// Función para ver detalle de un plan
+// Función para ver detalle de un plan (formato de impresión con checkboxes interactivos)
 window.verDetallePlan = async function(planId) {
     try {
         const { data: plan, error } = await window.supabaseClient
@@ -3306,43 +3414,117 @@ window.verDetallePlan = async function(planId) {
         if (error) throw error;
         
         const items = plan.items || [];
-        const fecha = new Date(plan.created_at).toLocaleString('es-CO');
+        const fecha = new Date(plan.created_at).toLocaleString('es-CO', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        const origenTipoTexto = plan.tipo_origen === 'bodega' ? 'Bodega' : 'Tienda';
+        const destinoTipoTexto = plan.tipo_destino === 'bodega' ? 'Bodega' : 'Tienda';
+        
+        // Generar IDs únicos para cada checkbox
+        const checkboxIds = items.map((_, idx) => `checkbox-plan-${planId}-${idx}`);
         
         const detalleHTML = `
-            <div style="max-width: 600px; margin: 0 auto;">
-                <h3 style="color: #6366f1; margin-bottom: 20px;">${plan.codigo_plan}</h3>
-                <p><strong>Fecha:</strong> ${fecha}</p>
-                <p><strong>Estado:</strong> ${plan.estado.toUpperCase()}</p>
-                <p><strong>Creado por:</strong> ${plan.creado_por || 'N/A'}</p>
-                ${plan.ejecutado_por ? `<p><strong>Ejecutado por:</strong> ${plan.ejecutado_por}</p>` : ''}
-                
-                <div style="margin: 20px 0; padding: 15px; background: #f8fafc; border-radius: 8px;">
-                    <p><strong>Origen:</strong> ${plan.origen_nombre} (${plan.tipo_origen})</p>
-                    <p><strong>Destino:</strong> ${plan.destino_nombre} (${plan.tipo_destino})</p>
+            <div id="planDetalleParaImprimir" style="background: white; padding: 20px; border-radius: 8px;">
+                <div style="text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #e2e8f0;">
+                    <h2 style="margin: 0 0 5px 0; color: #1e293b;">📦 Plan de Movimiento de Inventario</h2>
+                    <p style="margin: 0; color: #64748b; font-size: 14px;">${fecha}</p>
                 </div>
                 
-                <h4>Items (${items.length}):</h4>
-                <ul style="list-style: none; padding: 0;">
-                    ${items.map(i => `
-                        <li style="padding: 8px; border-bottom: 1px solid #e2e8f0;">
-                            <strong>${i.nombre}</strong> (${i.codigo}) - ${i.cantidad} unidades
-                        </li>
-                    `).join('')}
-                </ul>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                    <div style="background: #fef3c7; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                        <p style="margin: 0 0 5px 0; color: #92400e; font-weight: bold; font-size: 12px; text-transform: uppercase;">
+                            <i class="fas fa-arrow-right"></i> ORIGEN
+                        </p>
+                        <p style="margin: 0; color: #1e293b; font-size: 16px; font-weight: bold;">${plan.origen_nombre}</p>
+                        <p style="margin: 0; color: #64748b; font-size: 12px;">${origenTipoTexto}</p>
+                    </div>
+                    <div style="background: #d1fae5; padding: 15px; border-radius: 8px; border-left: 4px solid #10b981;">
+                        <p style="margin: 0 0 5px 0; color: #065f46; font-weight: bold; font-size: 12px; text-transform: uppercase;">
+                            <i class="fas fa-arrow-left"></i> DESTINO
+                        </p>
+                        <p style="margin: 0; color: #1e293b; font-size: 16px; font-weight: bold;">${plan.destino_nombre}</p>
+                        <p style="margin: 0; color: #64748b; font-size: 12px;">${destinoTipoTexto}</p>
+                    </div>
+                </div>
                 
-                <p style="margin-top: 15px;"><strong>Total:</strong> ${plan.total_unidades} unidades</p>
+                <h4 style="margin: 0 0 10px 0; color: #1e293b;">
+                    <i class="fas fa-list"></i> Juguetes a Mover (${items.length})
+                </h4>
+                
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    <thead>
+                        <tr style="background: #f1f5f9;">
+                            <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #475569;">✓</th>
+                            <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #475569;">Código</th>
+                            <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #475569;">Juguete</th>
+                            <th style="padding: 12px 8px; text-align: center; border-bottom: 2px solid #e2e8f0; color: #475569;">Cantidad</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${items.map((j, index) => `
+                            <tr style="border-bottom: 1px solid #e2e8f0; ${index % 2 === 0 ? 'background: #fafafa;' : ''}">
+                                <td style="padding: 12px 8px;">
+                                    <div 
+                                        id="${checkboxIds[index]}"
+                                        class="plan-checkbox" 
+                                        data-checked="false"
+                                        onclick="togglePlanCheckbox('${checkboxIds[index]}')"
+                                        style="width: 20px; height: 20px; border: 2px solid #cbd5e1; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
+                                    ></div>
+                                </td>
+                                <td style="padding: 12px 8px; font-family: monospace; color: #6366f1; font-weight: bold;">${j.codigo}</td>
+                                <td style="padding: 12px 8px; color: #1e293b;">${j.nombre}</td>
+                                <td style="padding: 12px 8px; text-align: center; font-weight: bold; font-size: 16px; color: #059669;">${j.cantidad}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background: #f1f5f9;">
+                            <td colspan="3" style="padding: 12px 8px; text-align: right; font-weight: bold; color: #1e293b;">Total de unidades:</td>
+                            <td style="padding: 12px 8px; text-align: center; font-weight: bold; font-size: 18px; color: #6366f1;">
+                                ${plan.total_unidades}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 2px dashed #e2e8f0;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                        <div>
+                            <p style="margin: 0 0 30px 0; color: #64748b; font-size: 12px;">Firma de quien entrega:</p>
+                            <div style="border-bottom: 1px solid #1e293b; margin-bottom: 5px;"></div>
+                            <p style="margin: 0; color: #64748b; font-size: 11px;">Nombre: _______________________</p>
+                        </div>
+                        <div>
+                            <p style="margin: 0 0 30px 0; color: #64748b; font-size: 12px;">Firma de quien recibe:</p>
+                            <div style="border-bottom: 1px solid #1e293b; margin-bottom: 5px;"></div>
+                            <p style="margin: 0; color: #64748b; font-size: 11px;">Nombre: _______________________</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
         
-        // Mostrar en modal o alert
+        // Mostrar en modal
         const modal = document.createElement('div');
+        modal.id = `modal-plan-${planId}`;
         modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
         modal.innerHTML = `
-            <div style="background: white; padding: 30px; border-radius: 12px; max-width: 90%; max-height: 90%; overflow: auto;">
+            <div style="background: white; padding: 30px; border-radius: 12px; max-width: 90%; max-height: 90%; overflow: auto; position: relative;">
                 ${detalleHTML}
-                <button onclick="this.closest('div').parentElement.remove()" style="margin-top: 20px; padding: 10px 20px; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer;">
-                    Cerrar
-                </button>
+                <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+                    <button onclick="imprimirPlanDetalle(${planId})" style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer;">
+                        <i class="fas fa-print"></i> Imprimir
+                    </button>
+                    <button onclick="document.getElementById('modal-plan-${planId}').remove()" style="padding: 10px 20px; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer;">
+                        Cerrar
+                    </button>
+                </div>
             </div>
         `;
         document.body.appendChild(modal);
@@ -3351,6 +3533,77 @@ window.verDetallePlan = async function(planId) {
         console.error('Error al cargar detalle:', error);
         alert('Error al cargar detalle del plan');
     }
+};
+
+// Función para toggle de checkbox en el plan
+window.togglePlanCheckbox = function(checkboxId) {
+    const checkbox = document.getElementById(checkboxId);
+    if (!checkbox) return;
+    
+    const isChecked = checkbox.dataset.checked === 'true';
+    
+    if (isChecked) {
+        // Desmarcar
+        checkbox.dataset.checked = 'false';
+        checkbox.style.background = 'transparent';
+        checkbox.style.borderColor = '#cbd5e1';
+        checkbox.innerHTML = '';
+    } else {
+        // Marcar
+        checkbox.dataset.checked = 'true';
+        checkbox.style.background = '#10b981';
+        checkbox.style.borderColor = '#10b981';
+        checkbox.innerHTML = '<i class="fas fa-check" style="color: white; font-size: 12px;"></i>';
+    }
+};
+
+// Función para imprimir el detalle del plan
+window.imprimirPlanDetalle = function(planId) {
+    const planParaImprimir = document.getElementById('planDetalleParaImprimir');
+    
+    if (!planParaImprimir) {
+        alert('No se encontró el plan para imprimir');
+        return;
+    }
+    
+    // Crear ventana de impresión
+    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
+    
+    ventanaImpresion.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Plan de Movimiento - Toys Wall</title>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { 
+                    font-family: 'Segoe UI', Arial, sans-serif; 
+                    padding: 20px;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+                @media print {
+                    body { padding: 10px; }
+                    @page { margin: 1cm; }
+                }
+            </style>
+        </head>
+        <body>
+            ${planParaImprimir.outerHTML}
+            <script>
+                window.onload = function() {
+                    window.print();
+                    window.onafterprint = function() {
+                        window.close();
+                    };
+                };
+            </script>
+        </body>
+        </html>
+    `);
+    
+    ventanaImpresion.document.close();
 };
 
 // Inicializar planes al cargar la vista
@@ -4298,13 +4551,13 @@ function initAbastecer() {
             return;
         }
 
-        // Obtener juguetes seleccionados con cantidad
-        const juguetesSeleccionados = Array.from(document.querySelectorAll('.cantidad-input'))
-            .map(input => ({
-                id: parseInt(input.dataset.jugueteId),
-                cantidad: parseInt(input.value) || 0
+        // Obtener juguetes seleccionados desde la tabla de movimiento
+        const juguetesSeleccionados = (itemsMovimientoAbastecer || [])
+            .map(it => ({
+                id: it.juguete_id,
+                cantidad: it.cantidad || 0
             }))
-            .filter(j => j.cantidad > 0);
+            .filter(j => j.id && j.cantidad > 0);
 
         if (juguetesSeleccionados.length === 0) {
             showAbastecerMessage('Debes seleccionar al menos un juguete con cantidad mayor a 0', 'error');
@@ -4465,6 +4718,9 @@ function initAbastecer() {
             showAbastecerMessage('Movimiento realizado correctamente', 'success');
             form.reset();
             document.getElementById('juguetesDisponiblesList').innerHTML = '';
+            // Limpiar tabla de juguetes a mover
+            itemsMovimientoAbastecer = [];
+            renderMovimientoAbastecerTabla();
             
             // Recargar datos para reflejar los cambios en el inventario
             if (typeof loadTiendas === 'function') {
