@@ -30,6 +30,11 @@ function initVentaPorMayor() {
     registrarVentaPorMayorInitialized = true;
     ventaPorMayorItems = []; // Reiniciar items
 
+    // Asegurar que el campo de abono esté oculto inicialmente
+    if (abonoRow) {
+        abonoRow.style.display = 'none';
+    }
+
     // Buscar juguete por código
     jugueteCodigoInput.addEventListener('blur', async function() {
         const codigo = this.value.trim();
@@ -179,15 +184,65 @@ function initVentaPorMayor() {
         loadClientesParaVenta();
     }
 
-    // Mostrar/ocultar campo de abono según método de pago
+    // Configurar formato del campo de abono (separadores de miles)
+    if (abonoInput) {
+        abonoInput.addEventListener('input', function(e) {
+            let value = e.target.value;
+            const numericValue = value.replace(/[^\d]/g, '');
+
+            if (numericValue === '') {
+                e.target.value = '';
+                e.target.dataset.numericValue = '';
+                return;
+            }
+
+            const numValue = parseInt(numericValue, 10);
+            e.target.dataset.numericValue = numValue;
+
+            const formatted = numValue.toLocaleString('es-CO', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            });
+
+            e.target.value = formatted;
+        });
+
+        abonoInput.addEventListener('blur', function(e) {
+            const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
+            if (numericValue && numericValue !== '') {
+                const numValue = parseInt(numericValue, 10);
+                e.target.value = numValue.toLocaleString('es-CO', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0
+                });
+                e.target.dataset.numericValue = numValue;
+            }
+        });
+
+        abonoInput.addEventListener('focus', function(e) {
+            const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
+            if (numericValue && numericValue !== '') {
+                const numValue = parseInt(numericValue, 10);
+                e.target.value = numValue.toLocaleString('es-CO', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0
+                });
+            }
+        });
+    }
+
+    // Mostrar/ocultar campo de abono según método de pago y si hay items agregados
     if (metodoPagoSelect && abonoRow) {
         metodoPagoSelect.addEventListener('change', function() {
             const metodo = this.value;
-            if (metodo === 'efectivo' || metodo === 'transferencia') {
+            if (metodo === 'credito' && ventaPorMayorItems.length > 0) {
                 abonoRow.style.display = 'flex';
             } else {
                 abonoRow.style.display = 'none';
-                if (abonoInput) abonoInput.value = '0';
+                if (abonoInput) {
+                    abonoInput.value = '0';
+                    abonoInput.dataset.numericValue = '0';
+                }
             }
         });
     }
@@ -359,13 +414,14 @@ function initVentaPorMayor() {
             // Obtener cliente y abono
             const clienteId = clienteSelect ? clienteSelect.value : null;
             const metodoPago = metodoPagoSelect ? metodoPagoSelect.value : '';
-            const abono = (abonoInput && (metodoPago === 'efectivo' || metodoPago === 'transferencia')) 
-                ? parseFloat(abonoInput.value) || 0 
-                : 0;
+            let abono = 0;
+            if (abonoInput && metodoPago === 'credito') {
+                const raw = abonoInput.dataset.numericValue || abonoInput.value.replace(/[^\d]/g, '');
+                abono = raw ? parseInt(raw, 10) || 0 : 0;
+            }
 
             // Array para almacenar información de cada venta registrada (para deshacer)
             const ventasRegistradas = [];
-            const pagosRegistrados = [];
 
             // Registrar cada item
             for (const item of ventaPorMayorItems) {
@@ -439,28 +495,9 @@ function initVentaPorMayor() {
 
                         if (ventaError) throw ventaError;
                         
+                        // NO crear pagos automáticos aquí. El abono ya está guardado en el campo 'abono' de la venta.
+                        // Los pagos adicionales se crearán cuando el usuario los registre manualmente desde la interfaz de clientes.
                         let pagoId = null;
-
-                        // Si es crédito y hay abono, registrar pago
-                        if (metodoPago === 'credito' && abonoProporcional > 0 && ventaInsertada) {
-                            const { data: pagoInsertado, error: pagoError } = await window.supabaseClient
-                                .from('pagos')
-                                .insert({
-                                    venta_id: ventaInsertada.id,
-                                    cliente_id: clienteId || null,
-                                    monto: abonoProporcional,
-                                    metodo_pago: 'efectivo', // El abono inicial siempre es efectivo/transferencia
-                                    empresa_id: user.empresa_id
-                                })
-                                .select()
-                                .single();
-                            
-                            if (pagoError) throw pagoError;
-                            if (pagoInsertado) {
-                                pagoId = pagoInsertado.id;
-                                pagosRegistrados.push(pagoId);
-                            }
-                        }
 
                         // Reducir cantidad del juguete
                         const nuevaCantidad = Math.max(0, cantidadDisponible - cantidadADescontar);
@@ -511,7 +548,6 @@ function initVentaPorMayor() {
                 ultimaVentaPorMayor = {
                     codigo_venta: codigoVenta,
                     ventas: ventasRegistradas,
-                    pagos: pagosRegistrados,
                     timestamp: new Date().toISOString()
                 };
                 actualizarBotonDeshacerVentaPorMayor(true);
@@ -553,9 +589,11 @@ function initVentaPorMayor() {
                 // Obtener cliente y abono
                 const clienteId = clienteSelect ? clienteSelect.value : null;
                 const metodoPago = metodoPagoSelect ? metodoPagoSelect.value : '';
-                const abono = (abonoInput && (metodoPago === 'efectivo' || metodoPago === 'transferencia')) 
-                    ? parseFloat(abonoInput.value) || 0 
-                    : 0;
+                let abono = 0;
+                if (abonoInput && metodoPago === 'credito') {
+                    const raw = abonoInput.dataset.numericValue || abonoInput.value.replace(/[^\d]/g, '');
+                    abono = raw ? parseInt(raw, 10) || 0 : 0;
+                }
 
                 // Registrar cada item
                 for (const item of ventaPorMayorItems) {
@@ -619,18 +657,8 @@ function initVentaPorMayor() {
 
                             if (ventaError) throw ventaError;
 
-                            // Si es crédito y hay abono, registrar pago
-                            if (metodoPago === 'credito' && abonoProporcional > 0 && ventaInsertada) {
-                                await window.supabaseClient
-                                    .from('pagos')
-                                    .insert({
-                                        venta_id: ventaInsertada.id,
-                                        cliente_id: clienteId || null,
-                                        monto: abonoProporcional,
-                                        metodo_pago: 'efectivo', // El abono inicial siempre es efectivo/transferencia
-                                        empresa_id: user.empresa_id
-                                    });
-                            }
+                            // NO crear pagos automáticos aquí. El abono ya está guardado en el campo 'abono' de la venta.
+                            // Los pagos adicionales se crearán cuando el usuario los registre manualmente desde la interfaz de clientes.
 
                             // Reducir cantidad del juguete
                             const nuevaCantidad = Math.max(0, cantidadDisponible - cantidadADescontar);
@@ -684,10 +712,16 @@ function initVentaPorMayor() {
 // Función para actualizar lista de items al por mayor
 function updateVentaPorMayorItemsList() {
     const itemsList = document.getElementById('ventaPorMayorItemsList');
+    const abonoRow = document.getElementById('ventaPorMayorAbonoRow');
+    const metodoPagoSelect = document.getElementById('ventaPorMayorMetodoPago');
     if (!itemsList) return;
     
     if (ventaPorMayorItems.length === 0) {
         itemsList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay items agregados</p>';
+        // Si no hay items, ocultar el campo de abono
+        if (abonoRow) {
+            abonoRow.style.display = 'none';
+        }
         return;
     }
 
@@ -743,12 +777,30 @@ function updateVentaPorMayorItemsList() {
             </div>
         </div>
     `;
+
+    // Si hay items y el método de pago es crédito, mostrar el campo de abono
+    if (abonoRow && metodoPagoSelect) {
+        if (metodoPagoSelect.value === 'credito') {
+            abonoRow.style.display = 'flex';
+        } else {
+            abonoRow.style.display = 'none';
+        }
+    }
 }
 
 // Función global para remover item al por mayor
 window.removeVentaPorMayorItem = function(index) {
     ventaPorMayorItems.splice(index, 1);
     updateVentaPorMayorItemsList();
+
+    // Ocultar campo de abono si ya no hay items o el método no es crédito
+    const abonoRow = document.getElementById('ventaPorMayorAbonoRow');
+    const metodoPagoSelect = document.getElementById('ventaPorMayorMetodoPago');
+    if (abonoRow && metodoPagoSelect) {
+        if (ventaPorMayorItems.length === 0 || metodoPagoSelect.value !== 'credito') {
+            abonoRow.style.display = 'none';
+        }
+    }
 };
 
 // ============================================

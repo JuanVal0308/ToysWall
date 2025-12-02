@@ -4845,19 +4845,31 @@ async function buscarVentaParaDevolucion() {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
         
-        // Buscar todas las ventas con ese código
+        // Buscar todas las ventas con ese código (sin relaciones automáticas a juguetes)
         const { data: ventas, error } = await window.supabaseClient
             .from('ventas')
-            .select(`
-                *,
-                juguetes(id, nombre, codigo, cantidad, bodega_id, tienda_id),
-                empleados(nombre, codigo)
-            `)
+            .select('id, codigo_venta, juguete_codigo, cantidad, precio_venta, created_at, empleado_id, empleados(nombre, codigo)')
             .eq('codigo_venta', codigoVenta)
             .eq('empresa_id', user.empresa_id)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
+
+        // Cargar información de los juguetes por separado usando juguete_codigo
+        let juguetesMap = new Map();
+        if (ventas && ventas.length > 0) {
+            const codigosJuguetes = [...new Set(ventas.map(v => v.juguete_codigo).filter(c => c))];
+            if (codigosJuguetes.length > 0) {
+                const { data: juguetes, error: juguetesError } = await window.supabaseClient
+                    .from('juguetes')
+                    .select('codigo, nombre')
+                    .in('codigo', codigosJuguetes)
+                    .eq('empresa_id', user.empresa_id);
+                
+                if (juguetesError) throw juguetesError;
+                juguetesMap = new Map((juguetes || []).map(j => [j.codigo, j]));
+            }
+        }
 
         if (!ventas || ventas.length === 0) {
             ventasListContainer.innerHTML = `
@@ -4911,6 +4923,7 @@ async function buscarVentaParaDevolucion() {
                         </thead>
                         <tbody>
                             ${ventas.map(venta => {
+                                const juguete = juguetesMap.get(venta.juguete_codigo) || null;
                                 const cantidad = venta.cantidad || 1;
                                 const precioUnitario = parseFloat(venta.precio_venta) / cantidad;
                                 return `
@@ -4922,8 +4935,8 @@ async function buscarVentaParaDevolucion() {
                                                 data-cantidad-max="${cantidad}"
                                                 onchange="toggleSeleccionItem()">
                                         </td>
-                                        <td>${venta.juguetes?.nombre || 'N/A'}</td>
-                                        <td>${venta.juguetes?.codigo || 'N/A'}</td>
+                                        <td>${juguete?.nombre || 'N/A'}</td>
+                                        <td>${juguete?.codigo || venta.juguete_codigo || 'N/A'}</td>
                                         <td>${cantidad}</td>
                                         <td>
                                             <input 

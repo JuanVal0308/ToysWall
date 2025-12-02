@@ -8,6 +8,27 @@ let paginaActualClientes = 1;
 const itemsPorPaginaClientes = 20;
 let clientesInitialized = false;
 
+// Configurar manejador del formulario del modal de cliente (usable desde cualquier vista)
+function setupClienteModalFormHandler() {
+    const clienteModalForm = document.getElementById('clienteModalForm');
+    if (!clienteModalForm) return;
+
+    // Evitar registrar múltiples listeners
+    if (clienteModalForm.dataset.listenerAdded === 'true') return;
+
+    clienteModalForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        await guardarClienteModal();
+    });
+
+    clienteModalForm.dataset.listenerAdded = 'true';
+}
+
+// Asegurar que el formulario del modal funcione incluso si nunca se abrió la vista de Clientes
+document.addEventListener('DOMContentLoaded', function() {
+    setupClienteModalFormHandler();
+});
+
 // Función para inicializar la vista de clientes
 function initClientes() {
     const clientesView = document.getElementById('clientesView');
@@ -29,14 +50,8 @@ function initClientes() {
         });
     }
 
-    // Modal de cliente
-    const clienteModalForm = document.getElementById('clienteModalForm');
-    if (clienteModalForm) {
-        clienteModalForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            await guardarClienteModal();
-        });
-    }
+    // Modal de cliente (reutiliza configurador global)
+    setupClienteModalFormHandler();
 
     // Botones del modal
     const clienteModal = document.getElementById('clienteModal');
@@ -277,10 +292,10 @@ async function obtenerInfoVentasCliente(clienteId) {
 
         if (ventasError) throw ventasError;
 
-        // Obtener todos los pagos del cliente
+        // Obtener todos los pagos del cliente (con fecha para detectar duplicados)
         const { data: pagos, error: pagosError } = await window.supabaseClient
             .from('pagos')
-            .select('monto, venta_id')
+            .select('monto, venta_id, created_at')
             .eq('cliente_id', clienteId)
             .eq('empresa_id', user.empresa_id);
 
@@ -295,11 +310,31 @@ async function obtenerInfoVentasCliente(clienteId) {
             const totalVenta = parseFloat(venta.precio_venta || 0);
             const abonoInicial = parseFloat(venta.abono || 0);
             
-            // Sumar pagos adicionales de esta venta
+            // Obtener pagos de esta venta
             const pagosVenta = (pagos || []).filter(p => p.venta_id === venta.id);
-            const totalPagos = pagosVenta.reduce((sum, p) => sum + parseFloat(p.monto || 0), 0);
             
-            const totalPagadoVenta = abonoInicial + totalPagos;
+            // Calcular pagos adicionales (excluyendo duplicados del bug)
+            // Un pago se considera duplicado si:
+            // 1. Tiene el mismo monto que el abono inicial
+            // 2. Fue creado en la misma fecha/hora que la venta (dentro de 1 minuto)
+            let pagosAdicionales = 0;
+            const fechaVenta = new Date(venta.created_at).getTime();
+            
+            pagosVenta.forEach(pago => {
+                const montoPago = parseFloat(pago.monto || 0);
+                const fechaPago = new Date(pago.created_at).getTime();
+                const diferenciaTiempo = Math.abs(fechaPago - fechaVenta) / 1000 / 60; // diferencia en minutos
+                
+                // Si el pago tiene el mismo monto que el abono y fue creado casi al mismo tiempo, es un duplicado
+                const esDuplicado = Math.abs(montoPago - abonoInicial) < 0.01 && diferenciaTiempo < 1;
+                
+                if (!esDuplicado) {
+                    pagosAdicionales += montoPago;
+                }
+            });
+            
+            // Total pagado = abono inicial + pagos adicionales (sin duplicados)
+            const totalPagadoVenta = abonoInicial + pagosAdicionales;
             const pendienteVenta = totalVenta - totalPagadoVenta;
             
             if (venta.metodo_pago === 'credito' && pendienteVenta > 0) {
