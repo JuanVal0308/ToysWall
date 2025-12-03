@@ -4761,6 +4761,8 @@ function initAbastecer() {
             if (typeof loadDashboardSummary === 'function') {
                 await loadDashboardSummary();
             }
+            // Recargar juguetes disponibles para actualizar las cantidades
+            await loadJuguetesDisponibles();
         } catch (error) {
             console.error('Error al realizar movimiento:', error);
             showAbastecerMessage('Error al realizar el movimiento: ' + error.message, 'error');
