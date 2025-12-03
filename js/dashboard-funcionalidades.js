@@ -26,13 +26,23 @@ async function loadDashboardSummary() {
             console.error('Usuario no válido');
             return;
         }
+        const isEmpleado = user.tipo_usuario_id === 3;
         
         // Cargar totales (optimizado: solo counts)
+        // Para empleados, las ventas solo cuentan las NO mayoristas (es_por_mayor = false)
+        let ventasTotalesQuery = window.supabaseClient
+            .from('ventas')
+            .select('precio_venta')
+            .eq('empresa_id', user.empresa_id);
+        if (isEmpleado) {
+            ventasTotalesQuery = ventasTotalesQuery.eq('es_por_mayor', false);
+        }
+
         const [tiendas, bodegas, usuarios, ventas] = await Promise.all([
             window.supabaseClient.from('tiendas').select('id', { count: 'exact' }).eq('empresa_id', user.empresa_id),
             window.supabaseClient.from('bodegas').select('id', { count: 'exact' }).eq('empresa_id', user.empresa_id),
             window.supabaseClient.from('usuarios').select('id', { count: 'exact' }).eq('empresa_id', user.empresa_id),
-            window.supabaseClient.from('ventas').select('precio_venta').eq('empresa_id', user.empresa_id)
+            ventasTotalesQuery
         ]);
 
         // Verificar errores
@@ -74,12 +84,17 @@ async function loadDashboardSummary() {
         const ventasList = document.getElementById('ventasRecientes');
         try {
             // Cargar ventas sin relaciones (ya no hay foreign key)
-            const { data: ventasSimples, error: errorSimple } = await window.supabaseClient
+            let ventasRecientesQuery = window.supabaseClient
                 .from('ventas')
                 .select('*')
                 .eq('empresa_id', user.empresa_id)
                 .order('created_at', { ascending: false })
                 .limit(5);
+            // Empleados NO deben ver ventas al por mayor
+            if (isEmpleado) {
+                ventasRecientesQuery = ventasRecientesQuery.eq('es_por_mayor', false);
+            }
+            const { data: ventasSimples, error: errorSimple } = await ventasRecientesQuery;
             
             if (errorSimple) {
                 throw errorSimple;
@@ -1109,16 +1124,22 @@ async function generarCodigoVenta() {
 async function showVentasParaFacturar() {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
+        const isEmpleado = user.tipo_usuario_id === 3;
         
         // Buscar ventas que NO han sido facturadas
         // Cargar ventas sin relaciones automáticas (usar juguete_codigo)
-        const { data: ventasSimples, error: errorSimple } = await window.supabaseClient
+        let ventasParaFacturarQuery = window.supabaseClient
             .from('ventas')
             .select('*')
             .eq('empresa_id', user.empresa_id)
             .eq('facturada', false) // Solo ventas no facturadas
             .order('created_at', { ascending: false })
             .limit(50); // Últimas 50 ventas
+        // Empleados solo pueden ver ventas normales (no mayoristas)
+        if (isEmpleado) {
+            ventasParaFacturarQuery = ventasParaFacturarQuery.eq('es_por_mayor', false);
+        }
+        const { data: ventasSimples, error: errorSimple } = await ventasParaFacturarQuery;
 
         if (errorSimple) throw errorSimple;
         
@@ -1226,15 +1247,21 @@ async function showVentasParaFacturar() {
 async function facturarVentaRegistrada(codigoVenta) {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
+        const isEmpleado = user.tipo_usuario_id === 3;
         
         // Obtener todas las ventas con ese código que NO estén facturadas
         // Cargar ventas sin relaciones automáticas (usar juguete_codigo)
-        const { data: ventasSimples, error: errorSimple } = await window.supabaseClient
+        let ventasPorCodigoQuery = window.supabaseClient
             .from('ventas')
             .select('*')
             .eq('codigo_venta', codigoVenta)
             .eq('empresa_id', user.empresa_id)
             .eq('facturada', false); // Solo ventas no facturadas
+        // Empleados no deben poder facturar ventas al por mayor
+        if (isEmpleado) {
+            ventasPorCodigoQuery = ventasPorCodigoQuery.eq('es_por_mayor', false);
+        }
+        const { data: ventasSimples, error: errorSimple } = await ventasPorCodigoQuery;
 
         if (errorSimple) throw errorSimple;
         
@@ -3765,6 +3792,7 @@ function setupExportButtons() {
 async function exportarAExcel(tipo) {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
+        const isEmpleado = user.tipo_usuario_id === 3;
         let data = [];
         let filename = '';
 
@@ -3841,10 +3869,15 @@ async function exportarAExcel(tipo) {
                 break;
             case 'ventas':
                 // Cargar ventas sin relaciones automáticas
-                const { data: ventasSimples, error: errorVentas } = await window.supabaseClient
+                let ventasExportQuery = window.supabaseClient
                     .from('ventas')
                     .select('codigo_venta, precio_venta, cantidad, metodo_pago, created_at, juguete_codigo, empleado_id')
                     .eq('empresa_id', user.empresa_id);
+                // Empleados solo exportan ventas normales (no al por mayor)
+                if (isEmpleado) {
+                    ventasExportQuery = ventasExportQuery.eq('es_por_mayor', false);
+                }
+                const { data: ventasSimples, error: errorVentas } = await ventasExportQuery;
                 
                 if (errorVentas) throw errorVentas;
                 
@@ -5109,14 +5142,20 @@ function initAjustes() {
 async function cargarVentasRecientesAjustes() {
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
+        const isEmpleado = user && user.tipo_usuario_id === 3;
         
         // Cargar ventas recientes (sin relaciones automáticas, usar juguete_codigo)
-        const { data: ventasSimples } = await window.supabaseClient
+        let ajustesVentasQuery = window.supabaseClient
             .from('ventas')
             .select('*')
             .eq('empresa_id', user.empresa_id)
             .order('created_at', { ascending: false })
             .limit(10);
+        // Empleados solo ven ventas normales (no al por mayor)
+        if (isEmpleado) {
+            ajustesVentasQuery = ajustesVentasQuery.eq('es_por_mayor', false);
+        }
+        const { data: ventasSimples } = await ajustesVentasQuery;
         
         // Cargar juguetes por código
         let ventasRecientes = [];
@@ -5175,14 +5214,20 @@ async function buscarVentaParaDevolucion() {
 
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
+        const isEmpleado = user && user.tipo_usuario_id === 3;
         
         // Buscar todas las ventas con ese código (sin relaciones automáticas a juguetes)
-        const { data: ventas, error } = await window.supabaseClient
+        let ventasDevolucionQuery = window.supabaseClient
             .from('ventas')
             .select('id, codigo_venta, juguete_codigo, cantidad, precio_venta, created_at, empleado_id, empleados(nombre, codigo)')
             .eq('codigo_venta', codigoVenta)
             .eq('empresa_id', user.empresa_id)
             .order('created_at', { ascending: false });
+        // Empleados NO pueden ver ni devolver ventas al por mayor
+        if (isEmpleado) {
+            ventasDevolucionQuery = ventasDevolucionQuery.eq('es_por_mayor', false);
+        }
+        const { data: ventas, error } = await ventasDevolucionQuery;
 
         if (error) throw error;
 

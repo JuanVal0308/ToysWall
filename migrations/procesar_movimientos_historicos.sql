@@ -109,10 +109,16 @@ BEGIN
             
             -- Actualizar o crear destino
             IF FOUND AND juguete_destino.id IS NOT NULL THEN
-                -- Si existe, sumar cantidad
+                -- Si existe, sumar cantidad y completar datos faltantes (precios, foto, item, bultos)
                 nueva_cantidad_destino := juguete_destino.cantidad + movimiento_record.cantidad;
                 UPDATE juguetes
-                SET cantidad = nueva_cantidad_destino
+                SET cantidad = nueva_cantidad_destino,
+                    foto_url = COALESCE(juguete_destino.foto_url, juguete_origen.foto_url),
+                    precio_min = COALESCE(juguete_destino.precio_min, juguete_origen.precio_min),
+                    precio_por_mayor = COALESCE(juguete_destino.precio_por_mayor, juguete_origen.precio_por_mayor),
+                    item = COALESCE(juguete_destino.item, juguete_origen.item),
+                    cantidad_por_bulto = COALESCE(juguete_destino.cantidad_por_bulto, juguete_origen.cantidad_por_bulto),
+                    numero_bultos = COALESCE(juguete_destino.numero_bultos, juguete_origen.numero_bultos)
                 WHERE id = juguete_destino.id;
             ELSE
                 -- Si no existe, crear nuevo registro

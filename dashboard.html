@@ -578,11 +578,12 @@
                                     <th>Foto</th>
                                     <th>Cantidad</th>
                                     <th>Ubicación</th>
+                                    <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody id="inventarioTableBody">
                                 <tr>
-                                    <td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">
+                                    <td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">
                                         Cargando inventario...
                                     </td>
                                 </tr>
@@ -1987,15 +1988,15 @@
     <script src="js/config.js"></script>
     <script src="js/supabase-storage.js"></script>
     <!-- Modal para editar juguete -->
-    <div id="editarJugueteModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; align-items: center; justify-content: center;">
-        <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+    <div id="editarJugueteModal" style="display: none; position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 24px 24px 20px 24px; border-radius: 12px; max-width: 520px; width: 92%; max-height: 90vh; box-shadow: 0 10px 40px rgba(0,0,0,0.2); overflow-y: auto;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h2 style="margin: 0; color: #1e293b;">Editar Juguete</h2>
                 <button onclick="cerrarModalEditarJuguete()" style="background: none; border: none; font-size: 24px; color: #64748b; cursor: pointer; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <form id="editarJugueteForm">
+            <form id="editarJugueteForm" style="margin: 0; padding: 0;">
                 <input type="hidden" id="editarJugueteId">
                 <div style="margin-bottom: 20px;">
                     <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Nombre</label>
@@ -2038,11 +2039,19 @@
                     </div>
                     <small style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Ingresa la URL de la imagen del juguete</small>
                 </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Precio Mínimo *</label>
-                    <input type="number" id="editarJuguetePrecioMin" required min="0" step="0.01"
-                           style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
-                    <small style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Precio mínimo permitido para la venta</small>
+                <div style="margin-bottom: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Precio Mínimo *</label>
+                        <input type="number" id="editarJuguetePrecioMin" required min="0" step="0.01"
+                               style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
+                        <small style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Precio mínimo permitido para la venta</small>
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Precio al por Mayor</label>
+                        <input type="number" id="editarJuguetePrecioPorMayor" min="0" step="0.01"
+                               style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
+                        <small style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Opcional: precio para ventas al por mayor</small>
+                    </div>
                 </div>
                 <div id="editarJugueteErrorMessage" style="display: none; padding: 12px; background: #fee2e2; color: #dc2626; border-radius: 6px; margin-bottom: 15px; font-size: 14px;"></div>
                 <div id="editarJugueteSuccessMessage" style="display: none; padding: 12px; background: #d1fae5; color: #059669; border-radius: 6px; margin-bottom: 15px; font-size: 14px;"></div>

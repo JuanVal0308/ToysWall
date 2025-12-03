@@ -2294,10 +2294,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                 const key = `${juguete.codigo}-${juguete.nombre}`;
                 if (!juguetesAgrupados.has(key)) {
                     juguetesAgrupados.set(key, {
+                        id_principal: juguete.id, // Usar el primer registro como referencia para edición
                         codigo: juguete.codigo,
                         nombre: juguete.nombre,
                         item: (juguete.item && juguete.item.trim() !== '') ? juguete.item : null, // Inicializar con el item del primer registro (solo si tiene valor)
                         foto_url: juguete.foto_url,
+                        precio_min: juguete.precio_min,
+                        precio_por_mayor: juguete.precio_por_mayor,
                         ubicaciones: new Map() // Usar Map para evitar duplicados
                     });
                 } else {
@@ -2313,6 +2316,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                     // También actualizar foto_url si no existe
                     if (!jugueteAgrupado.foto_url && juguete.foto_url) {
                         jugueteAgrupado.foto_url = juguete.foto_url;
+                    }
+                    // Actualizar precios de referencia si no están definidos aún
+                    if ((jugueteAgrupado.precio_min === null || jugueteAgrupado.precio_min === undefined) && juguete.precio_min !== null && juguete.precio_min !== undefined) {
+                        jugueteAgrupado.precio_min = juguete.precio_min;
+                    }
+                    if ((jugueteAgrupado.precio_por_mayor === null || jugueteAgrupado.precio_por_mayor === undefined) && juguete.precio_por_mayor !== null && juguete.precio_por_mayor !== undefined) {
+                        jugueteAgrupado.precio_por_mayor = juguete.precio_por_mayor;
                     }
                 }
                 
@@ -2493,6 +2503,32 @@ document.addEventListener('DOMContentLoaded', async function() {
                 ubicacionesHTML = '<span style="color: #94a3b8; font-style: italic;">Sin ubicación</span>';
             }
             
+            const accionesHTML = isAdmin
+                ? `
+                    <button 
+                        type="button" 
+                        onclick="abrirMenuEditarJuguete(${juguete.id_principal}, event)" 
+                        title="Editar información del juguete"
+                        style="
+                            background: #f1f5f9;
+                            border: 1px solid #e2e8f0;
+                            border-radius: 999px;
+                            padding: 6px 10px;
+                            cursor: pointer;
+                            display: inline-flex;
+                            align-items: center;
+                            justify-content: center;
+                            color: #64748b;
+                            transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+                        "
+                        onmouseover="this.style.background='#e5e7eb'; this.style.color='#111827'; this.style.boxShadow='0 2px 6px rgba(15,23,42,0.12)';"
+                        onmouseout="this.style.background='#f1f5f9'; this.style.color='#64748b'; this.style.boxShadow='none';"
+                    >
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                `
+                : '<span style="color: #94a3b8;">-</span>';
+
             row.innerHTML = `
                 <td>${nombreCapitalizado}</td>
                 <td>${juguete.codigo}</td>
@@ -2500,6 +2536,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 <td>${foto}</td>
                 <td>${juguete.cantidadTotal || 0}</td>
                 <td>${ubicacionesHTML}</td>
+                <td style="text-align: center;">${accionesHTML}</td>
             `;
             tbody.appendChild(row);
         });
@@ -2767,6 +2804,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                 document.getElementById('editarJugueteCodigo').value = data.codigo;
                 document.getElementById('editarJugueteCantidad').value = data.cantidad;
                 document.getElementById('editarJuguetePrecioMin').value = data.precio_min || '';
+                const editarPrecioPorMayorInputDb = document.getElementById('editarJuguetePrecioPorMayor');
+                if (editarPrecioPorMayorInputDb) {
+                    editarPrecioPorMayorInputDb.value = data.precio_por_mayor || '';
+                }
                 // Llenar campos de bultos si existen
                 const numeroBultosInput = document.getElementById('editarJugueteNumeroBultos');
                 const cantidadPorBultoInput = document.getElementById('editarJugueteCantidadPorBulto');
@@ -2799,6 +2840,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                 document.getElementById('editarJugueteCodigo').value = juguete.codigo;
                 document.getElementById('editarJugueteCantidad').value = juguete.cantidad;
                 document.getElementById('editarJuguetePrecioMin').value = juguete.precio_min || '';
+                const editarPrecioPorMayorInput = document.getElementById('editarJuguetePrecioPorMayor');
+                if (editarPrecioPorMayorInput) {
+                    editarPrecioPorMayorInput.value = juguete.precio_por_mayor || '';
+                }
                 const fotoUrlInput = document.getElementById('editarJugueteFotoUrl');
                 const fotoPreview = document.getElementById('editarFotoPreview');
                 const fotoPreviewImg = document.getElementById('editarFotoPreviewImg');
@@ -2862,18 +2907,21 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.getElementById('editarJugueteSuccessMessage').style.display = 'none';
     };
 
-    // Configurar formulario de edición
-    document.addEventListener('DOMContentLoaded', function() {
-        const editarJugueteForm = document.getElementById('editarJugueteForm');
-        if (editarJugueteForm) {
-            editarJugueteForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
+    // Configurar formulario de edición (ya estamos dentro de DOMContentLoaded del dashboard)
+    const editarJugueteForm = document.getElementById('editarJugueteForm');
+    if (editarJugueteForm) {
+        editarJugueteForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
                 const jugueteId = document.getElementById('editarJugueteId').value;
                 const nombre = capitalizarPrimeraLetra(document.getElementById('editarJugueteNombre').value.trim());
                 const codigo = document.getElementById('editarJugueteCodigo').value.trim();
                 const cantidad = parseInt(document.getElementById('editarJugueteCantidad').value);
                 const precioMin = parseFloat(document.getElementById('editarJuguetePrecioMin').value);
+                const precioPorMayorInput = document.getElementById('editarJuguetePrecioPorMayor');
+                const precioPorMayor = precioPorMayorInput && precioPorMayorInput.value.trim() !== ''
+                    ? parseFloat(precioPorMayorInput.value)
+                    : null;
                 const fotoUrl = document.getElementById('editarJugueteFotoUrl')?.value.trim() || null;
                 // Obtener campos de bultos (opcionales)
                 const numeroBultosInput = document.getElementById('editarJugueteNumeroBultos');
@@ -2891,7 +2939,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         errorMsg.style.display = 'none';
         successMsg.style.display = 'none';
         
-                if (!nombre || !codigo || cantidad < 0 || isNaN(precioMin) || precioMin < 0) {
+                if (!nombre || !codigo || cantidad < 0 || isNaN(precioMin) || precioMin < 0 || (precioPorMayor !== null && (isNaN(precioPorMayor) || precioPorMayor < 0))) {
                     errorMsg.textContent = 'Por favor, completa todos los campos correctamente';
                     errorMsg.style.display = 'block';
                     return;
@@ -2929,9 +2977,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                     const codigoCambio = jugueteOriginal.codigo !== codigo;
                     const nombreCambio = jugueteOriginal.nombre !== nombre;
                     
-                    // Si cambió el código o nombre, actualizar todos los registros relacionados
+                    // Si cambió el código o nombre, actualizar todos los registros relacionados (código/nombre)
                     if (codigoCambio || nombreCambio) {
-                        // Actualizar todos los registros con el mismo código y nombre original (solo código y nombre, no precios)
+                        // Actualizar todos los registros con el mismo código y nombre original (solo código y nombre)
                         const { error: updateAllError } = await window.supabaseClient
                             .from('juguetes')
                             .update({
@@ -2944,10 +2992,11 @@ document.addEventListener('DOMContentLoaded', async function() {
                         
                         if (updateAllError) throw updateAllError;
                         
-                        // Luego actualizar la cantidad, precio mínimo y foto_url solo del registro específico
+                        // Luego actualizar la cantidad, precios, foto_url y bultos del registro específico
                         const updateData = { 
                             cantidad: cantidad,
-                            precio_min: precioMin
+                            precio_min: precioMin,
+                            precio_por_mayor: precioPorMayor
                         };
                         if (fotoUrl !== null) {
                             updateData.foto_url = fotoUrl || null;
@@ -2970,10 +3019,11 @@ document.addEventListener('DOMContentLoaded', async function() {
                         
                         if (updateCantidadError) throw updateCantidadError;
                     } else {
-                        // Si solo cambió la cantidad, actualizar solo ese registro
+                        // Si no cambió código/nombre, actualizar solo este registro con todos los campos
                         const updateData = {
                             nombre: nombre,
                             precio_min: precioMin,
+                            precio_por_mayor: precioPorMayor,
                             codigo: codigo,
                             cantidad: cantidad
                         };
@@ -2998,6 +3048,18 @@ document.addEventListener('DOMContentLoaded', async function() {
 
                         if (updateError) throw updateError;
                     }
+
+                    // Asegurar que los precios se sincronicen en TODOS los registros de ese código (todas las ubicaciones) después de posibles cambios
+                    const { error: updatePreciosGlobalError } = await window.supabaseClient
+                        .from('juguetes')
+                        .update({
+                            precio_min: precioMin,
+                            precio_por_mayor: precioPorMayor
+                        })
+                        .eq('codigo', codigo)
+                        .eq('empresa_id', user.empresa_id);
+                    
+                    if (updatePreciosGlobalError) throw updatePreciosGlobalError;
                     
                     successMsg.textContent = 'Juguete actualizado correctamente. Recargando...';
                     successMsg.style.display = 'block';
@@ -3009,14 +3071,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                     setTimeout(() => {
                         cerrarModalEditarJuguete();
                     }, 500);
-        } catch (error) {
+            } catch (error) {
                     console.error('Error al actualizar juguete:', error);
                     errorMsg.textContent = 'Error al actualizar el juguete: ' + error.message;
                     errorMsg.style.display = 'block';
-        }
-            });
+            }
+        });
     }
-    });
 
     // ============================================
     // FUNCIONALIDAD DE EMPLEADOS
