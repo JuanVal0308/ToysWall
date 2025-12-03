@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS juguetes (
 CREATE TABLE IF NOT EXISTS ventas (
     id SERIAL PRIMARY KEY,
     codigo_venta VARCHAR(50) NOT NULL,
-    juguete_id INTEGER NOT NULL REFERENCES juguetes(id) ON DELETE CASCADE,
+    juguete_codigo VARCHAR(50) NOT NULL, -- Cambiado de juguete_id a juguete_codigo
     empleado_id INTEGER REFERENCES empleados(id) ON DELETE SET NULL,
     precio_venta DECIMAL(10, 2) NOT NULL,
     cantidad INTEGER NOT NULL DEFAULT 1,
@@ -136,6 +136,8 @@ CREATE TABLE IF NOT EXISTS ventas (
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
     facturada BOOLEAN DEFAULT FALSE,
     es_por_mayor BOOLEAN DEFAULT FALSE,
+    cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+    abono DECIMAL(10, 2) DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -170,7 +172,7 @@ CREATE TABLE IF NOT EXISTS movimientos (
     origen_id INTEGER NOT NULL,
     tipo_destino VARCHAR(20) NOT NULL CHECK (tipo_destino IN ('bodega', 'tienda')),
     destino_id INTEGER NOT NULL,
-    juguete_id INTEGER NOT NULL REFERENCES juguetes(id) ON DELETE CASCADE,
+    juguete_codigo VARCHAR(50) NOT NULL, -- Cambiado de juguete_id a juguete_codigo
     cantidad INTEGER NOT NULL DEFAULT 1,
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -221,7 +223,22 @@ CREATE TABLE IF NOT EXISTS pagos (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Agregar cliente_id y abono a ventas si no existen
+-- Tabla: logs_deshacer_ventas
+CREATE TABLE IF NOT EXISTS logs_deshacer_ventas (
+    id SERIAL PRIMARY KEY,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    usuario_id INTEGER, -- usuario de la tabla usuarios que oprimió deshacer
+    codigo_venta VARCHAR(100),
+    codigo_vendedor VARCHAR(50), -- código del empleado
+    empleado_id INTEGER, -- referencia a empleados.id (opcional)
+    juguete_codigo VARCHAR(50),
+    juguete_nombre VARCHAR(255),
+    precio_venta NUMERIC(12,2) NOT NULL,
+    cantidad INTEGER NOT NULL,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Agregar cliente_id y abono a ventas si no existen (para compatibilidad con instalaciones existentes)
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -236,6 +253,36 @@ BEGIN
         WHERE table_name = 'ventas' AND column_name = 'abono'
     ) THEN
         ALTER TABLE ventas ADD COLUMN abono DECIMAL(10, 2) DEFAULT 0;
+    END IF;
+    
+    -- Migración: Agregar juguete_codigo si no existe (para instalaciones antiguas)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'ventas' AND column_name = 'juguete_codigo'
+    ) THEN
+        ALTER TABLE ventas ADD COLUMN juguete_codigo VARCHAR(50);
+        -- Migrar datos existentes si hay juguete_id
+        UPDATE ventas v
+        SET juguete_codigo = j.codigo
+        FROM juguetes j
+        WHERE v.juguete_id = j.id
+        AND v.juguete_codigo IS NULL
+        AND j.codigo IS NOT NULL;
+    END IF;
+    
+    -- Migración: Agregar juguete_codigo a movimientos si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'movimientos' AND column_name = 'juguete_codigo'
+    ) THEN
+        ALTER TABLE movimientos ADD COLUMN juguete_codigo VARCHAR(50);
+        -- Migrar datos existentes si hay juguete_id
+        UPDATE movimientos m
+        SET juguete_codigo = j.codigo
+        FROM juguetes j
+        WHERE m.juguete_id = j.id
+        AND m.juguete_codigo IS NULL
+        AND j.codigo IS NOT NULL;
     END IF;
 END $$;
 
@@ -258,11 +305,13 @@ CREATE INDEX IF NOT EXISTS idx_juguetes_codigo ON juguetes(codigo);
 CREATE INDEX IF NOT EXISTS idx_juguetes_empresa_id ON juguetes(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_juguetes_precio_min ON juguetes(precio_min) WHERE precio_min IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_ventas_empresa_id ON ventas(empresa_id);
-CREATE INDEX IF NOT EXISTS idx_ventas_juguete_id ON ventas(juguete_id);
+CREATE INDEX IF NOT EXISTS idx_ventas_juguete_codigo ON ventas(juguete_codigo);
 CREATE INDEX IF NOT EXISTS idx_ventas_empleado_id ON ventas(empleado_id);
+CREATE INDEX IF NOT EXISTS idx_ventas_codigo_venta ON ventas(codigo_venta);
 CREATE INDEX IF NOT EXISTS idx_ventas_facturada ON ventas(facturada, codigo_venta);
 CREATE INDEX IF NOT EXISTS idx_facturas_empresa_id ON facturas(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_movimientos_empresa_id ON movimientos(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_movimientos_juguete_codigo ON movimientos(juguete_codigo);
 CREATE INDEX IF NOT EXISTS idx_planes_movimiento_empresa_id ON planes_movimiento(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_planes_movimiento_estado ON planes_movimiento(estado);
 CREATE INDEX IF NOT EXISTS idx_planes_movimiento_created_at ON planes_movimiento(created_at DESC);
@@ -271,6 +320,8 @@ CREATE INDEX IF NOT EXISTS idx_clientes_correo ON clientes(correo);
 CREATE INDEX IF NOT EXISTS idx_pagos_venta_id ON pagos(venta_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_cliente_id ON pagos(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_ventas_cliente_id ON ventas(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_logs_deshacer_ventas_empresa_id ON logs_deshacer_ventas(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_logs_deshacer_ventas_codigo_venta ON logs_deshacer_ventas(codigo_venta);
 
 -- ============================================
 -- 3. INSERTAR TIPOS DE USUARIO
@@ -738,6 +789,20 @@ CREATE POLICY "pagos_delete_policy" ON pagos
         )
     );
 
+-- Habilitar RLS para logs_deshacer_ventas
+ALTER TABLE logs_deshacer_ventas ENABLE ROW LEVEL SECURITY;
+
+-- Políticas RLS para logs_deshacer_ventas
+DROP POLICY IF EXISTS "logs_deshacer_ventas_select" ON logs_deshacer_ventas;
+CREATE POLICY "logs_deshacer_ventas_select"
+    ON logs_deshacer_ventas FOR SELECT
+    USING (true);
+
+DROP POLICY IF EXISTS "logs_deshacer_ventas_insert" ON logs_deshacer_ventas;
+CREATE POLICY "logs_deshacer_ventas_insert"
+    ON logs_deshacer_ventas FOR INSERT
+    WITH CHECK (true);
+
 -- ============================================
 -- 7. FUNCIONES AUXILIARES
 -- ============================================
@@ -962,5 +1027,8 @@ ORDER BY e.nombre;
 -- ✅ precio_min en juguetes (agregar_precios_juguetes.sql - solo precio_min, sin precio_max)
 -- ✅ Políticas RLS corregidas para ventas, usuarios y relaciones (fix_ventas_rls_policies.sql, fix_ventas_relations_rls.sql, fix_usuarios_rls.sql)
 -- ✅ Foreign keys con ON DELETE CASCADE (fix_foreign_keys_delete.sql)
+-- ✅ Cambio de juguete_id a juguete_codigo en ventas y movimientos (cambiar_juguete_id_a_codigo.sql)
+-- ✅ Tabla clientes y pagos (crear_tabla_clientes.sql)
+-- ✅ Tabla logs_deshacer_ventas (crear_tabla_logs_deshacer_ventas.sql)
 -- 
 -- ============================================

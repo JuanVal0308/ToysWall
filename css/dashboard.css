@@ -724,12 +724,23 @@ body {
         font-size: 20px;
     }
 
+    .card-info {
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+    }
+
     .card-info h3 {
         font-size: 22px;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        max-width: 100%;
     }
 
     .card-info p {
         font-size: 13px;
+        word-break: break-word;
+        overflow-wrap: break-word;
     }
 
     .sidebar-btn span {
@@ -848,6 +859,20 @@ body {
     }
 
     .inventario-table {
+        min-width: 800px;
+    }
+
+    .data-table {
+        min-width: 1000px;
+    }
+
+    #movimientoAbastecerItems {
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #movimientoAbastecerItems .inventario-table {
         min-width: 600px;
     }
 
@@ -855,7 +880,11 @@ body {
     .inventario-table td {
         padding: 10px 8px;
         font-size: 12px;
-        word-break: break-word;
+        white-space: nowrap;
+    }
+
+    .inventario-table td:last-child {
+        white-space: normal;
     }
 
     /* Venta items responsive */
@@ -1130,10 +1159,53 @@ body {
 
     .juguete-movimiento-item {
         display: flex;
+        flex-wrap: wrap;
         align-items: flex-start;
         gap: 10px;
         padding: 10px;
-        word-break: normal;
+    }
+
+    .juguete-info {
+        flex: 1 1 100%;
+        min-width: 0;
+        max-width: 100%;
+        word-break: break-word;
+        overflow-wrap: break-word;
+    }
+
+    .juguete-info strong {
+        display: block;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        font-size: 13px;
+    }
+
+    .juguete-info small {
+        display: block;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        font-size: 11px;
+    }
+
+    .juguete-cantidad {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1 1 auto;
+        justify-content: flex-end;
+        min-width: 150px;
+    }
+
+    .juguete-cantidad input {
+        width: 70px;
+        min-width: 60px;
+        font-size: 13px;
+    }
+
+    .juguete-cantidad button {
+        flex-shrink: 0;
+        padding: 6px 8px;
+        font-size: 12px;
     }
 
     /* Categorías checkboxes responsive */
@@ -1652,13 +1724,16 @@ button[data-processing="true"]::after {
 
 .inventario-table-container {
     overflow-x: auto;
+    overflow-y: visible;
     background: white;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    -webkit-overflow-scrolling: touch;
 }
 
 .inventario-table {
     width: 100%;
+    min-width: 800px;
     border-collapse: collapse;
 }
 
@@ -1687,6 +1762,18 @@ button[data-processing="true"]::after {
 
 .inventario-table tbody tr:last-child td {
     border-bottom: none;
+}
+
+/* Tabla de inventario detalle (data-table) */
+.data-table {
+    width: 100%;
+    min-width: 1000px;
+    border-collapse: collapse;
+}
+
+.inventario-table-container .data-table {
+    width: 100%;
+    min-width: 1000px;
 }
 
 /* ============================================
@@ -1769,11 +1856,22 @@ button[data-processing="true"]::after {
     font-size: 28px;
     font-weight: 700;
     color: #1e293b;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+}
+
+.card-info {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
 }
 
 .card-info p {
     margin: 4px 0 0 0;
     color: #64748b;
+    word-break: break-word;
+    overflow-wrap: break-word;
     font-size: 14px;
 }
 
@@ -2134,6 +2232,18 @@ button[data-processing="true"]::after {
     border: 1px solid #e2e8f0;
 }
 
+/* Contenedor para tabla de movimiento en abastecer */
+#movimientoAbastecerItems {
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+}
+
+#movimientoAbastecerItems .inventario-table {
+    min-width: 600px;
+    width: 100%;
+}
+
 .juguete-movimiento-item {
     display: flex;
     justify-content: space-between;
@@ -2143,6 +2253,12 @@ button[data-processing="true"]::after {
     border-radius: 8px;
     margin-bottom: 8px;
     border: 1px solid #e2e8f0;
+    gap: 12px;
+    min-width: 0;
+}
+
+.juguete-imagen {
+    flex-shrink: 0;
 }
 
 .juguete-info {
@@ -2150,13 +2266,40 @@ button[data-processing="true"]::after {
     min-width: 0;
     word-wrap: break-word;
     overflow-wrap: break-word;
+    overflow: hidden;
+}
+
+.juguete-info strong {
+    display: block;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.juguete-info small {
+    display: block;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.juguete-cantidad {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
 }
 
 .juguete-cantidad input {
     width: 80px;
+    min-width: 60px;
     padding: 8px;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
+    font-size: 14px;
+}
+
+.juguete-cantidad button {
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 /* ============================================

@@ -2713,7 +2713,8 @@ window.renderMovimientoAbastecerTabla = function() {
     const totalUnidades = itemsMovimientoAbastecer.reduce((sum, it) => sum + (it.cantidad || 0), 0);
 
     container.innerHTML = `
-        <table class="inventario-table">
+        <div style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+        <table class="inventario-table" style="min-width: 600px; width: 100%;">
             <thead>
                 <tr>
                     <th>Código</th>
@@ -2753,6 +2754,7 @@ window.renderMovimientoAbastecerTabla = function() {
                 </tr>
             </tfoot>
         </table>
+        </div>
     `;
 };
 
