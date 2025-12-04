@@ -4588,8 +4588,15 @@ function initAbastecer() {
     origenSelect.addEventListener('change', loadJuguetesDisponibles);
     destinoSelect.addEventListener('change', loadJuguetesDisponibles);
 
+    // Bandera para evitar limpiar el último movimiento cuando se restauran valores después de un movimiento exitoso
+    let restaurandoValoresDespuesMovimiento = false;
+    
     // Limpiar último movimiento cuando se cambian los campos del formulario
     const limpiarUltimoMovimiento = () => {
+        // No limpiar si estamos restaurando valores después de un movimiento exitoso
+        if (restaurandoValoresDespuesMovimiento) {
+            return;
+        }
         ultimoMovimientoAbastecer = null;
         actualizarBotonDeshacerAbastecer(false);
     };
@@ -4800,11 +4807,17 @@ function initAbastecer() {
             // Resetear formulario
             form.reset();
             
+            // Activar bandera para evitar que se limpie el último movimiento al restaurar valores
+            restaurandoValoresDespuesMovimiento = true;
+            
             // Restaurar valores de origen y destino
             origenTipo.value = origenTipoValGuardado;
             origenSelect.value = origenIdGuardado;
             destinoTipo.value = destinoTipoValGuardado;
             destinoSelect.value = destinoIdGuardado;
+            
+            // Desactivar bandera después de restaurar valores
+            restaurandoValoresDespuesMovimiento = false;
             
             // Recargar datos para reflejar los cambios en el inventario
             if (typeof loadTiendas === 'function') {
