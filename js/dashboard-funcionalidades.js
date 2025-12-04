@@ -3309,34 +3309,102 @@ async function ejecutarPlanMovimientoInterno(planId) {
                     .eq(campoDestino, plan.destino_id)
                     .limit(1);
 
-                // Reducir cantidad en origen
+                // Guardar todos los datos del juguete original para heredar
+                const datosJugueteOriginal = {
+                    nombre: jugueteActual.nombre,
+                    codigo: jugueteActual.codigo,
+                    item: jugueteActual.item || null,
+                    foto_url: jugueteActual.foto_url || null,
+                    precio_min: jugueteActual.precio_min || null,
+                    precio_por_mayor: jugueteActual.precio_por_mayor || null,
+                    numero_bultos: jugueteActual.numero_bultos || null,
+                    cantidad_por_bulto: jugueteActual.cantidad_por_bulto || null
+                };
+
+                // Calcular cantidad restante en origen
                 const nuevaCantidadOrigen = jugueteActual.cantidad - item.cantidad;
-                
-                if (nuevaCantidadOrigen <= 0) {
+
+                // PRIMERO: Eliminar el registro original
+                await window.supabaseClient
+                    .from('juguetes')
+                    .delete()
+                    .eq('id', jugueteActual.id);
+
+                // SEGUNDO: Crear nuevo registro en origen si hay cantidad restante
+                if (nuevaCantidadOrigen > 0) {
+                    const nuevoJugueteOrigen = {
+                        nombre: datosJugueteOriginal.nombre,
+                        codigo: datosJugueteOriginal.codigo,
+                        item: datosJugueteOriginal.item,
+                        cantidad: nuevaCantidadOrigen,
+                        foto_url: datosJugueteOriginal.foto_url,
+                        precio_min: datosJugueteOriginal.precio_min,
+                        precio_por_mayor: datosJugueteOriginal.precio_por_mayor,
+                        numero_bultos: datosJugueteOriginal.numero_bultos,
+                        cantidad_por_bulto: datosJugueteOriginal.cantidad_por_bulto,
+                        empresa_id: user.empresa_id
+                    };
+                    
+                    if (plan.tipo_origen === 'bodega') {
+                        nuevoJugueteOrigen.bodega_id = plan.origen_id;
+                        nuevoJugueteOrigen.tienda_id = null;
+                    } else {
+                        nuevoJugueteOrigen.tienda_id = plan.origen_id;
+                        nuevoJugueteOrigen.bodega_id = null;
+                    }
+                    
                     await window.supabaseClient
                         .from('juguetes')
-                        .delete()
-                        .eq('id', jugueteActual.id);
-                } else {
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .update({ cantidad: nuevaCantidadOrigen })
-                        .eq('id', jugueteActual.id);
+                        .insert(nuevoJugueteOrigen);
                 }
 
-                // Agregar en destino
+                // TERCERO: Crear o actualizar registro en destino
                 if (jugueteExistenteData && jugueteExistenteData.length > 0) {
+                    // Si ya existe un juguete con el mismo código en el destino, actualizar cantidad y completar datos faltantes
                     const jugueteExistente = jugueteExistenteData[0];
+                    const nuevaCantidadDestino = jugueteExistente.cantidad + item.cantidad;
+                    
+                    // Actualizar cantidad y completar datos faltantes (precios, item, bultos)
+                    const updateData = { 
+                        cantidad: nuevaCantidadDestino
+                    };
+                    
+                    // Completar campos si el existente no los tiene pero el origen sí
+                    if (!jugueteExistente.item && datosJugueteOriginal.item) {
+                        updateData.item = datosJugueteOriginal.item;
+                    }
+                    if (!jugueteExistente.precio_min && datosJugueteOriginal.precio_min) {
+                        updateData.precio_min = datosJugueteOriginal.precio_min;
+                    }
+                    if (!jugueteExistente.precio_por_mayor && datosJugueteOriginal.precio_por_mayor) {
+                        updateData.precio_por_mayor = datosJugueteOriginal.precio_por_mayor;
+                    }
+                    if (!jugueteExistente.numero_bultos && datosJugueteOriginal.numero_bultos) {
+                        updateData.numero_bultos = datosJugueteOriginal.numero_bultos;
+                    }
+                    if (!jugueteExistente.cantidad_por_bulto && datosJugueteOriginal.cantidad_por_bulto) {
+                        updateData.cantidad_por_bulto = datosJugueteOriginal.cantidad_por_bulto;
+                    }
+                    if (!jugueteExistente.foto_url && datosJugueteOriginal.foto_url) {
+                        updateData.foto_url = datosJugueteOriginal.foto_url;
+                    }
+                    
                     await window.supabaseClient
                         .from('juguetes')
-                        .update({ cantidad: jugueteExistente.cantidad + item.cantidad })
+                        .update(updateData)
                         .eq('id', jugueteExistente.id);
                 } else {
+                    // Si no existe, crear un nuevo registro en el destino con todos los datos
                     const nuevoJuguete = {
-                        nombre: jugueteActual.nombre,
-                        codigo: jugueteActual.codigo,
+                        nombre: datosJugueteOriginal.nombre,
+                        codigo: datosJugueteOriginal.codigo,
+                        item: datosJugueteOriginal.item,
                         cantidad: item.cantidad,
-                        foto_url: jugueteActual.foto_url,
+                        foto_url: datosJugueteOriginal.foto_url,
+                        precio_min: datosJugueteOriginal.precio_min,
+                        precio_por_mayor: datosJugueteOriginal.precio_por_mayor,
+                        numero_bultos: datosJugueteOriginal.numero_bultos,
+                        cantidad_por_bulto: datosJugueteOriginal.cantidad_por_bulto,
                         empresa_id: user.empresa_id
                     };
                     
@@ -4668,6 +4736,18 @@ function initAbastecer() {
                     .eq(campoDestino, destinoId)
                     .limit(1);
 
+                // Guardar información completa del juguete original para heredar todos los datos
+                const datosJugueteOriginal = {
+                    nombre: jugueteActual.nombre,
+                    codigo: jugueteActual.codigo,
+                    item: jugueteActual.item || null,
+                    foto_url: jugueteActual.foto_url || null,
+                    precio_min: jugueteActual.precio_min || null,
+                    precio_por_mayor: jugueteActual.precio_por_mayor || null,
+                    numero_bultos: jugueteActual.numero_bultos || null,
+                    cantidad_por_bulto: jugueteActual.cantidad_por_bulto || null
+                };
+
                 // Guardar información para deshacer
                 const movimientoDetalle = {
                     juguete_id_origen: juguete.id,
@@ -4682,39 +4762,84 @@ function initAbastecer() {
                     juguete_existia_en_destino: jugueteExistenteData && jugueteExistenteData.length > 0,
                     juguete_id_destino: jugueteExistenteData && jugueteExistenteData.length > 0 ? jugueteExistenteData[0].id : null,
                     cantidad_destino_original: jugueteExistenteData && jugueteExistenteData.length > 0 ? jugueteExistenteData[0].cantidad : 0,
-                    juguete_eliminado_origen: false,
+                    juguete_eliminado_origen: true, // Siempre eliminamos el original
                     juguete_creado_destino: false,
-                    foto_url: jugueteActual.foto_url || null
+                    juguete_id_origen_creado: null, // ID del nuevo registro creado en origen
+                    datos_completos: datosJugueteOriginal // Guardar todos los datos para recrear
                 };
 
-                // PRIMERO: Reducir cantidad en origen (o eliminar si llega a 0)
+                // Calcular cantidad restante en origen
                 const nuevaCantidadOrigen = jugueteActual.cantidad - juguete.cantidad;
-                
-                if (nuevaCantidadOrigen <= 0) {
-                    // Si la cantidad llega a 0 o menos, eliminar el registro del origen
-                    movimientoDetalle.juguete_eliminado_origen = true;
-                    await window.supabaseClient
+
+                // PRIMERO: Eliminar el registro original
+                await window.supabaseClient
+                    .from('juguetes')
+                    .delete()
+                    .eq('id', juguete.id);
+
+                // SEGUNDO: Crear nuevo registro en origen si hay cantidad restante
+                if (nuevaCantidadOrigen > 0) {
+                    const nuevoJugueteOrigen = {
+                        nombre: datosJugueteOriginal.nombre,
+                        codigo: datosJugueteOriginal.codigo,
+                        item: datosJugueteOriginal.item,
+                        cantidad: nuevaCantidadOrigen,
+                        foto_url: datosJugueteOriginal.foto_url,
+                        precio_min: datosJugueteOriginal.precio_min,
+                        precio_por_mayor: datosJugueteOriginal.precio_por_mayor,
+                        numero_bultos: datosJugueteOriginal.numero_bultos,
+                        cantidad_por_bulto: datosJugueteOriginal.cantidad_por_bulto,
+                        empresa_id: user.empresa_id
+                    };
+                    
+                    if (origenTipoVal === 'bodega') {
+                        nuevoJugueteOrigen.bodega_id = origenId;
+                        nuevoJugueteOrigen.tienda_id = null;
+                    } else {
+                        nuevoJugueteOrigen.tienda_id = origenId;
+                        nuevoJugueteOrigen.bodega_id = null;
+                    }
+                    
+                    const { data: nuevoJugueteOrigenInsertado } = await window.supabaseClient
                         .from('juguetes')
-                        .delete()
-                        .eq('id', juguete.id);
-                } else {
-                    // Actualizar cantidad en origen
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .update({ cantidad: nuevaCantidadOrigen })
-                        .eq('id', juguete.id);
+                        .insert(nuevoJugueteOrigen)
+                        .select()
+                        .single();
+                    
+                    if (nuevoJugueteOrigenInsertado) {
+                        movimientoDetalle.juguete_id_origen_creado = nuevoJugueteOrigenInsertado.id;
+                    }
                 }
 
-                // SEGUNDO: Aumentar cantidad en destino (o crear nuevo registro si no existe)
+                // TERCERO: Crear o actualizar registro en destino
                 if (jugueteExistenteData && jugueteExistenteData.length > 0) {
-                    // Si ya existe un juguete con el mismo código en el destino, sumar la cantidad
+                    // Si ya existe un juguete con el mismo código en el destino, actualizar cantidad y completar datos faltantes
                     const jugueteExistente = jugueteExistenteData[0];
                     const nuevaCantidadDestino = jugueteExistente.cantidad + juguete.cantidad;
                     
-                    // Actualizar cantidad y ITEM si el existente no tiene ITEM pero el origen sí
-                    const updateData = { cantidad: nuevaCantidadDestino };
-                    if (!jugueteExistente.item && jugueteActual.item) {
-                        updateData.item = jugueteActual.item;
+                    // Actualizar cantidad y completar datos faltantes (precios, item, bultos)
+                    const updateData = { 
+                        cantidad: nuevaCantidadDestino
+                    };
+                    
+                    // Completar campos si el existente no los tiene pero el origen sí
+                    if (!jugueteExistente.item && datosJugueteOriginal.item) {
+                        updateData.item = datosJugueteOriginal.item;
+                    }
+                    if (!jugueteExistente.precio_min && datosJugueteOriginal.precio_min) {
+                        updateData.precio_min = datosJugueteOriginal.precio_min;
+                    }
+                    if (!jugueteExistente.precio_por_mayor && datosJugueteOriginal.precio_por_mayor) {
+                        updateData.precio_por_mayor = datosJugueteOriginal.precio_por_mayor;
+                    }
+                    if (!jugueteExistente.numero_bultos && datosJugueteOriginal.numero_bultos) {
+                        updateData.numero_bultos = datosJugueteOriginal.numero_bultos;
+                    }
+                    if (!jugueteExistente.cantidad_por_bulto && datosJugueteOriginal.cantidad_por_bulto) {
+                        updateData.cantidad_por_bulto = datosJugueteOriginal.cantidad_por_bulto;
+                    }
+                    if (!jugueteExistente.foto_url && datosJugueteOriginal.foto_url) {
+                        updateData.foto_url = datosJugueteOriginal.foto_url;
                     }
                     
                     await window.supabaseClient
@@ -4722,15 +4847,19 @@ function initAbastecer() {
                         .update(updateData)
                         .eq('id', jugueteExistente.id);
                 } else {
-                    // Si no existe, crear un nuevo registro en el destino
+                    // Si no existe, crear un nuevo registro en el destino con todos los datos
                     movimientoDetalle.juguete_creado_destino = true;
                     const nuevoJugueteData = {
-                        nombre: jugueteActual.nombre,
-                        codigo: jugueteActual.codigo,
-                        item: jugueteActual.item || null,
+                        nombre: datosJugueteOriginal.nombre,
+                        codigo: datosJugueteOriginal.codigo,
+                        item: datosJugueteOriginal.item,
                         cantidad: juguete.cantidad,
-                        empresa_id: user.empresa_id,
-                        foto_url: jugueteActual.foto_url || null
+                        foto_url: datosJugueteOriginal.foto_url,
+                        precio_min: datosJugueteOriginal.precio_min,
+                        precio_por_mayor: datosJugueteOriginal.precio_por_mayor,
+                        numero_bultos: datosJugueteOriginal.numero_bultos,
+                        cantidad_por_bulto: datosJugueteOriginal.cantidad_por_bulto,
+                        empresa_id: user.empresa_id
                     };
                     
                     if (destinoTipoVal === 'bodega') {
@@ -4890,34 +5019,12 @@ async function deshacerUltimoMovimientoAbastecer() {
         for (let i = ultimoMovimientoAbastecer.movimientos.length - 1; i >= 0; i--) {
             const movimiento = ultimoMovimientoAbastecer.movimientos[i];
             
-            // 1. Restaurar origen
-            if (movimiento.juguete_eliminado_origen) {
-                // Si se eliminó el registro, recrearlo
-                const nuevoJugueteOrigen = {
-                    nombre: movimiento.juguete_nombre,
-                    codigo: movimiento.juguete_codigo,
-                    cantidad: movimiento.cantidad_origen_original,
-                    empresa_id: user.empresa_id,
-                    foto_url: movimiento.foto_url
-                };
-                
-                if (movimiento.origen_tipo === 'bodega') {
-                    nuevoJugueteOrigen.bodega_id = movimiento.origen_id;
-                    nuevoJugueteOrigen.tienda_id = null;
-                } else {
-                    nuevoJugueteOrigen.tienda_id = movimiento.origen_id;
-                    nuevoJugueteOrigen.bodega_id = null;
-                }
-                
+            // 1. Eliminar registros creados en origen (si existe)
+            if (movimiento.juguete_id_origen_creado) {
                 await window.supabaseClient
                     .from('juguetes')
-                    .insert(nuevoJugueteOrigen);
-            } else {
-                // Si solo se actualizó la cantidad, restaurarla
-                await window.supabaseClient
-                    .from('juguetes')
-                    .update({ cantidad: movimiento.cantidad_origen_original })
-                    .eq('id', movimiento.juguete_id_origen);
+                    .delete()
+                    .eq('id', movimiento.juguete_id_origen_creado);
             }
             
             // 2. Revertir destino
@@ -4939,7 +5046,45 @@ async function deshacerUltimoMovimientoAbastecer() {
                 }
             }
             
-            // 3. Eliminar registro de movimiento de auditoría
+            // 3. Recrear el registro original con todos sus datos
+            // Usar datos_completos si está disponible, sino usar los campos individuales guardados
+            const datosCompletos = movimiento.datos_completos || {
+                nombre: movimiento.juguete_nombre,
+                codigo: movimiento.juguete_codigo,
+                item: null,
+                foto_url: movimiento.foto_url,
+                precio_min: null,
+                precio_por_mayor: null,
+                numero_bultos: null,
+                cantidad_por_bulto: null
+            };
+            
+            const jugueteOriginal = {
+                nombre: datosCompletos.nombre,
+                codigo: datosCompletos.codigo,
+                item: datosCompletos.item || null,
+                cantidad: movimiento.cantidad_origen_original,
+                foto_url: datosCompletos.foto_url || null,
+                precio_min: datosCompletos.precio_min || null,
+                precio_por_mayor: datosCompletos.precio_por_mayor || null,
+                numero_bultos: datosCompletos.numero_bultos || null,
+                cantidad_por_bulto: datosCompletos.cantidad_por_bulto || null,
+                empresa_id: user.empresa_id
+            };
+            
+            if (movimiento.origen_tipo === 'bodega') {
+                jugueteOriginal.bodega_id = movimiento.origen_id;
+                jugueteOriginal.tienda_id = null;
+            } else {
+                jugueteOriginal.tienda_id = movimiento.origen_id;
+                jugueteOriginal.bodega_id = null;
+            }
+            
+            await window.supabaseClient
+                .from('juguetes')
+                .insert(jugueteOriginal);
+            
+            // 4. Eliminar registro de movimiento de auditoría
             if (movimiento.movimiento_id) {
                 await window.supabaseClient
                     .from('movimientos')
