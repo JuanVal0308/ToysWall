@@ -24,3 +24,4 @@ CREATE INDEX IF NOT EXISTS idx_juguetes_cantidad_por_bulto ON juguetes(cantidad_
 
 
 
+

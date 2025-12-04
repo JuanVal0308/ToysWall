@@ -61,3 +61,4 @@ CREATE POLICY "pagos_delete_policy" ON pagos
 -- actualizadas para funcionar con autenticación personalizada.
 -- ============================================
 
+
