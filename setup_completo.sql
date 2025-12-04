@@ -711,83 +711,45 @@ CREATE POLICY "planes_movimiento_delete_policy"
 DROP POLICY IF EXISTS "clientes_select_policy" ON clientes;
 CREATE POLICY "clientes_select_policy" ON clientes
     FOR SELECT
-    USING (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
+    USING (true);
 
 DROP POLICY IF EXISTS "clientes_insert_policy" ON clientes;
 CREATE POLICY "clientes_insert_policy" ON clientes
     FOR INSERT
-    WITH CHECK (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
+    WITH CHECK (true);
 
 DROP POLICY IF EXISTS "clientes_update_policy" ON clientes;
 CREATE POLICY "clientes_update_policy" ON clientes
     FOR UPDATE
-    USING (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
+    USING (true)
+    WITH CHECK (true);
 
 DROP POLICY IF EXISTS "clientes_delete_policy" ON clientes;
 CREATE POLICY "clientes_delete_policy" ON clientes
     FOR DELETE
-    USING (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
+    USING (true);
 
 -- Políticas RLS para pagos
 DROP POLICY IF EXISTS "pagos_select_policy" ON pagos;
 CREATE POLICY "pagos_select_policy" ON pagos
     FOR SELECT
-    USING (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
+    USING (true);
 
 DROP POLICY IF EXISTS "pagos_insert_policy" ON pagos;
 CREATE POLICY "pagos_insert_policy" ON pagos
     FOR INSERT
-    WITH CHECK (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
+    WITH CHECK (true);
 
 DROP POLICY IF EXISTS "pagos_update_policy" ON pagos;
 CREATE POLICY "pagos_update_policy" ON pagos
     FOR UPDATE
-    USING (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
+    USING (true)
+    WITH CHECK (true);
 
 DROP POLICY IF EXISTS "pagos_delete_policy" ON pagos;
 CREATE POLICY "pagos_delete_policy" ON pagos
     FOR DELETE
-    USING (
-        empresa_id IN (
-            SELECT empresa_id FROM usuarios 
-            WHERE id = auth.uid()
-        )
-    );
+    USING (true);
 
 -- Habilitar RLS para logs_deshacer_ventas
 ALTER TABLE logs_deshacer_ventas ENABLE ROW LEVEL SECURITY;
@@ -806,6 +768,47 @@ CREATE POLICY "logs_deshacer_ventas_insert"
 -- ============================================
 -- 7. FUNCIONES AUXILIARES
 -- ============================================
+
+-- Función para generar código de venta único
+CREATE OR REPLACE FUNCTION generar_codigo_venta()
+RETURNS TEXT AS $$
+DECLARE
+    nuevo_codigo TEXT;
+    fecha_actual TEXT;
+    contador INTEGER;
+    ultimo_codigo TEXT;
+    partes TEXT[];
+BEGIN
+    -- Obtener fecha actual en formato YYYYMMDD
+    fecha_actual := TO_CHAR(CURRENT_DATE, 'YYYYMMDD');
+    
+    -- Buscar el último código de venta del día
+    SELECT codigo_venta
+    INTO ultimo_codigo
+    FROM ventas
+    WHERE codigo_venta LIKE 'VENT-' || fecha_actual || '-%'
+    ORDER BY codigo_venta DESC
+    LIMIT 1;
+    
+    -- Si existe un código del día, extraer el contador
+    IF ultimo_codigo IS NOT NULL THEN
+        -- Dividir por guiones: VENT-YYYYMMDD-XXX
+        partes := string_to_array(ultimo_codigo, '-');
+        IF array_length(partes, 1) >= 3 THEN
+            contador := CAST(partes[3] AS INTEGER) + 1;
+        ELSE
+            contador := 1;
+        END IF;
+    ELSE
+        contador := 1;
+    END IF;
+    
+    -- Generar código: VENT-YYYYMMDD-XXX
+    nuevo_codigo := 'VENT-' || fecha_actual || '-' || LPAD(contador::TEXT, 3, '0');
+    
+    RETURN nuevo_codigo;
+END;
+$$ LANGUAGE plpgsql;
 
 -- Función para actualizar updated_at automáticamente
 CREATE OR REPLACE FUNCTION update_updated_at_column()
