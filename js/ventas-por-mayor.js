@@ -17,6 +17,8 @@ function initVentaPorMayor() {
     const abonoInput = document.getElementById('ventaPorMayorAbono');
     const agregarItemBtn = document.getElementById('agregarItemPorMayorBtn');
     const agregarClienteBtn = document.getElementById('agregarClientePorMayorBtn');
+    const ubicacionTipoSelect = document.getElementById('ventaPorMayorUbicacionTipo');
+    const ubicacionSelect = document.getElementById('ventaPorMayorUbicacion');
     
     if (!form || !jugueteCodigoInput || !empleadoCodigoInput || !agregarItemBtn) {
         return; // Elementos no disponibles aún
@@ -35,15 +37,49 @@ function initVentaPorMayor() {
         abonoRow.style.display = 'none';
     }
 
+    // Cargar ubicaciones cuando se selecciona el tipo
+    if (ubicacionTipoSelect && ubicacionSelect) {
+        ubicacionTipoSelect.addEventListener('change', async function() {
+            const tipo = this.value;
+            if (tipo && typeof loadUbicacionesPorTipo === 'function') {
+                await loadUbicacionesPorTipo(tipo, ubicacionSelect);
+            } else {
+                ubicacionSelect.innerHTML = '<option value="">Primero selecciona el tipo</option>';
+            }
+            // Limpiar información del juguete cuando cambia la ubicación
+            const jugueteInfo = document.getElementById('juguetePorMayorInfo');
+            if (jugueteInfo) {
+                jugueteInfo.style.display = 'none';
+            }
+        });
+    }
+
     // Buscar juguete por código
     jugueteCodigoInput.addEventListener('blur', async function() {
         const codigo = this.value.trim();
         if (!codigo) return;
 
+        // Verificar que se haya seleccionado ubicación
+        const ubicacionTipo = ubicacionTipoSelect ? ubicacionTipoSelect.value : '';
+        const ubicacionId = ubicacionSelect ? ubicacionSelect.value : '';
+        
+        if (!ubicacionTipo || !ubicacionId) {
+            const jugueteInfo = document.getElementById('juguetePorMayorInfo');
+            if (jugueteInfo) {
+                jugueteInfo.innerHTML = `
+                    <div class="info-box error">
+                        Por favor, selecciona primero el tipo de ubicación y la ubicación específica
+                    </div>
+                `;
+                jugueteInfo.style.display = 'block';
+            }
+            return;
+        }
+
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
-            // Buscar TODOS los juguetes con ese código
-            const { data: juguetes, error } = await window.supabaseClient
+            // Construir query base
+            let query = window.supabaseClient
                 .from('juguetes')
                 .select(`
                     *,
@@ -52,6 +88,15 @@ function initVentaPorMayor() {
                 `)
                 .eq('codigo', codigo)
                 .eq('empresa_id', user.empresa_id);
+            
+            // Filtrar por ubicación seleccionada
+            if (ubicacionTipo === 'tienda') {
+                query = query.eq('tienda_id', ubicacionId).is('bodega_id', null);
+            } else if (ubicacionTipo === 'bodega') {
+                query = query.eq('bodega_id', ubicacionId).is('tienda_id', null);
+            }
+            
+            const { data: juguetes, error } = await query;
 
             if (error) throw error;
 
@@ -68,25 +113,17 @@ function initVentaPorMayor() {
                     jugueteItemInput.value = item;
                 }
                 
-                // Calcular cantidad total
+                // Calcular cantidad total (solo en la ubicación seleccionada)
                 const cantidadTotal = juguetes.reduce((sum, j) => sum + (j.cantidad || 0), 0);
                 
-                // Obtener todas las ubicaciones donde está disponible
-                const ubicaciones = [];
-                juguetes.forEach(j => {
-                    const cantidad = j.cantidad || 0;
-                    if (cantidad > 0) {
-                        if (j.tienda_id && j.tiendas) {
-                            ubicaciones.push({ tipo: 'Tienda', nombre: j.tiendas.nombre, cantidad: cantidad });
-                        } else if (j.bodega_id && j.bodegas) {
-                            ubicaciones.push({ tipo: 'Bodega', nombre: j.bodegas.nombre, cantidad: cantidad });
-                        }
-                    }
-                });
-                
+                // Obtener información de la ubicación seleccionada
                 let ubicacionInfo = '';
-                if (ubicaciones.length > 0) {
-                    ubicacionInfo = `<div style="margin-top: 8px;"><strong>Ubicaciones disponibles:</strong><ul style="margin: 4px 0; padding-left: 20px;">${ubicaciones.map(u => `<li>${u.tipo}: ${u.nombre} (${u.cantidad} unidades)</li>`).join('')}</ul></div>`;
+                if (juguetes.length > 0) {
+                    const juguete = juguetes[0];
+                    const nombreUbicacion = ubicacionTipo === 'tienda' 
+                        ? (juguete.tiendas ? juguete.tiendas.nombre : 'Tienda seleccionada')
+                        : (juguete.bodegas ? juguete.bodegas.nombre : 'Bodega seleccionada');
+                    ubicacionInfo = `<div style="margin-top: 8px;"><strong>Ubicación:</strong> ${ubicacionTipo === 'tienda' ? 'Tienda' : 'Bodega'}: ${nombreUbicacion}</div>`;
                 }
                 
                 // Generar HTML de imagen
@@ -309,25 +346,36 @@ function initVentaPorMayor() {
         const codigoEmpleado = empleadoCodigoInput.value.trim();
         const cantidad = parseInt(document.getElementById('ventaPorMayorCantidad').value) || 1;
         const metodoPago = document.getElementById('ventaPorMayorMetodoPago').value;
+        const ubicacionTipo = ubicacionTipoSelect ? ubicacionTipoSelect.value : '';
+        const ubicacionId = ubicacionSelect ? ubicacionSelect.value : '';
 
-        if (!codigoJuguete || !codigoEmpleado || !metodoPago) {
-            showVentaPorMayorMessage('Por favor, completa código de juguete, código de empleado y método de pago para agregar el item', 'error');
+        if (!codigoJuguete || !codigoEmpleado || !metodoPago || !ubicacionTipo || !ubicacionId) {
+            showVentaPorMayorMessage('Por favor, completa todos los campos requeridos (juguete, empleado, método de pago y ubicación)', 'error');
             return;
         }
 
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
             
-            // Buscar TODOS los juguetes con ese código (pueden estar en múltiples ubicaciones)
-            const { data: juguetes, error: jugueteError } = await window.supabaseClient
+            // Buscar juguetes con ese código en la ubicación seleccionada
+            let query = window.supabaseClient
                 .from('juguetes')
                 .select('*')
                 .eq('codigo', codigoJuguete)
                 .eq('empresa_id', user.empresa_id);
+            
+            // Filtrar por ubicación seleccionada
+            if (ubicacionTipo === 'tienda') {
+                query = query.eq('tienda_id', ubicacionId).is('bodega_id', null);
+            } else if (ubicacionTipo === 'bodega') {
+                query = query.eq('bodega_id', ubicacionId).is('tienda_id', null);
+            }
+            
+            const { data: juguetes, error: jugueteError } = await query;
 
             if (jugueteError) throw jugueteError;
             if (!juguetes || juguetes.length === 0) {
-                showVentaPorMayorMessage('Juguete no encontrado', 'error');
+                showVentaPorMayorMessage('Juguete no encontrado en la ubicación seleccionada', 'error');
                 return;
             }
 
@@ -356,16 +404,19 @@ function initVentaPorMayor() {
             const empleado = empleados[0];
             const precio = juguete.precio_por_mayor;
 
-            // Verificar cantidad disponible (suma de todas las ubicaciones)
+            // Verificar cantidad disponible en la ubicación seleccionada
             const cantidadTotal = juguetes.reduce((sum, j) => sum + (j.cantidad || 0), 0);
             if (cantidad > cantidadTotal) {
-                showVentaPorMayorMessage(`Cantidad insuficiente. Disponible: ${cantidadTotal}`, 'error');
+                showVentaPorMayorMessage(`Cantidad insuficiente en la ubicación seleccionada. Disponible: ${cantidadTotal}`, 'error');
                 return;
             }
 
-            // Agregar item (guardamos el código para poder buscar todos los juguetes al procesar)
+            // Obtener nombre de la ubicación desde el select
+            const ubicacionNombre = ubicacionSelect ? ubicacionSelect.options[ubicacionSelect.selectedIndex]?.textContent || '' : '';
+
+            // Agregar item (guardamos la información de ubicación)
             ventaPorMayorItems.push({
-                juguete_codigo: juguete.codigo, // Guardamos código para buscar todos los juguetes
+                juguete_codigo: juguete.codigo,
                 juguete_nombre: juguete.nombre,
                 juguete_item: juguete.item || null,
                 juguete_foto_url: juguete.foto_url || null,
@@ -374,7 +425,12 @@ function initVentaPorMayor() {
                 empleado_codigo: empleado.codigo,
                 cantidad: cantidad,
                 precio: precio,
-                metodo_pago: metodoPago
+                metodo_pago: metodoPago,
+                ubicacion_tipo: ubicacionTipo,
+                ubicacion_id: ubicacionId,
+                ubicacion_nombre: ubicacionNombre,
+                tienda_id: ubicacionTipo === 'tienda' ? ubicacionId : null,
+                bodega_id: ubicacionTipo === 'bodega' ? ubicacionId : null
             });
 
             // Actualizar lista de items en pantalla
@@ -425,122 +481,109 @@ function initVentaPorMayor() {
 
             // Registrar cada item
             for (const item of ventaPorMayorItems) {
-                // Buscar TODOS los juguetes con este código (pueden estar en múltiples ubicaciones)
-                const { data: juguetesDisponibles, error: juguetesError } = await window.supabaseClient
+                // Buscar el juguete específico en la ubicación seleccionada
+                let query = window.supabaseClient
                     .from('juguetes')
                     .select('id, cantidad, codigo, nombre, bodega_id, tienda_id')
                     .eq('codigo', item.juguete_codigo)
                     .eq('empresa_id', user.empresa_id)
-                    .gt('cantidad', 0); // Solo los que tienen cantidad > 0
+                    .gt('cantidad', 0);
+                
+                // Filtrar por la ubicación específica del item
+                if (item.ubicacion_tipo === 'tienda' && item.tienda_id) {
+                    query = query.eq('tienda_id', item.tienda_id).is('bodega_id', null);
+                } else if (item.ubicacion_tipo === 'bodega' && item.bodega_id) {
+                    query = query.eq('bodega_id', item.bodega_id).is('tienda_id', null);
+                } else {
+                    throw new Error(`Ubicación no válida para el item ${item.juguete_nombre}`);
+                }
+                
+                const { data: juguetesDisponibles, error: juguetesError } = await query;
 
                 if (juguetesError) throw juguetesError;
                 if (!juguetesDisponibles || juguetesDisponibles.length === 0) {
-                    throw new Error(`No hay juguetes disponibles con código ${item.juguete_codigo}`);
+                    throw new Error(`No hay juguetes disponibles con código ${item.juguete_codigo} en la ubicación seleccionada`);
                 }
 
-                // Ordenar: primero tiendas (tienda_id IS NOT NULL), luego bodegas, y por cantidad descendente
-                juguetesDisponibles.sort((a, b) => {
-                    // Priorizar tiendas sobre bodegas
-                    const aEsTienda = a.tienda_id !== null;
-                    const bEsTienda = b.tienda_id !== null;
-                    if (aEsTienda !== bEsTienda) {
-                        return bEsTienda ? 1 : -1; // Tiendas primero
-                    }
-                    // Si ambos son del mismo tipo, ordenar por cantidad descendente
-                    return (b.cantidad || 0) - (a.cantidad || 0);
-                });
-
-                // Distribuir la cantidad a descontar entre todas las ubicaciones disponibles
-                let cantidadRestante = item.cantidad;
+                // Debería haber solo un juguete en la ubicación seleccionada
+                const juguete = juguetesDisponibles[0];
+                const cantidadDisponible = juguete.cantidad || 0;
                 
-                for (const juguete of juguetesDisponibles) {
-                    if (cantidadRestante <= 0) break;
-
-                    const cantidadDisponible = juguete.cantidad || 0;
-                    const cantidadADescontar = Math.min(cantidadRestante, cantidadDisponible);
-                    
-                    if (cantidadADescontar > 0) {
-                        // Guardar información del juguete antes de modificar (para deshacer)
-                        const infoJugueteOriginal = {
-                            juguete_id: juguete.id,
-                            juguete_codigo: juguete.codigo,
-                            juguete_nombre: juguete.nombre,
-                            cantidad_original: juguete.cantidad,
-                            bodega_id: juguete.bodega_id,
-                            tienda_id: juguete.tienda_id
-                        };
-                        
-                        // Calcular abono proporcional para este item
-                        const totalItem = item.precio * cantidadADescontar;
-                        const totalVenta = ventaPorMayorItems.reduce((sum, i) => sum + (i.precio * i.cantidad), 0);
-                        const abonoProporcional = totalVenta > 0 ? (abono * totalItem / totalVenta) : 0;
-
-                        // Registrar venta para este juguete específico
-                        const { data: ventaInsertada, error: ventaError } = await window.supabaseClient
-                            .from('ventas')
-                            .insert({
-                                codigo_venta: codigoVenta,
-                                juguete_codigo: juguete.codigo,
-                                empleado_id: item.empleado_id,
-                                cantidad: cantidadADescontar,
-                                precio_venta: item.precio * cantidadADescontar, // Precio total para esta cantidad
-                                metodo_pago: item.metodo_pago,
-                                empresa_id: user.empresa_id,
-                                es_por_mayor: true, // Marcar como venta al por mayor
-                                cliente_id: clienteId || null,
-                                abono: abonoProporcional
-                            })
-                            .select()
-                            .single();
-
-                        if (ventaError) throw ventaError;
-                        
-                        // NO crear pagos automáticos aquí. El abono ya está guardado en el campo 'abono' de la venta.
-                        // Los pagos adicionales se crearán cuando el usuario los registre manualmente desde la interfaz de clientes.
-                        let pagoId = null;
-
-                        // Reducir cantidad del juguete
-                        const nuevaCantidad = Math.max(0, cantidadDisponible - cantidadADescontar);
-                        
-                        if (nuevaCantidad === 0) {
-                            // Si la cantidad llega a 0, eliminar el registro
-                            const { error: deleteError } = await window.supabaseClient
-                                .from('juguetes')
-                                .delete()
-                                .eq('id', juguete.id);
-                            if (deleteError) throw deleteError;
-                        } else {
-                            // Actualizar cantidad
-                            const { error: updateError } = await window.supabaseClient
-                                .from('juguetes')
-                                .update({ cantidad: nuevaCantidad })
-                                .eq('id', juguete.id);
-                            if (updateError) throw updateError;
-                        }
-                        
-                        // Guardar información de la venta registrada (para deshacer)
-                        ventasRegistradas.push({
-                            venta_id: ventaInsertada.id,
-                            codigo_venta: codigoVenta,
-                            juguete_info: infoJugueteOriginal,
-                            cantidad_vendida: cantidadADescontar,
-                            precio_venta: item.precio * cantidadADescontar,
-                            empleado_id: item.empleado_id,
-                            metodo_pago: item.metodo_pago,
-                            cliente_id: clienteId,
-                            abono: abonoProporcional,
-                            pago_id: pagoId,
-                            juguete_eliminado: nuevaCantidad === 0
-                        });
-
-                        cantidadRestante -= cantidadADescontar;
-                    }
+                if (item.cantidad > cantidadDisponible) {
+                    throw new Error(`Cantidad insuficiente en la ubicación seleccionada. Disponible: ${cantidadDisponible}, Solicitado: ${item.cantidad}`);
                 }
+                
+                // Guardar información del juguete antes de modificar (para deshacer)
+                const infoJugueteOriginal = {
+                    juguete_id: juguete.id,
+                    juguete_codigo: juguete.codigo,
+                    juguete_nombre: juguete.nombre,
+                    cantidad_original: juguete.cantidad,
+                    bodega_id: juguete.bodega_id,
+                    tienda_id: juguete.tienda_id
+                };
+                
+                // Calcular abono proporcional para este item
+                const totalItem = item.precio * item.cantidad;
+                const totalVenta = ventaPorMayorItems.reduce((sum, i) => sum + (i.precio * i.cantidad), 0);
+                const abonoProporcional = totalVenta > 0 ? (abono * totalItem / totalVenta) : 0;
 
-                // Verificar que se haya descontado toda la cantidad
-                if (cantidadRestante > 0) {
-                    throw new Error(`No se pudo descontar toda la cantidad solicitada. Faltan ${cantidadRestante} unidades del juguete ${item.juguete_nombre}`);
+                // Registrar venta
+                const { data: ventaInsertada, error: ventaError } = await window.supabaseClient
+                    .from('ventas')
+                    .insert({
+                        codigo_venta: codigoVenta,
+                        juguete_codigo: juguete.codigo,
+                        empleado_id: item.empleado_id,
+                        cantidad: item.cantidad,
+                        precio_venta: item.precio * item.cantidad,
+                        metodo_pago: item.metodo_pago,
+                        empresa_id: user.empresa_id,
+                        es_por_mayor: true,
+                        cliente_id: clienteId || null,
+                        abono: abonoProporcional
+                    })
+                    .select()
+                    .single();
+
+                if (ventaError) throw ventaError;
+                
+                // NO crear pagos automáticos aquí. El abono ya está guardado en el campo 'abono' de la venta.
+                let pagoId = null;
+
+                // Reducir cantidad del juguete
+                const nuevaCantidad = Math.max(0, cantidadDisponible - item.cantidad);
+                
+                if (nuevaCantidad === 0) {
+                    // Si la cantidad llega a 0, eliminar el registro
+                    const { error: deleteError } = await window.supabaseClient
+                        .from('juguetes')
+                        .delete()
+                        .eq('id', juguete.id);
+                    if (deleteError) throw deleteError;
+                } else {
+                    // Actualizar cantidad
+                    const { error: updateError } = await window.supabaseClient
+                        .from('juguetes')
+                        .update({ cantidad: nuevaCantidad })
+                        .eq('id', juguete.id);
+                    if (updateError) throw updateError;
                 }
+                
+                // Guardar información de la venta registrada (para deshacer)
+                ventasRegistradas.push({
+                    venta_id: ventaInsertada.id,
+                    codigo_venta: codigoVenta,
+                    juguete_info: infoJugueteOriginal,
+                    cantidad_vendida: item.cantidad,
+                    precio_venta: item.precio * item.cantidad,
+                    empleado_id: item.empleado_id,
+                    metodo_pago: item.metodo_pago,
+                    cliente_id: clienteId,
+                    abono: abonoProporcional,
+                    pago_id: pagoId,
+                    juguete_eliminado: nuevaCantidad === 0
+                });
             }
 
             // Guardar información de la última venta al por mayor para poder deshacerla
@@ -597,95 +640,82 @@ function initVentaPorMayor() {
 
                 // Registrar cada item
                 for (const item of ventaPorMayorItems) {
-                    // Buscar TODOS los juguetes con este código (pueden estar en múltiples ubicaciones)
-                    const { data: juguetesDisponibles, error: juguetesError } = await window.supabaseClient
+                    // Buscar el juguete específico en la ubicación seleccionada
+                    let query = window.supabaseClient
                         .from('juguetes')
-                        .select('id, cantidad, bodega_id, tienda_id')
+                        .select('id, cantidad, codigo, nombre, bodega_id, tienda_id')
                         .eq('codigo', item.juguete_codigo)
                         .eq('empresa_id', user.empresa_id)
-                        .gt('cantidad', 0); // Solo los que tienen cantidad > 0
+                        .gt('cantidad', 0);
+                    
+                    // Filtrar por la ubicación específica del item
+                    if (item.ubicacion_tipo === 'tienda' && item.tienda_id) {
+                        query = query.eq('tienda_id', item.tienda_id).is('bodega_id', null);
+                    } else if (item.ubicacion_tipo === 'bodega' && item.bodega_id) {
+                        query = query.eq('bodega_id', item.bodega_id).is('tienda_id', null);
+                    } else {
+                        throw new Error(`Ubicación no válida para el item ${item.juguete_nombre}`);
+                    }
+                    
+                    const { data: juguetesDisponibles, error: juguetesError } = await query;
 
                     if (juguetesError) throw juguetesError;
                     if (!juguetesDisponibles || juguetesDisponibles.length === 0) {
-                        throw new Error(`No hay juguetes disponibles con código ${item.juguete_codigo}`);
+                        throw new Error(`No hay juguetes disponibles con código ${item.juguete_codigo} en la ubicación seleccionada`);
                     }
 
-                    // Ordenar: primero tiendas (tienda_id IS NOT NULL), luego bodegas, y por cantidad descendente
-                    juguetesDisponibles.sort((a, b) => {
-                        // Priorizar tiendas sobre bodegas
-                        const aEsTienda = a.tienda_id !== null;
-                        const bEsTienda = b.tienda_id !== null;
-                        if (aEsTienda !== bEsTienda) {
-                            return bEsTienda ? 1 : -1; // Tiendas primero
-                        }
-                        // Si ambos son del mismo tipo, ordenar por cantidad descendente
-                        return (b.cantidad || 0) - (a.cantidad || 0);
-                    });
-
-                    // Distribuir la cantidad a descontar entre todas las ubicaciones disponibles
-                    let cantidadRestante = item.cantidad;
+                    // Debería haber solo un juguete en la ubicación seleccionada
+                    const juguete = juguetesDisponibles[0];
+                    const cantidadDisponible = juguete.cantidad || 0;
                     
-                    for (const juguete of juguetesDisponibles) {
-                        if (cantidadRestante <= 0) break;
-
-                        const cantidadDisponible = juguete.cantidad || 0;
-                        const cantidadADescontar = Math.min(cantidadRestante, cantidadDisponible);
-                        
-                        if (cantidadADescontar > 0) {
-                            // Calcular abono proporcional para este item
-                            const totalItem = item.precio * cantidadADescontar;
-                            const totalVenta = ventaPorMayorItems.reduce((sum, i) => sum + (i.precio * i.cantidad), 0);
-                            const abonoProporcional = totalVenta > 0 ? (abono * totalItem / totalVenta) : 0;
-
-                            // Registrar venta para este juguete específico
-                            const { data: ventaInsertada, error: ventaError } = await window.supabaseClient
-                                .from('ventas')
-                                .insert({
-                                    codigo_venta: codigoVenta,
-                                    juguete_codigo: juguete.codigo,
-                                    empleado_id: item.empleado_id,
-                                    cantidad: cantidadADescontar,
-                                    precio_venta: item.precio * cantidadADescontar, // Precio total para esta cantidad
-                                    metodo_pago: item.metodo_pago,
-                                    empresa_id: user.empresa_id,
-                                    es_por_mayor: true, // Marcar como venta al por mayor
-                                    cliente_id: clienteId || null,
-                                    abono: abonoProporcional
-                                })
-                                .select()
-                                .single();
-
-                            if (ventaError) throw ventaError;
-
-                            // NO crear pagos automáticos aquí. El abono ya está guardado en el campo 'abono' de la venta.
-                            // Los pagos adicionales se crearán cuando el usuario los registre manualmente desde la interfaz de clientes.
-
-                            // Reducir cantidad del juguete
-                            const nuevaCantidad = Math.max(0, cantidadDisponible - cantidadADescontar);
-                            
-                            if (nuevaCantidad === 0) {
-                                // Si la cantidad llega a 0, eliminar el registro
-                                const { error: deleteError } = await window.supabaseClient
-                                    .from('juguetes')
-                                    .delete()
-                                    .eq('id', juguete.id);
-                                if (deleteError) throw deleteError;
-                            } else {
-                                // Actualizar cantidad
-                                const { error: updateError } = await window.supabaseClient
-                                    .from('juguetes')
-                                    .update({ cantidad: nuevaCantidad })
-                                    .eq('id', juguete.id);
-                                if (updateError) throw updateError;
-                            }
-
-                            cantidadRestante -= cantidadADescontar;
-                        }
+                    if (item.cantidad > cantidadDisponible) {
+                        throw new Error(`Cantidad insuficiente en la ubicación seleccionada. Disponible: ${cantidadDisponible}, Solicitado: ${item.cantidad}`);
                     }
+                    
+                    // Calcular abono proporcional para este item
+                    const totalItem = item.precio * item.cantidad;
+                    const totalVenta = ventaPorMayorItems.reduce((sum, i) => sum + (i.precio * i.cantidad), 0);
+                    const abonoProporcional = totalVenta > 0 ? (abono * totalItem / totalVenta) : 0;
 
-                    // Verificar que se haya descontado toda la cantidad
-                    if (cantidadRestante > 0) {
-                        throw new Error(`No se pudo descontar toda la cantidad solicitada. Faltan ${cantidadRestante} unidades del juguete ${item.juguete_nombre}`);
+                    // Registrar venta
+                    const { data: ventaInsertada, error: ventaError } = await window.supabaseClient
+                        .from('ventas')
+                        .insert({
+                            codigo_venta: codigoVenta,
+                            juguete_codigo: juguete.codigo,
+                            empleado_id: item.empleado_id,
+                            cantidad: item.cantidad,
+                            precio_venta: item.precio * item.cantidad,
+                            metodo_pago: item.metodo_pago,
+                            empresa_id: user.empresa_id,
+                            es_por_mayor: true,
+                            cliente_id: clienteId || null,
+                            abono: abonoProporcional
+                        })
+                        .select()
+                        .single();
+
+                    if (ventaError) throw ventaError;
+
+                    // NO crear pagos automáticos aquí. El abono ya está guardado en el campo 'abono' de la venta.
+
+                    // Reducir cantidad del juguete
+                    const nuevaCantidad = Math.max(0, cantidadDisponible - item.cantidad);
+                    
+                    if (nuevaCantidad === 0) {
+                        // Si la cantidad llega a 0, eliminar el registro
+                        const { error: deleteError } = await window.supabaseClient
+                            .from('juguetes')
+                            .delete()
+                            .eq('id', juguete.id);
+                        if (deleteError) throw deleteError;
+                    } else {
+                        // Actualizar cantidad
+                        const { error: updateError } = await window.supabaseClient
+                            .from('juguetes')
+                            .update({ cantidad: nuevaCantidad })
+                            .eq('id', juguete.id);
+                        if (updateError) throw updateError;
                     }
                 }
 
@@ -754,12 +784,16 @@ function updateVentaPorMayorItemsList() {
             </div>`;
         }
 
+        const ubicacionTexto = item.ubicacion_nombre 
+            ? `${item.ubicacion_tipo === 'tienda' ? 'Tienda' : 'Bodega'}: ${item.ubicacion_nombre}`
+            : (item.ubicacion_tipo ? `${item.ubicacion_tipo === 'tienda' ? 'Tienda' : 'Bodega'}` : '');
+        
         return `
         <div class="venta-item-card" style="display: flex; align-items: center; gap: 12px;">
             ${imagenHTML}
             <div class="item-info" style="flex: 1;">
                 <strong>${item.juguete_nombre}</strong> (${item.juguete_codigo})${itemCode}<br>
-                <small>Precio al por Mayor: $${item.precio.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} | Cantidad: ${cantidad} | Empleado: ${item.empleado_nombre} | Método: ${item.metodo_pago}</small>
+                <small>Precio al por Mayor: $${item.precio.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} | Cantidad: ${cantidad} | Empleado: ${item.empleado_nombre} | Método: ${item.metodo_pago}${ubicacionTexto ? ` | ${ubicacionTexto}` : ''}</small>
             </div>
             <div class="item-actions">
                 <span class="item-precio">$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
