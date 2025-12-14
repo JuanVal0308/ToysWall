@@ -273,10 +273,15 @@ function initRegistrarVenta() {
     registrarVentaInitialized = true;
     ventaItems = []; // Reiniciar items
 
+    // Verificar tipo de usuario para restringir edición de precio
+    const user = JSON.parse(sessionStorage.getItem('user'));
+    const isAdmin = user.tipo_usuario_id === 1 || user.tipo_usuario_id === 2;
+    const isEmpleado = user.tipo_usuario_id === 3;
+
     // Configurar formato de precio con separadores de miles
     const ventaPrecioInput = document.getElementById('ventaPrecio');
     if (ventaPrecioInput) {
-        // Guardar el valor numérico real en un atributo data
+        // Configurar formato de precio para todos los usuarios
         ventaPrecioInput.addEventListener('input', function(e) {
             let value = e.target.value;
             // Remover todos los caracteres que no sean números
@@ -332,7 +337,9 @@ function initRegistrarVenta() {
     // Buscar juguete por código
     jugueteCodigoInput.addEventListener('blur', async function() {
         const codigo = this.value.trim();
-        if (!codigo) return;
+        if (!codigo) {
+            return;
+        }
 
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
@@ -651,23 +658,31 @@ function initRegistrarVenta() {
                 return;
             }
 
-            // Validar que el precio sea mayor o igual al precio mínimo
+            // Validar precio según tipo de usuario
             if (juguete.precio_min !== null && juguete.precio_min !== undefined) {
-                if (precio < juguete.precio_min) {
-                    const precioMinFormateado = juguete.precio_min.toLocaleString('es-CO', { 
-                        minimumFractionDigits: 0, 
-                        maximumFractionDigits: 0 
-                    });
-                    const precioIngresadoFormateado = precio.toLocaleString('es-CO', { 
-                        minimumFractionDigits: 0, 
-                        maximumFractionDigits: 0 
-                    });
-                    showVentaMessage(
-                        `El precio debe ser mayor o igual a $${precioMinFormateado}. Precio ingresado: $${precioIngresadoFormateado}`, 
-                        'error'
-                    );
-                    return;
+                if (isEmpleado) {
+                    // Empleados solo pueden usar precio mayor o igual al precio mínimo
+                    if (precio < juguete.precio_min) {
+                        const precioMinFormateado = juguete.precio_min.toLocaleString('es-CO', { 
+                            minimumFractionDigits: 0, 
+                            maximumFractionDigits: 0 
+                        });
+                        const precioIngresadoFormateado = precio.toLocaleString('es-CO', { 
+                            minimumFractionDigits: 0, 
+                            maximumFractionDigits: 0 
+                        });
+                        showVentaMessage(
+                            `El precio debe ser mayor o igual al precio mínimo ($${precioMinFormateado}). Precio ingresado: $${precioIngresadoFormateado}`, 
+                            'error'
+                        );
+                        return;
+                    }
                 }
+                // Administradores pueden usar cualquier precio (mayor, igual o menor al mínimo) - sin validación
+            } else if (isEmpleado) {
+                // Si es empleado y no hay precio mínimo, no puede vender
+                showVentaMessage('Este juguete no tiene precio mínimo configurado. Contacta a un administrador.', 'error');
+                return;
             }
 
             // Agregar item
