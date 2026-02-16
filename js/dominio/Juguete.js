@@ -1,9 +1,8 @@
 /**
- * Juguete (UML: Toy).
- * Atributos: codigo, nombre, stock, precioBase, precioMayorista.
- * Métodos: aumentarStock(cant), disminuirStock(cant).
+ * Juguete (UML: Toy). Hereda de Producto.
+ * Constructor: Juguete(codigo, nombre, stock, precioBase, precioMayorista).
  */
-class Juguete {
+class Juguete extends Producto {
   /**
    * @param {string} codigo
    * @param {string} nombre
@@ -12,20 +11,7 @@ class Juguete {
    * @param {number} [precioMayorista]
    */
   constructor(codigo, nombre, stock, precioBase, precioMayorista = null) {
-    this.codigo = codigo;
-    this.nombre = nombre;
-    this.stock = stock;
-    this.precioBase = precioBase;
-    this.precioMayorista = precioMayorista;
-  }
-
-  aumentarStock(cant) {
-    this.stock += cant;
-  }
-
-  disminuirStock(cant) {
-    if (this.stock < cant) throw new Error('Stock insuficiente');
-    this.stock -= cant;
+    super(codigo, nombre, stock, precioBase, precioMayorista);
   }
 
   static fromRow(row) {

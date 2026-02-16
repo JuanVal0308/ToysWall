@@ -1,6 +1,6 @@
 /**
  * Plan de movimiento (UML: PlanMovimiento).
- * Atributos: id, origen, destino, estado, items (Juguete[]).
+ * Atributos: id, origen, destino, estado, items (Producto[] — Juguete u otros).
  * Métodos: aprobar().
  */
 class PlanMovimiento {
@@ -9,7 +9,7 @@ class PlanMovimiento {
    * @param {string} origen
    * @param {string} destino
    * @param {string} [estado]
-   * @param {Juguete[]|Object[]} [items]
+   * @param {Producto[]|Object[]} [items]
    */
   constructor(id, origen, destino, estado = 'pendiente', items = []) {
     this.id = id;
