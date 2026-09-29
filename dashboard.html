@@ -607,6 +607,16 @@
                     <!-- Filtros -->
                     <div class="inventario-filters" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
                         <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                                        <!-- Selector de ubicación -->
+                            <select 
+                                id="inventarioDetalleUbicacionFilter" 
+                                class="search-input"
+                                style="width: 250px; padding: 10px 15px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; cursor: pointer;"
+                            >
+                                <option value="">📦 Todas las ubicaciones</option>
+                                <option value="general">🏢 Inventario General</option>
+                            </select>
+                            
                                         <input 
                                             type="text" 
                                 id="inventarioDetalleSearch" 
@@ -2293,6 +2303,7 @@
     
     <!-- Arquitectura Clean - Capa de Presentación -->
     <script src="js/presentacion/controladores/ControladorInventario.js"></script>
+    <script src="js/presentacion/vistas/inventario-por-ubicacion.js"></script>
     
     <!-- Scripts legacy (usando arquitectura Clean internamente) -->
     <script src="js/email-config.js"></script>
