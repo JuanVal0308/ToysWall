@@ -2913,7 +2913,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         editarJugueteForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-                const jugueteId = document.getElementById('editarJugueteId').value;
+                const jugueteId = parseInt(document.getElementById('editarJugueteId').value);
                 const nombre = capitalizarPrimeraLetra(document.getElementById('editarJugueteNombre').value.trim());
                 const codigo = document.getElementById('editarJugueteCodigo').value.trim();
                 const cantidad = parseInt(document.getElementById('editarJugueteCantidad').value);
