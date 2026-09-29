@@ -2948,121 +2948,58 @@ document.addEventListener('DOMContentLoaded', async function() {
         try {
                     const user = JSON.parse(sessionStorage.getItem('user'));
                     
-                    // Verificar si el código ya existe en otro juguete
-                    const { data: jugueteExistente, error: checkError } = await window.supabaseClient
-                        .from('juguetes')
-                        .select('id, nombre')
-                        .eq('codigo', codigo)
-                        .eq('empresa_id', user.empresa_id)
-                        .neq('id', jugueteId)
-                        .limit(1);
-
-                    if (checkError) throw checkError;
+                    // Preparar datos de actualización
+                    const updateData = {
+                        nombre: nombre,
+                        codigo: codigo,
+                        cantidad: cantidad,
+                        precio_min: precioMin,
+                        precio_por_mayor: precioPorMayor
+                    };
                     
-                    if (jugueteExistente && jugueteExistente.length > 0) {
-                        errorMsg.textContent = `El código "${codigo}" ya está asignado a otro juguete (${jugueteExistente[0].nombre})`;
-                        errorMsg.style.display = 'block';
-                        return;
+                    if (fotoUrl !== null) {
+                        updateData.foto_url = fotoUrl || null;
                     }
                     
-                    // Obtener el juguete original para comparar
-                    const { data: jugueteOriginal, error: fetchError } = await window.supabaseClient
-                        .from('juguetes')
-                        .select('codigo, nombre')
-                        .eq('id', jugueteId)
-                        .single();
-        
-                    if (fetchError) throw fetchError;
-                    
-                    const codigoCambio = jugueteOriginal.codigo !== codigo;
-                    const nombreCambio = jugueteOriginal.nombre !== nombre;
-                    
-                    // Si cambió el código o nombre, actualizar todos los registros relacionados (código/nombre)
-                    if (codigoCambio || nombreCambio) {
-                        // Actualizar todos los registros con el mismo código y nombre original (solo código y nombre)
-                        const { error: updateAllError } = await window.supabaseClient
-                            .from('juguetes')
-                            .update({
-                                nombre: nombre,
-                                codigo: codigo
-                            })
-                            .eq('codigo', jugueteOriginal.codigo)
-                            .eq('nombre', jugueteOriginal.nombre)
-                            .eq('empresa_id', user.empresa_id);
-                        
-                        if (updateAllError) throw updateAllError;
-                        
-                        // Luego actualizar la cantidad, precios, foto_url y bultos del registro específico
-                        const updateData = { 
-                            cantidad: cantidad,
-                            precio_min: precioMin,
-                            precio_por_mayor: precioPorMayor
-                        };
-                        if (fotoUrl !== null) {
-                            updateData.foto_url = fotoUrl || null;
-                        }
-                        // Agregar campos de bultos si se proporcionan
-                        if (numeroBultos !== null && !isNaN(numeroBultos)) {
-                            updateData.numero_bultos = numeroBultos;
-                        } else {
-                            updateData.numero_bultos = null;
-                        }
-                        if (cantidadPorBulto !== null && !isNaN(cantidadPorBulto)) {
-                            updateData.cantidad_por_bulto = cantidadPorBulto;
-                        } else {
-                            updateData.cantidad_por_bulto = null;
-                        }
-                        const { error: updateCantidadError } = await window.supabaseClient
-                            .from('juguetes')
-                            .update(updateData)
-                            .eq('id', jugueteId);
-                        
-                        if (updateCantidadError) throw updateCantidadError;
+                    // Agregar campos de bultos si se proporcionan
+                    if (numeroBultos !== null && !isNaN(numeroBultos)) {
+                        updateData.numero_bultos = numeroBultos;
                     } else {
-                        // Si no cambió código/nombre, actualizar solo este registro con todos los campos
-                        const updateData = {
-                            nombre: nombre,
-                            precio_min: precioMin,
-                            precio_por_mayor: precioPorMayor,
-                            codigo: codigo,
-                            cantidad: cantidad
-                        };
-                        if (fotoUrl !== null) {
-                            updateData.foto_url = fotoUrl || null;
-                        }
-                        // Agregar campos de bultos si se proporcionan
-                        if (numeroBultos !== null && !isNaN(numeroBultos)) {
-                            updateData.numero_bultos = numeroBultos;
-                        } else {
-                            updateData.numero_bultos = null;
-                        }
-                        if (cantidadPorBulto !== null && !isNaN(cantidadPorBulto)) {
-                            updateData.cantidad_por_bulto = cantidadPorBulto;
-                        } else {
-                            updateData.cantidad_por_bulto = null;
-                        }
-                        const { error: updateError } = await window.supabaseClient
-                            .from('juguetes')
-                            .update(updateData)
-                            .eq('id', jugueteId);
-
-                        if (updateError) throw updateError;
+                        updateData.numero_bultos = null;
                     }
-
-                    // Asegurar que los precios se sincronicen en TODOS los registros de ese código (todas las ubicaciones) después de posibles cambios
-                    const { error: updatePreciosGlobalError } = await window.supabaseClient
-                        .from('juguetes')
-                        .update({
-                            precio_min: precioMin,
-                            precio_por_mayor: precioPorMayor
-                        })
-                        .eq('codigo', codigo)
-                        .eq('empresa_id', user.empresa_id);
                     
-                    if (updatePreciosGlobalError) throw updatePreciosGlobalError;
+                    if (cantidadPorBulto !== null && !isNaN(cantidadPorBulto)) {
+                        updateData.cantidad_por_bulto = cantidadPorBulto;
+                    } else {
+                        updateData.cantidad_por_bulto = null;
+                    }
                     
-                    successMsg.textContent = 'Juguete actualizado correctamente. Recargando...';
-                    successMsg.style.display = 'block';
+                    // Usar el controlador de la arquitectura Clean
+                    if (window.controladorInventario) {
+                        const resultado = await window.controladorInventario.actualizarJuguete(
+                            jugueteId,
+                            updateData,
+                            user.empresa_id
+                        );
+                        
+                        if (!resultado.exito) {
+                            errorMsg.textContent = resultado.mensaje;
+                            errorMsg.style.display = 'block';
+                            return;
+                        }
+                        
+                        successMsg.textContent = 'Juguete actualizado correctamente. Recargando...';
+                        successMsg.style.display = 'block';
+                    } else {
+                        // Fallback a implementación directa si el controlador no está disponible
+                        console.warn('Controlador no disponible, usando implementación legacy');
+                        
+                        const repositorio = new RepositorioJuguetesSupabase(window.supabaseClient);
+                        await repositorio.actualizar(jugueteId, updateData, user.empresa_id);
+                        
+                        successMsg.textContent = 'Juguete actualizado correctamente. Recargando...';
+                        successMsg.style.display = 'block';
+                    }
                     
                     // Recargar inventario completo desde la base de datos
                     await loadInventario();

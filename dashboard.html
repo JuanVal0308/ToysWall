@@ -2269,6 +2269,32 @@
         </div>
     </div>
 
+    <!-- Arquitectura Clean - Capa de Dominio -->
+    <script src="js/dominio/entidades/Juguete.js"></script>
+    <script src="js/dominio/entidades/Ubicacion.js"></script>
+    <script src="js/dominio/entidades/InventarioUbicacion.js"></script>
+    
+    <script src="js/dominio/repositorios/IRepositorioJuguetes.js"></script>
+    <script src="js/dominio/repositorios/IRepositorioUbicaciones.js"></script>
+    <script src="js/dominio/repositorios/IRepositorioInventario.js"></script>
+    
+    <script src="js/dominio/casos-de-uso/ActualizarJuguete.js"></script>
+    <script src="js/dominio/casos-de-uso/ObtenerInventarioConsolidado.js"></script>
+    <script src="js/dominio/casos-de-uso/ActualizarInventarioUbicacion.js"></script>
+    <script src="js/dominio/casos-de-uso/ObtenerUbicaciones.js"></script>
+    
+    <!-- Arquitectura Clean - Capa de Infraestructura -->
+    <script src="js/infraestructura/repositorios/RepositorioJuguetesSupabase.js"></script>
+    <script src="js/infraestructura/repositorios/RepositorioUbicacionesSupabase.js"></script>
+    <script src="js/infraestructura/repositorios/RepositorioInventarioSupabase.js"></script>
+    
+    <script src="js/infraestructura/configuracion/inyeccion-dependencias.js"></script>
+    <script src="js/infraestructura/configuracion/adaptador-legacy.js"></script>
+    
+    <!-- Arquitectura Clean - Capa de Presentación -->
+    <script src="js/presentacion/controladores/ControladorInventario.js"></script>
+    
+    <!-- Scripts legacy (usando arquitectura Clean internamente) -->
     <script src="js/email-config.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/dashboard-funcionalidades.js"></script>
@@ -2276,6 +2302,19 @@
     <script src="js/inventario-detalle.js"></script>
     <script src="js/analisis-tiendas-empleados.js"></script>
     <script src="js/clientes.js"></script>
+    
+    <!-- Inicializar arquitectura -->
+    <script>
+        // Inicializar la arquitectura Clean cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.supabaseClient) {
+                inicializarArquitectura();
+                console.log('✅ Sistema iniciado con arquitectura Clean');
+            } else {
+                console.error('❌ Cliente de Supabase no disponible');
+            }
+        });
+    </script>
 </body>
 </html>
 
