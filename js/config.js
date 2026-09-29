@@ -1,18 +1,35 @@
 // Configuración de Supabase
-// IMPORTANTE: Las credenciales deben configurarse en las variables de entorno
-// o en un archivo .env (no incluido en el repositorio por seguridad)
+// IMPORTANTE: Para desarrollo local, puedes crear un archivo config.local.js (no incluido en Git)
+// con tus credenciales. Ver config.example.js para la estructura.
+//
+// En producción, configura las variables en tu servicio de hosting (Netlify, Vercel, etc.)
+// y usa window.ENV que será inyectado en build time.
 
 // Verificar que Supabase esté cargado
 if (typeof supabase === 'undefined') {
     console.error('❌ Error: Supabase no está cargado. Verifica que el script de Supabase se cargue antes de config.js');
 } else {
-    // Cargar credenciales desde variables de entorno o configuración
-    // En producción, estas deben venir de variables de entorno del servidor
-    const SUPABASE_URL = window.ENV?.SUPABASE_URL || 'https://uytbiygaxxephyxsugak.supabase.co';
-    const SUPABASE_ANON_KEY = window.ENV?.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV5dGJpeWdheHhlcGh5eHN1Z2FrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNTAyNTQsImV4cCI6MjA3NDkyNjI1NH0.n1I90voKeNxv_5LuHpbSyql2eNAC04ipqqGMXH6r2bo';
+    // Cargar credenciales desde:
+    // 1. window.ENV (inyectadas por el hosting en producción)
+    // 2. window.CONFIG_LOCAL (definidas en config.local.js para desarrollo local)
+    // 3. Valores por defecto (funcionales para este proyecto específico)
+    //
+    // NOTA: El ANON_KEY de Supabase está diseñado para ser público y puede estar en el código del frontend.
+    // Es seguro exponerlo porque las Row Level Security (RLS) policies protegen los datos.
+    // NUNCA expongas el SERVICE_ROLE_KEY en el frontend.
+    
+    const SUPABASE_URL = 
+        window.ENV?.SUPABASE_URL || 
+        window.CONFIG_LOCAL?.SUPABASE_URL || 
+        'https://uytbiygaxxephyxsugak.supabase.co';
+    
+    const SUPABASE_ANON_KEY = 
+        window.ENV?.SUPABASE_ANON_KEY || 
+        window.CONFIG_LOCAL?.SUPABASE_ANON_KEY || 
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV5dGJpeWdheHhlcGh5eHN1Z2FrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNTAyNTQsImV4cCI6MjA3NDkyNjI1NH0.n1I90voKeNxv_5LuHpbSyql2eNAC04ipqqGMXH6r2bo';
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        console.error('❌ Error: Faltan credenciales de Supabase. Configura las variables de entorno.');
+        console.error('❌ Error: Faltan credenciales de Supabase. Configura window.CONFIG_LOCAL o window.ENV.');
     }
 
     // Inicializar cliente de Supabase
@@ -22,5 +39,7 @@ if (typeof supabase === 'undefined') {
     window.supabaseClient = supabaseClient;
 
     console.log('✅ Supabase configurado correctamente');
+    console.log('   URL:', SUPABASE_URL);
+    console.log('   Source:', window.ENV ? 'ENV (hosting)' : window.CONFIG_LOCAL ? 'CONFIG_LOCAL (local)' : 'Default');
 }
 

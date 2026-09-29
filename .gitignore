@@ -23,6 +23,10 @@ desktop.ini
 .env.local
 .env.*.local
 
+# Configuración local (contiene credenciales)
+js/config.local.js
+config.local.js
+
 # Logs
 *.log
 npm-debug.log*

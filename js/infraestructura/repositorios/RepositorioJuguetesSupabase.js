@@ -110,7 +110,7 @@ class RepositorioJuguetesSupabase extends IRepositorioJuguetes {
         // Si cambió código o nombre, actualizar todos los registros con ese código
         if (codigoCambio || nombreCambio) {
             // Actualizar código y nombre en todos los registros
-            const { error: updateAllError } = await this.cliente
+            const { data: updatedAll, error: updateAllError } = await this.cliente
                 .from('juguetes')
                 .update({
                     nombre: datosActualizacion.nombre,
@@ -118,40 +118,56 @@ class RepositorioJuguetesSupabase extends IRepositorioJuguetes {
                 })
                 .eq('codigo', jugueteOriginal.codigo)
                 .eq('nombre', jugueteOriginal.nombre)
-                .eq('empresa_id', empresaId);
+                .eq('empresa_id', empresaId)
+                .select();
 
             if (updateAllError) throw new Error(`Error al actualizar código/nombre: ${updateAllError.message}`);
+            if (!updatedAll || updatedAll.length === 0) {
+                throw new Error('No se encontraron registros para actualizar código/nombre');
+            }
 
             // Actualizar el registro específico con todos los campos
-            const { error: updateError } = await this.cliente
+            const { data: updatedSpecific, error: updateError } = await this.cliente
                 .from('juguetes')
                 .update(datosActualizacion)
                 .eq('id', idNumerico)
-                .eq('empresa_id', empresaId);
+                .eq('empresa_id', empresaId)
+                .select();
 
             if (updateError) throw new Error(`Error al actualizar juguete específico: ${updateError.message}`);
+            if (!updatedSpecific || updatedSpecific.length === 0) {
+                throw new Error(`No se encontró el juguete con ID ${idNumerico} para actualizar`);
+            }
         } else {
             // Actualizar solo este registro
-            const { error: updateError } = await this.cliente
+            const { data: updated, error: updateError } = await this.cliente
                 .from('juguetes')
                 .update(datosActualizacion)
                 .eq('id', idNumerico)
-                .eq('empresa_id', empresaId);
+                .eq('empresa_id', empresaId)
+                .select();
 
             if (updateError) throw new Error(`Error al actualizar juguete: ${updateError.message}`);
+            if (!updated || updated.length === 0) {
+                throw new Error(`No se encontró el juguete con ID ${idNumerico} o no tienes permisos para actualizarlo`);
+            }
         }
 
         // Sincronizar precios en todos los registros del mismo código
-        const { error: syncPreciosError } = await this.cliente
+        const { data: syncedPrices, error: syncPreciosError } = await this.cliente
             .from('juguetes')
             .update({
                 precio_min: datosActualizacion.precio_min,
                 precio_por_mayor: datosActualizacion.precio_por_mayor
             })
             .eq('codigo', datosActualizacion.codigo)
-            .eq('empresa_id', empresaId);
+            .eq('empresa_id', empresaId)
+            .select();
 
         if (syncPreciosError) throw new Error(`Error al sincronizar precios: ${syncPreciosError.message}`);
+        if (!syncedPrices || syncedPrices.length === 0) {
+            console.warn('Advertencia: No se encontraron registros para sincronizar precios');
+        }
 
         return await this.obtenerPorId(idNumerico);
     }
