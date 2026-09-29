@@ -189,6 +189,11 @@ function aplicarFiltrosDetalle() {
     
     let filtrados = [...inventarioDetalleData];
     
+    // Aplicar filtro de ubicación si está disponible
+    if (window.inventarioPorUbicacion && typeof window.inventarioPorUbicacion.filtrarPorUbicacion === 'function') {
+        filtrados = window.inventarioPorUbicacion.filtrarPorUbicacion(filtrados);
+    }
+    
     // Aplicar filtro de búsqueda general
     if (termino) {
         const terminoLower = termino.toLowerCase();
