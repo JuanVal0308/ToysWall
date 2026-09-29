@@ -93,11 +93,26 @@ class RepositorioJuguetesSupabase extends IRepositorioJuguetes {
             throw new Error('ID de juguete inválido');
         }
 
-        // SOLUCIÓN SIMPLE: Update directo por ID, sin lógica compleja de cascada
-        // El modelo actual ya soporta múltiples filas por código (una por ubicación)
-        // Solo actualizamos LA FILA específica que el usuario está editando
+        // PASO 1: Obtener la fila original para saber código, empresa_id y valores anteriores
+        const { data: filaOriginal, error: fetchError } = await this.cliente
+            .from('juguetes')
+            .select('codigo, empresa_id, nombre, precio_min, precio_por_mayor, item, foto_url, cantidad_por_bulto')
+            .eq('id', idNumerico)
+            .single();
+
+        if (fetchError) {
+            throw new Error(`Error al obtener juguete: ${fetchError.message}`);
+        }
         
-        const { data: updated, error: updateError } = await this.cliente
+        if (!filaOriginal) {
+            throw new Error(`No se encontró el juguete con ID ${idNumerico}`);
+        }
+
+        const codigoOriginal = filaOriginal.codigo;
+        const empresaIdReal = filaOriginal.empresa_id; // Usar el de la BD, no de sesión
+
+        // PASO 2: Actualizar la fila editada por ID (todos los campos que vienen en datosActualizacion)
+        const { data: filaActualizada, error: updateError } = await this.cliente
             .from('juguetes')
             .update(datosActualizacion)
             .eq('id', idNumerico)
@@ -107,11 +122,80 @@ class RepositorioJuguetesSupabase extends IRepositorioJuguetes {
             throw new Error(`Error al actualizar juguete: ${updateError.message}`);
         }
         
-        if (!updated || updated.length === 0) {
-            throw new Error(`No se encontró el juguete con ID ${idNumerico}. Verifica que existe y que tienes permisos.`);
+        if (!filaActualizada || filaActualizada.length === 0) {
+            throw new Error(`No se pudo actualizar el juguete con ID ${idNumerico}. Verifica permisos.`);
         }
 
-        return Juguete.desdeDatos(updated[0]);
+        // PASO 3: Detectar si cambiaron campos COMPARTIDOS
+        const camposCompartidos = {};
+        let hayCambiosCompartidos = false;
+
+        // Nombre
+        if (datosActualizacion.nombre !== undefined && datosActualizacion.nombre !== filaOriginal.nombre) {
+            camposCompartidos.nombre = datosActualizacion.nombre;
+            hayCambiosCompartidos = true;
+        }
+
+        // Precio mínimo
+        if (datosActualizacion.precio_min !== undefined && datosActualizacion.precio_min !== filaOriginal.precio_min) {
+            camposCompartidos.precio_min = datosActualizacion.precio_min;
+            hayCambiosCompartidos = true;
+        }
+
+        // Precio por mayor
+        if (datosActualizacion.precio_por_mayor !== undefined && datosActualizacion.precio_por_mayor !== filaOriginal.precio_por_mayor) {
+            camposCompartidos.precio_por_mayor = datosActualizacion.precio_por_mayor;
+            hayCambiosCompartidos = true;
+        }
+
+        // Item
+        if (datosActualizacion.item !== undefined && datosActualizacion.item !== filaOriginal.item) {
+            camposCompartidos.item = datosActualizacion.item;
+            hayCambiosCompartidos = true;
+        }
+
+        // Foto URL
+        if (datosActualizacion.foto_url !== undefined && datosActualizacion.foto_url !== filaOriginal.foto_url) {
+            camposCompartidos.foto_url = datosActualizacion.foto_url;
+            hayCambiosCompartidos = true;
+        }
+
+        // Cantidad por bulto
+        if (datosActualizacion.cantidad_por_bulto !== undefined && datosActualizacion.cantidad_por_bulto !== filaOriginal.cantidad_por_bulto) {
+            camposCompartidos.cantidad_por_bulto = datosActualizacion.cantidad_por_bulto;
+            hayCambiosCompartidos = true;
+        }
+
+        // Código (si cambió, también hay que actualizarlo en hermanas)
+        const codigoCambio = datosActualizacion.codigo !== undefined && datosActualizacion.codigo !== codigoOriginal;
+        if (codigoCambio) {
+            camposCompartidos.codigo = datosActualizacion.codigo;
+            hayCambiosCompartidos = true;
+        }
+
+        // PASO 4: Si hay cambios en campos compartidos, actualizar filas hermanas
+        if (hayCambiosCompartidos) {
+            // Actualizar todas las OTRAS filas con el mismo código original y empresa_id
+            // (excluyendo la que acabamos de editar)
+            const { data: filasHermanas, error: syncError } = await this.cliente
+                .from('juguetes')
+                .update(camposCompartidos)
+                .eq('codigo', codigoOriginal)
+                .eq('empresa_id', empresaIdReal)
+                .neq('id', idNumerico)  // Excluir la fila ya actualizada
+                .select('id');
+
+            if (syncError) {
+                throw new Error(`Error al sincronizar campos compartidos: ${syncError.message}`);
+            }
+
+            // No es error si no hay filas hermanas (podría ser el único producto con ese código)
+            if (filasHermanas && filasHermanas.length > 0) {
+                console.log(`✓ Sincronizados campos compartidos en ${filasHermanas.length} ubicacion(es) adicional(es)`);
+            }
+        }
+
+        return Juguete.desdeDatos(filaActualizada[0]);
     }
 
     /**
