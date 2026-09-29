@@ -93,83 +93,25 @@ class RepositorioJuguetesSupabase extends IRepositorioJuguetes {
             throw new Error('ID de juguete inválido');
         }
 
-        // Obtener juguete original
-        const { data: jugueteOriginal, error: fetchError } = await this.cliente
+        // SOLUCIÓN SIMPLE: Update directo por ID, sin lógica compleja de cascada
+        // El modelo actual ya soporta múltiples filas por código (una por ubicación)
+        // Solo actualizamos LA FILA específica que el usuario está editando
+        
+        const { data: updated, error: updateError } = await this.cliente
             .from('juguetes')
-            .select('codigo, nombre')
+            .update(datosActualizacion)
             .eq('id', idNumerico)
-            .eq('empresa_id', empresaId)
-            .single();
-
-        if (fetchError) throw new Error(`Error al obtener juguete original: ${fetchError.message}`);
-        if (!jugueteOriginal) throw new Error('Juguete no encontrado');
-
-        const codigoCambio = jugueteOriginal.codigo !== datosActualizacion.codigo;
-        const nombreCambio = jugueteOriginal.nombre !== datosActualizacion.nombre;
-
-        // Si cambió código o nombre, actualizar todos los registros con ese código
-        if (codigoCambio || nombreCambio) {
-            // Actualizar código y nombre en todos los registros
-            const { data: updatedAll, error: updateAllError } = await this.cliente
-                .from('juguetes')
-                .update({
-                    nombre: datosActualizacion.nombre,
-                    codigo: datosActualizacion.codigo
-                })
-                .eq('codigo', jugueteOriginal.codigo)
-                .eq('nombre', jugueteOriginal.nombre)
-                .eq('empresa_id', empresaId)
-                .select();
-
-            if (updateAllError) throw new Error(`Error al actualizar código/nombre: ${updateAllError.message}`);
-            if (!updatedAll || updatedAll.length === 0) {
-                throw new Error('No se encontraron registros para actualizar código/nombre');
-            }
-
-            // Actualizar el registro específico con todos los campos
-            const { data: updatedSpecific, error: updateError } = await this.cliente
-                .from('juguetes')
-                .update(datosActualizacion)
-                .eq('id', idNumerico)
-                .eq('empresa_id', empresaId)
-                .select();
-
-            if (updateError) throw new Error(`Error al actualizar juguete específico: ${updateError.message}`);
-            if (!updatedSpecific || updatedSpecific.length === 0) {
-                throw new Error(`No se encontró el juguete con ID ${idNumerico} para actualizar`);
-            }
-        } else {
-            // Actualizar solo este registro
-            const { data: updated, error: updateError } = await this.cliente
-                .from('juguetes')
-                .update(datosActualizacion)
-                .eq('id', idNumerico)
-                .eq('empresa_id', empresaId)
-                .select();
-
-            if (updateError) throw new Error(`Error al actualizar juguete: ${updateError.message}`);
-            if (!updated || updated.length === 0) {
-                throw new Error(`No se encontró el juguete con ID ${idNumerico} o no tienes permisos para actualizarlo`);
-            }
-        }
-
-        // Sincronizar precios en todos los registros del mismo código
-        const { data: syncedPrices, error: syncPreciosError } = await this.cliente
-            .from('juguetes')
-            .update({
-                precio_min: datosActualizacion.precio_min,
-                precio_por_mayor: datosActualizacion.precio_por_mayor
-            })
-            .eq('codigo', datosActualizacion.codigo)
-            .eq('empresa_id', empresaId)
             .select();
 
-        if (syncPreciosError) throw new Error(`Error al sincronizar precios: ${syncPreciosError.message}`);
-        if (!syncedPrices || syncedPrices.length === 0) {
-            console.warn('Advertencia: No se encontraron registros para sincronizar precios');
+        if (updateError) {
+            throw new Error(`Error al actualizar juguete: ${updateError.message}`);
+        }
+        
+        if (!updated || updated.length === 0) {
+            throw new Error(`No se encontró el juguete con ID ${idNumerico}. Verifica que existe y que tienes permisos.`);
         }
 
-        return await this.obtenerPorId(idNumerico);
+        return Juguete.desdeDatos(updated[0]);
     }
 
     /**
