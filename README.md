@@ -43,6 +43,7 @@ ToysWall/
 1. Abre el SQL Editor en Supabase
 2. Copia y pega el contenido completo de `setup_completo.sql`
 3. Ejecuta el script (Run o Ctrl+Enter)
+4. Aplica las migraciones `migrations/2026_09_30_01` a `07` en el orden y con las pausas de `docs/MIGRACION_SUPABASE_AUTH.md` (Supabase Auth, RLS y stock atómico; el flag `USAR_SUPABASE_AUTH` de `js/config.js` controla el cambio)
 4. Verifica que se hayan creado todas las tablas
 
 **Para bases de datos existentes:** Si ya tienes una base de datos, ejecuta los scripts en la carpeta `migrations/` según sea necesario.

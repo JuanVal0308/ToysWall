@@ -43,7 +43,10 @@ js/
 │   │   ├── Ubicacion.js             # Entidad Ubicación
 │   │   └── InventarioUbicacion.js   # Entidad Inventario por Ubicación
 │   ├── servicios/                    # Reglas puras de dominio (sin Supabase ni DOM)
-│   │   └── ReglasInventario.js      # Parseo de cantidades/precios, selección de ubicación de venta
+│   │   ├── ReglasInventario.js      # Parseo de cantidades/precios, selección de ubicación de venta
+│   │   └── ReglasImportacionInventario.js # Lectura/validación/plan de la importación desde Excel
+│   ├── IAutenticacion.js             # Contrato de autenticación
+│   ├── AutenticacionSupabase.js      # Login antiguo (tabla usuarios) — USAR_SUPABASE_AUTH = false
 │   ├── repositorios/                 # Interfaces de repositorios (contratos)
 │   │   ├── IRepositorioJuguetes.js
 │   │   ├── IRepositorioUbicaciones.js
@@ -64,7 +67,12 @@ js/
 │   │   ├── RepositorioUbicacionesSupabase.js
 │   │   └── RepositorioInventarioSupabase.js
 │   ├── servicios/                    # Servicios técnicos sobre Supabase
-│   │   └── ServicioStockSupabase.js # Descontar/reponer/transferir stock con control de concurrencia
+│   │   ├── ServicioStockSupabase.js # Descontar/reponer/transferir stock desde el navegador (modo antiguo)
+│   │   ├── ServicioStockRpc.js      # Stock atómico vía RPC en Postgres (flag activo)
+│   │   ├── ServicioUsuariosRpc.js   # Alta/edición/baja de usuarios vía RPC (flag activo)
+│   │   ├── AutenticacionSupabaseAuth.js # Login con Supabase Auth (flag activo)
+│   │   ├── ServicioFacturaXml.js    # Sube el XML de la factura a Storage y devuelve el enlace
+│   │   └── ServicioImportacionInventario.js # Aplica en Supabase el plan de importación
 │   └── configuracion/                # Configuración del sistema
 │       ├── inyeccion-dependencias.js # Wire-up de dependencias
 │       └── adaptador-legacy.js       # Compatibilidad con código legacy
@@ -73,8 +81,24 @@ js/
     ├── controladores/                # Controladores de UI
     │   └── ControladorInventario.js
     ├── vistas/                       # Lógica de vistas
+    │   └── importar-inventario.js   # UI de importación de inventario desde Excel
     └── componentes/                  # Componentes reutilizables de UI
 ```
+
+## 🔐 Autenticación, RLS y stock en el servidor
+
+El flag `USAR_SUPABASE_AUTH` (`js/config.js`) elige la implementación en tiempo de carga:
+
+| | `false` (modo antiguo) | `true` |
+|---|---|---|
+| Login | `AutenticacionSupabase` (tabla `usuarios`) | `AutenticacionSupabaseAuth` (Supabase Auth) |
+| Stock | `ServicioStockSupabase` (desde el navegador) | `ServicioStockRpc` → funciones `registrar_venta`, `revertir_venta`, `transferir_stock`, … |
+| Usuarios/perfil | escritura directa en `usuarios` | `ServicioUsuariosRpc` / `actualizar_mi_perfil` |
+
+Las reglas de permisos viven en la base de datos (RLS y funciones `SECURITY DEFINER` en `migrations/2026_09_30_*`),
+no en el navegador. Pasos, verificación y rollback: `docs/MIGRACION_SUPABASE_AUTH.md`.
+
+Pruebas unitarias de reglas de dominio (sin navegador ni Supabase): `node --test pruebas/unitarias`.
 
 ## 🔄 Flujo de Dependencias
 
