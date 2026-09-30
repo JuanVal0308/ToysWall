@@ -931,8 +931,8 @@ async function deshacerUltimaVenta() {
                     .insert(datosLog)
                     .select()
                     .single();
-                // La columna usuario_id es INTEGER pero los usuarios tienen id UUID (error 22P02):
-                // reintentar sin usuario para que el log no se pierda. Ver migrations/corregir_usuario_id_logs_deshacer.sql
+                // Sin la migración 2026_09_30_03 la columna usuario_id es INTEGER y los usuarios tienen id UUID
+                // (error 22P02): reintentar sin usuario para que el log no se pierda.
                 if (logError && logError.code === '22P02') {
                     ({ data: logInsertado, error: logError } = await window.supabaseClient
                         .from('logs_deshacer_ventas')

@@ -27,7 +27,7 @@
 - No se validaban las unidades acumuladas (se podía agregar el mismo juguete varias veces y superar el stock), ni cantidades como "abc", "1.5" o negativas, ni precios inválidos.
 - Si la inserción de la venta fallaba, el stock ya descontado no se devolvía. Ahora se compensa.
 - "Deshacer" sobrescribía la cantidad con un valor absoluto viejo (pisaba otras ventas hechas en el intervalo) y, si el stock había llegado a 0, insertaba filas duplicadas. Ahora borra la venta y suma lo vendido a la cantidad actual.
-- El log de deshacer fallaba siempre (error 22P02: `logs_deshacer_ventas.usuario_id` es INTEGER y los usuarios usan UUID). Ahora reintenta con `usuario_id = null`. Se dejó la migración propuesta `migrations/corregir_usuario_id_logs_deshacer.sql` (**no ejecutada**).
+- El log de deshacer fallaba siempre (error 22P02: `logs_deshacer_ventas.usuario_id` es INTEGER y los usuarios usan UUID). Ahora reintenta con `usuario_id = null`. La corrección definitiva es `migrations/2026_09_30_03_logs_deshacer.sql` (ver `docs/MIGRACION_SUPABASE_AUTH.md`).
 - "Facturar" con items sin registrar creaba una factura sin venta y sin descontar stock. Ahora pide registrar la venta primero.
 - El doble clic en agregar item, registrar o deshacer duplicaba operaciones. Ahora está protegido.
 - El empleado y el método de pago se borraban después de cada item. Ahora se conservan.
