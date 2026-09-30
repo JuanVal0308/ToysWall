@@ -23,6 +23,11 @@ class Juguete {
         this.precioPorMayor = precioPorMayor;
         this.fotoUrl = fotoUrl;
         this.empresaId = empresaId;
+        
+        // Propiedades de compatibilidad con interfaz legacy Producto
+        this.stock = 0; // Se actualiza desde contexto de ubicación
+        this.precioBase = precioMinimo;
+        this.precioMayorista = precioPorMayor;
     }
 
     /**
