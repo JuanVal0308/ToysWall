@@ -2887,6 +2887,77 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.getElementById('editarJugueteErrorMessage').style.display = 'none';
         document.getElementById('editarJugueteSuccessMessage').style.display = 'none';
     };
+    
+    // Función para eliminar juguete actual
+    window.eliminarJugueteActual = async function() {
+        const jugueteId = parseInt(document.getElementById('editarJugueteId').value);
+        const jugueteNombre = document.getElementById('editarJugueteNombre').value;
+        const jugueteCodigo = document.getElementById('editarJugueteCodigo').value;
+        
+        // Confirmación con detalles del juguete
+        const confirmacion = confirm(
+            `¿Está seguro de que desea eliminar este juguete?\n\n` +
+            `Nombre: ${jugueteNombre}\n` +
+            `Código: ${jugueteCodigo}\n\n` +
+            `Esta acción no se puede deshacer.`
+        );
+        
+        if (!confirmacion) {
+            return;
+        }
+        
+        try {
+            const user = JSON.parse(sessionStorage.getItem('user'));
+            const errorMsg = document.getElementById('editarJugueteErrorMessage');
+            const successMsg = document.getElementById('editarJugueteSuccessMessage');
+            
+            errorMsg.style.display = 'none';
+            successMsg.style.display = 'none';
+            
+            // Eliminar el juguete usando el repositorio
+            if (window.RepositorioJuguetesSupabase && window.supabaseClient) {
+                const repositorio = new RepositorioJuguetesSupabase(window.supabaseClient);
+                await repositorio.eliminar(jugueteId);
+                
+                successMsg.textContent = 'Juguete eliminado correctamente. Recargando...';
+                successMsg.style.display = 'block';
+                
+                // Recargar inventario
+                await loadInventario();
+                
+                // Cerrar modal después de un breve delay
+                setTimeout(() => {
+                    cerrarModalEditarJuguete();
+                }, 1000);
+            } else {
+                // Fallback a eliminación directa si el repositorio no está disponible
+                console.warn('Repositorio no disponible, usando eliminación directa');
+                
+                const { error } = await window.supabaseClient
+                    .from('juguetes')
+                    .delete()
+                    .eq('id', jugueteId);
+                
+                if (error) {
+                    throw new Error(error.message);
+                }
+                
+                successMsg.textContent = 'Juguete eliminado correctamente. Recargando...';
+                successMsg.style.display = 'block';
+                
+                await loadInventario();
+                
+                setTimeout(() => {
+                    cerrarModalEditarJuguete();
+                }, 1000);
+            }
+        } catch (error) {
+            console.error('Error al eliminar juguete:', error);
+            const errorMsg = document.getElementById('editarJugueteErrorMessage');
+            errorMsg.textContent = 'Error al eliminar juguete: ' + error.message;
+            errorMsg.style.display = 'block';
+        }
+    };
 
     // Configurar formulario de edición (ya estamos dentro de DOMContentLoaded del dashboard)
     const editarJugueteForm = document.getElementById('editarJugueteForm');

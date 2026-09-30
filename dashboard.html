@@ -2128,15 +2128,21 @@
                 </div>
                 <div id="editarJugueteErrorMessage" style="display: none; padding: 12px; background: #fee2e2; color: #dc2626; border-radius: 6px; margin-bottom: 15px; font-size: 14px;"></div>
                 <div id="editarJugueteSuccessMessage" style="display: none; padding: 12px; background: #d1fae5; color: #059669; border-radius: 6px; margin-bottom: 15px; font-size: 14px;"></div>
-                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                    <button type="button" onclick="cerrarModalEditarJuguete()" 
-                            style="padding: 10px 20px; background: #f1f5f9; color: #64748b; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
-                        Cancelar
+                <div style="display: flex; gap: 10px; justify-content: space-between; align-items: center;">
+                    <button type="button" id="eliminarJugueteBtn" onclick="eliminarJugueteActual()" 
+                            style="padding: 10px 20px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-trash"></i> Eliminar
                     </button>
-                    <button type="submit" 
-                            style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">
-                        Guardar Cambios
-                    </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" onclick="cerrarModalEditarJuguete()" 
+                                style="padding: 10px 20px; background: #f1f5f9; color: #64748b; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                            Cancelar
+                        </button>
+                        <button type="submit" 
+                                style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">
+                            Guardar Cambios
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
