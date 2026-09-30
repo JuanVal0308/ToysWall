@@ -11,6 +11,19 @@
 -- =====================================================================
 BEGIN;
 
+-- ---------------------------------------------------------------------
+-- 0) Neutralizar trigger heredado on_auth_user_created -> handle_new_user()
+--    Insertaba en usuarios(auth_user_id, ...), columna que no existe, por lo
+--    que cualquier alta en auth.users fallaba. La vinculación ahora la hace
+--    esta migración (usuarios.auth_id), así que la función queda como no-op.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN NEW;
+END;
+$$;
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 -- ---------------------------------------------------------------------
