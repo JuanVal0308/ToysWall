@@ -2773,3 +2773,52 @@ textarea {
     overflow-wrap: break-word;
 }
 
+
+/* ============================================
+   AJUSTES RESPONSIVE FINALES
+   Van al final del archivo para prevalecer sobre las reglas base declaradas más arriba
+   (antes las tarjetas del dashboard usaban minmax(250px) también en móvil y se salían de la pantalla).
+   ============================================ */
+@media (max-width: 768px) {
+    .summary-cards {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+    }
+
+    .summary-card {
+        min-width: 0;
+    }
+
+    .card-info {
+        min-width: 0;
+        flex: 1;
+    }
+
+    /* La tarjeta de ganancias trae grid-column: span 2 en línea; en móvil eso creaba una
+       segunda columna implícita y partía los textos letra por letra. */
+    .summary-card.ganancias-card {
+        grid-column: 1 / -1 !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .summary-cards {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .card-info h3 {
+        font-size: 22px;
+    }
+
+    .summary-card.ganancias-card .card-info h3 {
+        font-size: 22px !important;
+        overflow-wrap: anywhere;
+    }
+}
+
+/* Botones deshabilitados mientras se procesa un envío */
+.btn-disabled,
+button[disabled] {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
