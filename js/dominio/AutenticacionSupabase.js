@@ -29,14 +29,25 @@ class AutenticacionSupabase {
     const passAlmacenada = usuario.password || usuario.contraseña;
     if (!passAlmacenada || passAlmacenada !== password) return null;
 
-    if (!usuario.empresas?.id) return null;
+    return AutenticacionSupabase.construirUsuario(this.client, usuario);
+  }
+
+  /**
+   * Construye el usuario de dominio (Usuario, Admin o Empleado) a partir de la fila de usuarios.
+   * Compartido por el login anterior y por AutenticacionSupabaseAuth.
+   * @param {Object} client - Cliente de Supabase
+   * @param {Object} usuario - Fila de usuarios con empresas(id, nombre)
+   * @returns {Promise<Usuario|null>}
+   */
+  static async construirUsuario(client, usuario) {
+    if (!usuario || !usuario.empresas?.id) return null;
 
     const tipoId = usuario.tipo_usuario_id;
     const isAdmin = tipoId === 1 || tipoId === 2; // Super Admin o Admin
     const isEmpleado = tipoId === 3; // Empleado
 
     if (isEmpleado) {
-      const { data: empleados } = await this.client
+      const { data: empleados } = await client
         .from('empleados')
         .select('*, tiendas(id, nombre, direccion)')
         .eq('empresa_id', usuario.empresa_id);

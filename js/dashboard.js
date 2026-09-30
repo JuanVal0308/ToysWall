@@ -1,6 +1,37 @@
 // Dashboard functionality
 
 document.addEventListener('DOMContentLoaded', async function() {
+    // Con Supabase Auth la sesión real es la de Supabase: se valida y se reconstruye el usuario desde la BD
+    const usarSupabaseAuth = window.APP_CONFIG?.USAR_SUPABASE_AUTH === true;
+    const autenticadorAuth = usarSupabaseAuth && window.AutenticacionSupabaseAuth
+        ? new window.AutenticacionSupabaseAuth(window.supabaseClient)
+        : null;
+
+    if (usarSupabaseAuth) {
+        const habiaUsuarioEnPestana = !!sessionStorage.getItem('user');
+        const usuarioSesion = autenticadorAuth ? await autenticadorAuth.obtenerUsuarioDeSesion() : null;
+        if (!usuarioSesion) {
+            if (autenticadorAuth) await autenticadorAuth.cerrarSesion();
+            sessionStorage.removeItem('user');
+            window.location.href = 'index.html';
+            return;
+        }
+        sessionStorage.setItem('user', JSON.stringify(usuarioSesion.toSession()));
+        if (!habiaUsuarioEnPestana) {
+            // Pestaña nueva con sesión de Supabase vigente: los demás módulos ya se inicializaron sin usuario,
+            // se recarga una vez para que todos arranquen con el usuario reconstruido.
+            window.location.reload();
+            return;
+        }
+
+        window.supabaseClient.auth.onAuthStateChange((evento) => {
+            if (evento === 'SIGNED_OUT') {
+                sessionStorage.removeItem('user');
+                window.location.href = 'index.html';
+            }
+        });
+    }
+
     // Verificar si hay usuario en sessionStorage
     const userData = sessionStorage.getItem('user');
     
@@ -21,6 +52,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.location.href = 'index.html';
         return;
     }
+
+    // Avisar a los módulos que dependen del usuario (la sesión de Supabase Auth se valida de forma asíncrona)
+    window.dispatchEvent(new CustomEvent('toyswall:sesion-lista', { detail: user }));
     
     // Ocultar botones del sidebar para empleados
     if (isEmpleado) {
@@ -65,9 +99,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     async function loadUserData() {
         try {
+            // Con Supabase Auth la contraseña no se lee nunca (ni existe en la tabla)
+            const columnas = usarSupabaseAuth ? 'id, nombre, email, empresa_id, tipo_usuario_id, activo' : '*';
             const { data, error } = await window.supabaseClient
                 .from('usuarios')
-                .select('*')
+                .select(columnas)
                 .eq('id', user.id)
                 .single();
 
@@ -170,6 +206,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         e.preventDefault();
         hideProfileMessages();
 
+        const saveBtn = document.getElementById('saveProfileBtn');
+        const saveBtnText = document.getElementById('saveBtnText');
+        const saveLoadingSpinner = document.getElementById('saveLoadingSpinner');
+
         const currentPassword = document.getElementById('currentPassword').value;
         const newNombre = document.getElementById('editNombre').value.trim();
         const newEmail = document.getElementById('editEmail').value.trim();
@@ -181,11 +221,18 @@ document.addEventListener('DOMContentLoaded', async function() {
             return;
         }
 
-        // Verificar que la contraseña actual sea correcta
-        const passwordAlmacenada = currentUserData.password || currentUserData.contraseña;
-        if (passwordAlmacenada !== currentPassword) {
-            showProfileMessage('La contraseña actual es incorrecta', 'error');
+        if (!currentUserData) {
+            showProfileMessage('No se pudieron cargar tus datos. Recarga la página e intenta nuevamente.', 'error');
             return;
+        }
+
+        // Modo anterior: la contraseña se compara en el navegador. Con Supabase Auth la verifica la BD (RPC).
+        if (!usarSupabaseAuth) {
+            const passwordAlmacenada = currentUserData.password || currentUserData.contraseña;
+            if (passwordAlmacenada !== currentPassword) {
+                showProfileMessage('La contraseña actual es incorrecta', 'error');
+                return;
+            }
         }
 
         // Verificar que al menos un campo tenga cambios
@@ -207,8 +254,14 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         }
 
+        if (passwordCambio && newPassword.length < 6) {
+            showProfileMessage('La nueva contraseña debe tener al menos 6 caracteres', 'error');
+            return;
+        }
+
         // Verificar que el nuevo nombre de usuario no esté en uso por otro usuario en la misma empresa
-        if (nombreCambio) {
+        // (con Supabase Auth lo valida la RPC actualizar_mi_perfil)
+        if (nombreCambio && !usarSupabaseAuth) {
             try {
                 const { data: existingUser, error: checkError } = await window.supabaseClient
                     .from('usuarios')
@@ -240,15 +293,31 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         // Deshabilitar botón y mostrar loading
-        const saveBtn = document.getElementById('saveProfileBtn');
-        const saveBtnText = document.getElementById('saveBtnText');
-        const saveLoadingSpinner = document.getElementById('saveLoadingSpinner');
-        
         saveBtn.disabled = true;
         saveBtnText.textContent = 'Guardando...';
         saveLoadingSpinner.style.display = 'inline-block';
 
         try {
+            if (usarSupabaseAuth) {
+                // La RPC verifica la contraseña actual contra Supabase Auth y actualiza perfil + credenciales
+                const { error: rpcError } = await window.supabaseClient.rpc('actualizar_mi_perfil', {
+                    p_password_actual: currentPassword,
+                    p_nombre: nombreCambio ? newNombre : null,
+                    p_email: emailCambio ? newEmail : null,
+                    p_password_nueva: passwordCambio ? newPassword : null
+                });
+                if (rpcError) throw rpcError;
+
+                await loadUserData();
+                user.nombre = currentUserData?.nombre || user.nombre;
+                user.email = currentUserData?.email || user.email;
+                userNameEl.textContent = user.nombre;
+                sessionStorage.setItem('user', JSON.stringify(user));
+                showProfileMessage('Información actualizada correctamente', 'success');
+                setTimeout(() => closeProfileModal(), 1500);
+                return;
+            }
+
             // Preparar datos para actualizar (solo los que cambiaron)
             const updateData = {};
 
@@ -275,7 +344,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Recargar los datos actualizados del usuario
             const { data: updatedUser, error: fetchError } = await window.supabaseClient
                 .from('usuarios')
-                .select('*')
+                .select('id, nombre, email, empresa_id, tipo_usuario_id, activo')
                 .eq('id', user.id)
                 .single();
 
@@ -309,7 +378,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             if (error.message && error.message.includes('Failed to fetch')) {
                 errorMessage += 'Error de conexión. Verifica tu conexión a internet.';
-            } else if (error.message && error.message.includes('permission denied') || error.message.includes('RLS')) {
+            } else if (error.message && (error.message.includes('permission denied') || error.message.includes('RLS'))) {
                 errorMessage += 'No tienes permisos para actualizar. Verifica las políticas RLS en Supabase.';
             } else if (error.message) {
                 errorMessage += error.message;
@@ -326,8 +395,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
 
     // Cerrar sesión
-    logoutBtn.addEventListener('click', function() {
+    logoutBtn.addEventListener('click', async function() {
         if (confirm('¿Estás seguro de que deseas cerrar sesión?')) {
+            if (autenticadorAuth) {
+                await autenticadorAuth.cerrarSesion();
+            }
             sessionStorage.removeItem('user');
             window.location.href = 'index.html';
         }

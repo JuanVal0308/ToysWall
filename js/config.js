@@ -38,8 +38,20 @@ if (typeof supabase === 'undefined') {
     // Exportar para uso en otros archivos
     window.supabaseClient = supabaseClient;
 
+    // Flags de la aplicación
+    // USAR_SUPABASE_AUTH: true = login con Supabase Auth, operaciones de stock por RPC y XML de factura
+    // en bucket privado (requiere las migraciones 2026_09_30_01..05 aplicadas; ver docs/MIGRACION_SUPABASE_AUTH.md).
+    // false = modo anterior. Se puede sobrescribir con window.ENV o window.CONFIG_LOCAL.
+    const USAR_SUPABASE_AUTH_POR_DEFECTO = false;
+    const valorFlag = (valor) => valor === true || valor === 'true';
+    window.APP_CONFIG = Object.freeze({
+        USAR_SUPABASE_AUTH: valorFlag(
+            window.ENV?.USAR_SUPABASE_AUTH ?? window.CONFIG_LOCAL?.USAR_SUPABASE_AUTH ?? USAR_SUPABASE_AUTH_POR_DEFECTO)
+    });
+
     console.log('✅ Supabase configurado correctamente');
     console.log('   URL:', SUPABASE_URL);
     console.log('   Source:', window.ENV ? 'ENV (hosting)' : window.CONFIG_LOCAL ? 'CONFIG_LOCAL (local)' : 'Default');
+    console.log('   Supabase Auth:', window.APP_CONFIG.USAR_SUPABASE_AUTH ? 'activado' : 'desactivado (modo anterior)');
 }
 

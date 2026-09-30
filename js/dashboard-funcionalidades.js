@@ -2301,7 +2301,7 @@ async function loadUsuarios() {
         const { data: usuarios, error } = await window.supabaseClient
             .from('usuarios')
             .select(`
-                *,
+                id, nombre, email, empresa_id, tipo_usuario_id, activo, created_at,
                 tipo_usuarios(nombre),
                 empresas(nombre)
             `)
@@ -3982,22 +3982,22 @@ async function exportarAExcel(tipo) {
     }
 }
 
-// Inicializar cuando el DOM esté listo
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
-        initRegistrarVenta();
-        initFacturar();
-        loadTiendasForEmpleados();
-        // Asegurar que los formularios de usuarios y tiendas tengan listeners
-        setupUsuarioForm();
-        setupTiendaForm();
-    });
-} else {
+// Inicializar cuando el DOM esté listo.
+// Sin usuario en la pestaña no se inicializa nada: dashboard.js redirige al login o, con Supabase Auth,
+// reconstruye el usuario desde la sesión y recarga la página.
+function inicializarModulosDashboard() {
+    if (!sessionStorage.getItem('user')) return;
     initRegistrarVenta();
     initFacturar();
     loadTiendasForEmpleados();
+    // Asegurar que los formularios de usuarios y tiendas tengan listeners
     setupUsuarioForm();
     setupTiendaForm();
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', inicializarModulosDashboard);
+} else {
+    inicializarModulosDashboard();
 }
 
 // Función para configurar formulario de usuarios
@@ -4018,13 +4018,23 @@ const nuevoUsuarioForm = document.getElementById('nuevoUsuarioForm');
             return;
         }
             
-            // Validar que la contraseña tenga al menos 3 caracteres
-            if (password.length < 3) {
-                showUsuarioMessage('La contraseña debe tener al menos 3 caracteres', 'error');
+            // Supabase Auth exige al menos 6 caracteres; el modo anterior aceptaba 3
+            const usarAuth = window.APP_CONFIG?.USAR_SUPABASE_AUTH === true && window.servicioUsuariosRpc;
+            const minimo = usarAuth ? ServicioUsuariosRpc.LONGITUD_MINIMA_PASSWORD : 3;
+            if (password.length < minimo) {
+                showUsuarioMessage(`La contraseña debe tener al menos ${minimo} caracteres`, 'error');
                 return;
             }
 
         try {
+            if (usarAuth) {
+                await window.servicioUsuariosRpc.crear({ nombre, email, password, tipoUsuarioId });
+                showUsuarioMessage('Usuario agregado correctamente', 'success');
+                nuevoUsuarioForm.reset();
+                if (typeof loadUsuarios === 'function') loadUsuarios();
+                return;
+            }
+
             const user = JSON.parse(sessionStorage.getItem('user'));
             const { error } = await window.supabaseClient
                 .from('usuarios')
@@ -4106,7 +4116,7 @@ async function openEditUsuarioModal(usuarioId) {
     try {
         const { data: usuario, error } = await window.supabaseClient
             .from('usuarios')
-            .select('*')
+            .select('id, nombre, email, tipo_usuario_id, activo')
             .eq('id', usuarioId)
             .single();
 
@@ -4142,6 +4152,20 @@ if (editUsuarioForm) {
         }
 
         try {
+            if (window.APP_CONFIG?.USAR_SUPABASE_AUTH === true && window.servicioUsuariosRpc) {
+                if (password && password.length < ServicioUsuariosRpc.LONGITUD_MINIMA_PASSWORD) {
+                    showEditUsuarioMessage(`La contraseña debe tener al menos ${ServicioUsuariosRpc.LONGITUD_MINIMA_PASSWORD} caracteres`, 'error');
+                    return;
+                }
+                await window.servicioUsuariosRpc.actualizar(window.currentUsuarioId, { nombre, email, tipoUsuarioId, password });
+                showEditUsuarioMessage('Usuario actualizado correctamente', 'success');
+                setTimeout(() => {
+                    closeEditUsuarioModal();
+                    loadUsuarios();
+                }, 1500);
+                return;
+            }
+
             const updateData = {
                 nombre: nombre,
                 email: email,
@@ -4226,12 +4250,17 @@ async function deleteUsuario(usuarioId) {
     }
 
     try {
-        const { error } = await window.supabaseClient
-            .from('usuarios')
-            .delete()
-            .eq('id', usuarioId);
+        if (window.APP_CONFIG?.USAR_SUPABASE_AUTH === true && window.servicioUsuariosRpc) {
+            // Elimina el usuario y su cuenta de Supabase Auth
+            await window.servicioUsuariosRpc.eliminar(usuarioId);
+        } else {
+            const { error } = await window.supabaseClient
+                .from('usuarios')
+                .delete()
+                .eq('id', usuarioId);
 
-        if (error) throw error;
+            if (error) throw error;
+        }
 
         alert('Usuario eliminado correctamente');
         loadUsuarios();

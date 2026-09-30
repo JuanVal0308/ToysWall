@@ -49,9 +49,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         successMessage.style.display = 'none';
     }
 
-    // ServicioLogin con implementación IAutenticacion (Supabase)
-    const autenticador = window.AutenticacionSupabase && window.supabaseClient
-        ? new window.AutenticacionSupabase(window.supabaseClient)
+    // ServicioLogin con implementación IAutenticacion:
+    //  - Supabase Auth (APP_CONFIG.USAR_SUPABASE_AUTH = true)
+    //  - tabla usuarios (modo anterior)
+    const usarSupabaseAuth = window.APP_CONFIG?.USAR_SUPABASE_AUTH === true;
+    const ClaseAutenticador = usarSupabaseAuth ? window.AutenticacionSupabaseAuth : window.AutenticacionSupabase;
+    const autenticador = ClaseAutenticador && window.supabaseClient
+        ? new ClaseAutenticador(window.supabaseClient)
         : null;
     const servicioLogin = window.ServicioLogin && autenticador
         ? new window.ServicioLogin(autenticador)
@@ -94,6 +98,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             // Validar nombre de usuario (coincidencia con el que tiene la cuenta)
             if ((usuario.nombre || '').toLowerCase() !== nombreUsuario.toLowerCase()) {
+                if (typeof autenticador.cerrarSesion === 'function') {
+                    await autenticador.cerrarSesion();
+                }
                 throw new Error('Contraseña o usuario incorrecto');
             }
 

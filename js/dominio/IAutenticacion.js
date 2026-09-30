@@ -4,7 +4,8 @@
  * @interface
  */
 // En JS no hay interfaces; se documenta el contrato.
-// Implementaciones: AutenticacionSupabase
+// Implementaciones: AutenticacionSupabase (tabla usuarios, modo anterior) y
+// AutenticacionSupabaseAuth (Supabase Auth, APP_CONFIG.USAR_SUPABASE_AUTH = true)
 window.IAutenticacion = Object.freeze({
   /**
    * Autentica un usuario por correo y contraseña.
