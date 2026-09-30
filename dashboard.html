@@ -14,7 +14,7 @@
         <div class="header-content">
             <div class="header-left">
                 <div class="logo-container" id="logoContainer">
-                    <img id="empresaLogo" src="https://i.imgur.com/RBbjVnp.jpeg" alt="Logo ToysWalls" class="empresa-logo">
+                    <img id="empresaLogo" src="https://i.imgur.com/RBbjVnp.jpeg" alt="Logo ToysWalls" class="empresa-logo" referrerpolicy="no-referrer" onerror="this.onerror=null; this.style.visibility='hidden';">
                 </div>
                 <div class="empresa-info">
                     <h2 class="welcome-text">Bienvenido a ToysWalls</h2>
@@ -229,12 +229,12 @@
                                     <i class="fas fa-dollar-sign"></i> Precio Unitario del Juguete *
                                 </label>
                                 <input 
-                                    type="number" 
+                                    type="text"
+                                    inputmode="numeric"
+                                    autocomplete="off" 
                                     id="ventaPrecio" 
                                     name="precio" 
-                                    placeholder="0.00"
-                                    min="0"
-                                    step="0.01"
+                                    placeholder="0"
                                     required
                                 >
                             </div>
@@ -480,12 +480,12 @@
                                     <i class="fas fa-dollar-sign"></i> Precio Mínimo *
                                 </label>
                                 <input 
-                                    type="number" 
+                                    type="text"
+                                    inputmode="numeric"
+                                    autocomplete="off" 
                                     id="juguetePrecioMinInput" 
                                     name="precio_min" 
                                     placeholder="0"
-                                    min="0"
-                                    step="0.01"
                                     required
                                 >
                                 <small class="form-help">Precio mínimo permitido para la venta</small>
@@ -495,12 +495,12 @@
                                     <i class="fas fa-dollar-sign"></i> Precio al por Mayor
                                 </label>
                                 <input 
-                                    type="number" 
+                                    type="text"
+                                    inputmode="numeric"
+                                    autocomplete="off" 
                                     id="juguetePrecioPorMayorInput" 
                                     name="precio_por_mayor" 
                                     placeholder="0"
-                                    min="0"
-                                    step="0.01"
                                 >
                                 <small class="form-help">Precio exclusivo para ventas al por mayor</small>
                             </div>
@@ -2321,6 +2321,9 @@
     <script src="js/presentacion/vistas/inventario-por-ubicacion.js"></script>
     
     <!-- Scripts legacy (usando arquitectura Clean internamente) -->
+    <!-- Reglas de inventario (dominio), servicio de stock (infraestructura) -->
+    <script src="js/dominio/servicios/ReglasInventario.js"></script>
+    <script src="js/infraestructura/servicios/ServicioStockSupabase.js"></script>
     <script src="js/email-config.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/dashboard-funcionalidades.js"></script>

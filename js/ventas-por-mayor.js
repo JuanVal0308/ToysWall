@@ -340,17 +340,26 @@ function initVentaPorMayor() {
         }
     });
 
-    // Agregar item al por mayor
+    // Agregar item al por mayor (protegido contra doble clic para no duplicar items)
     agregarItemBtn.addEventListener('click', async function() {
+        await preventDoubleClick(agregarItemBtn, agregarItemPorMayor, { loadingText: 'Agregando...' }).catch(() => {});
+    });
+
+    async function agregarItemPorMayor() {
         const codigoJuguete = jugueteCodigoInput.value.trim();
         const codigoEmpleado = empleadoCodigoInput.value.trim();
-        const cantidad = parseInt(document.getElementById('ventaPorMayorCantidad').value) || 1;
+        const cantidad = ReglasInventario.parsearCantidad(document.getElementById('ventaPorMayorCantidad').value);
         const metodoPago = document.getElementById('ventaPorMayorMetodoPago').value;
         const ubicacionTipo = ubicacionTipoSelect ? ubicacionTipoSelect.value : '';
         const ubicacionId = ubicacionSelect ? ubicacionSelect.value : '';
 
-        if (!codigoJuguete || !codigoEmpleado || !metodoPago || !ubicacionTipo || !ubicacionId) {
-            showVentaPorMayorMessage('Por favor, completa todos los campos requeridos (juguete, empleado, método de pago y ubicación)', 'error');
+        // El empleado es opcional (igual que en Registrar Venta)
+        if (!codigoJuguete || !metodoPago || !ubicacionTipo || !ubicacionId) {
+            showVentaPorMayorMessage('Por favor, completa los campos requeridos (juguete, método de pago y ubicación)', 'error');
+            return;
+        }
+        if (cantidad === null) {
+            showVentaPorMayorMessage('La cantidad debe ser un número entero mayor o igual a 1', 'error');
             return;
         }
 
@@ -388,7 +397,7 @@ function initVentaPorMayor() {
             }
 
             // Buscar empleado (opcional)
-            let empleado = null;
+            let empleado = { id: null, nombre: 'Sin empleado', codigo: null };
             if (codigoEmpleado) {
                 const { data: empleados, error: empleadoError } = await window.supabaseClient
                     .from('empleados')
@@ -403,30 +412,26 @@ function initVentaPorMayor() {
                     return;
                 }
                 empleado = empleados[0];
-            } else {
-                // Sin empleado especificado, crear objeto placeholder
-                empleado = {
-                    id: null,
-                    nombre: 'Admin',
-                    codigo: 'ADMIN'
-                };
-                console.log('Venta por mayor sin empleado específico, usando usuario actual');
             }
 
             const precio = juguete.precio_por_mayor;
 
-            // Verificar cantidad disponible en la ubicación seleccionada
-            const cantidadTotal = juguetes.reduce((sum, j) => sum + (j.cantidad || 0), 0);
-            if (cantidad > cantidadTotal) {
-                showVentaPorMayorMessage(`Cantidad insuficiente en la ubicación seleccionada. Disponible: ${cantidadTotal}`, 'error');
+            // Verificar cantidad disponible descontando lo ya agregado a esta venta del mismo registro
+            const yaReservado = ventaPorMayorItems
+                .filter(it => it.juguete_id === juguete.id)
+                .reduce((sum, it) => sum + it.cantidad, 0);
+            const disponible = (juguete.cantidad || 0) - yaReservado;
+            if (cantidad > disponible) {
+                showVentaPorMayorMessage(`Cantidad insuficiente en la ubicación seleccionada. Disponible: ${Math.max(0, disponible)}${yaReservado ? ` (ya agregaste ${yaReservado} a esta venta)` : ''}`, 'error');
                 return;
             }
 
             // Obtener nombre de la ubicación desde el select
             const ubicacionNombre = ubicacionSelect ? ubicacionSelect.options[ubicacionSelect.selectedIndex]?.textContent || '' : '';
 
-            // Agregar item (guardamos la información de ubicación)
+            // Agregar item (guardamos el registro exacto y la ubicación)
             ventaPorMayorItems.push({
+                juguete_id: juguete.id,
                 juguete_codigo: juguete.codigo,
                 juguete_nombre: juguete.nombre,
                 juguete_item: juguete.item || null,
@@ -461,93 +466,61 @@ function initVentaPorMayor() {
             console.error('Error al agregar item:', error);
             showVentaPorMayorMessage('Error al agregar item: ' + error.message, 'error');
         }
-    });
+    }
 
     // Registrar venta al por mayor - con protección contra clics múltiples
-    // Importar la función preventFormDoubleSubmit si está disponible
-    if (typeof preventFormDoubleSubmit === 'function') {
-        preventFormDoubleSubmit(form, async function(e) {
-            if (ventaPorMayorItems.length === 0) {
-                showVentaPorMayorMessage('Debes agregar al menos un item a la venta', 'error');
-                return;
-            }
+    preventFormDoubleSubmit(form, async function(e) {
+        if (ventaPorMayorItems.length === 0) {
+            showVentaPorMayorMessage('Debes agregar al menos un item a la venta', 'error');
+            return;
+        }
 
-            try {
-                const user = JSON.parse(sessionStorage.getItem('user'));
+        const clienteId = clienteSelect ? clienteSelect.value : null;
+        const metodoPago = metodoPagoSelect ? metodoPagoSelect.value : '';
+        const totalVenta = ventaPorMayorItems.reduce((sum, i) => sum + (i.precio * i.cantidad), 0);
+        let abono = 0;
+        if (abonoInput && metodoPago === 'credito') {
+            abono = ReglasInventario.parsearPrecio(abonoInput.dataset.numericValue || abonoInput.value) || 0;
+        }
+
+        // Validaciones de crédito: la deuda debe quedar asociada a un cliente y el abono no puede superar el total
+        if (metodoPago === 'credito' && !clienteId) {
+            showVentaPorMayorMessage('Para ventas a crédito debes seleccionar un cliente', 'error');
+            return;
+        }
+        if (abono > totalVenta) {
+            showVentaPorMayorMessage('El abono no puede ser mayor que el total de la venta', 'error');
+            return;
+        }
+
+        const ventasRegistradas = [];
+        let codigoVenta = null;
+
+        try {
+            const user = JSON.parse(sessionStorage.getItem('user'));
             
             // Generar código de venta
-            const codigoVenta = await generarCodigoVenta();
-            
-            // Obtener cliente y abono
-            const clienteId = clienteSelect ? clienteSelect.value : null;
-            const metodoPago = metodoPagoSelect ? metodoPagoSelect.value : '';
-            let abono = 0;
-            if (abonoInput && metodoPago === 'credito') {
-                const raw = abonoInput.dataset.numericValue || abonoInput.value.replace(/[^\d]/g, '');
-                abono = raw ? parseInt(raw, 10) || 0 : 0;
-            }
-
-            // Array para almacenar información de cada venta registrada (para deshacer)
-            const ventasRegistradas = [];
+            codigoVenta = await generarCodigoVenta();
 
             // Registrar cada item
             for (const item of ventaPorMayorItems) {
-                // Buscar el juguete específico en la ubicación seleccionada
-                let query = window.supabaseClient
-                    .from('juguetes')
-                    .select('id, cantidad, codigo, nombre, bodega_id, tienda_id')
-                    .eq('codigo', item.juguete_codigo)
-                    .eq('empresa_id', user.empresa_id)
-                    .gt('cantidad', 0);
-                
-                // Filtrar por la ubicación específica del item
-                if (item.ubicacion_tipo === 'tienda' && item.tienda_id) {
-                    query = query.eq('tienda_id', item.tienda_id).is('bodega_id', null);
-                } else if (item.ubicacion_tipo === 'bodega' && item.bodega_id) {
-                    query = query.eq('bodega_id', item.bodega_id).is('tienda_id', null);
-                } else {
-                    throw new Error(`Ubicación no válida para el item ${item.juguete_nombre}`);
-                }
-                
-                const { data: juguetesDisponibles, error: juguetesError } = await query;
-
-                if (juguetesError) throw juguetesError;
-                if (!juguetesDisponibles || juguetesDisponibles.length === 0) {
-                    throw new Error(`No hay juguetes disponibles con código ${item.juguete_codigo} en la ubicación seleccionada`);
-                }
-
-                // Debería haber solo un juguete en la ubicación seleccionada
-                const juguete = juguetesDisponibles[0];
-                const cantidadDisponible = juguete.cantidad || 0;
-                
-                if (item.cantidad > cantidadDisponible) {
-                    throw new Error(`Cantidad insuficiente en la ubicación seleccionada. Disponible: ${cantidadDisponible}, Solicitado: ${item.cantidad}`);
-                }
-                
-                // Guardar información del juguete antes de modificar (para deshacer)
-                const infoJugueteOriginal = {
-                    juguete_id: juguete.id,
-                    juguete_codigo: juguete.codigo,
-                    juguete_nombre: juguete.nombre,
-                    cantidad_original: juguete.cantidad,
-                    bodega_id: juguete.bodega_id,
-                    tienda_id: juguete.tienda_id
-                };
-                
                 // Calcular abono proporcional para este item
                 const totalItem = item.precio * item.cantidad;
-                const totalVenta = ventaPorMayorItems.reduce((sum, i) => sum + (i.precio * i.cantidad), 0);
                 const abonoProporcional = totalVenta > 0 ? (abono * totalItem / totalVenta) : 0;
 
-                // Registrar venta
+                // 1. Descontar del registro exacto de la ubicación seleccionada (valida stock y concurrencia).
+                //    El registro se conserva con cantidad 0 en lugar de borrarse, para no perder precio, foto, ITEM, etc.
+                const { anterior, fila } = await window.servicioStock.descontar(item.juguete_id, item.cantidad);
+
+                // 2. Registrar venta; si falla, devolver el stock descontado
                 const { data: ventaInsertada, error: ventaError } = await window.supabaseClient
                     .from('ventas')
                     .insert({
                         codigo_venta: codigoVenta,
-                        juguete_codigo: juguete.codigo,
+                        juguete_codigo: fila.codigo,
                         empleado_id: item.empleado_id,
                         cantidad: item.cantidad,
-                        precio_venta: item.precio * item.cantidad,
+                        precio_venta: totalItem,
                         metodo_pago: item.metodo_pago,
                         empresa_id: user.empresa_id,
                         es_por_mayor: true,
@@ -557,47 +530,56 @@ function initVentaPorMayor() {
                     .select()
                     .single();
 
-                if (ventaError) throw ventaError;
-                
-                // NO crear pagos automáticos aquí. El abono ya está guardado en el campo 'abono' de la venta.
-                let pagoId = null;
-
-                // Reducir cantidad del juguete
-                const nuevaCantidad = Math.max(0, cantidadDisponible - item.cantidad);
-                
-                if (nuevaCantidad === 0) {
-                    // Si la cantidad llega a 0, eliminar el registro
-                    const { error: deleteError } = await window.supabaseClient
-                        .from('juguetes')
-                        .delete()
-                        .eq('id', juguete.id);
-                    if (deleteError) throw deleteError;
-                } else {
-                    // Actualizar cantidad
-                    const { error: updateError } = await window.supabaseClient
-                        .from('juguetes')
-                        .update({ cantidad: nuevaCantidad })
-                        .eq('id', juguete.id);
-                    if (updateError) throw updateError;
+                if (ventaError) {
+                    await window.servicioStock.reponer(item.juguete_id, item.cantidad, fila).catch(err => console.error('No se pudo reponer el stock:', err));
+                    throw ventaError;
                 }
                 
                 // Guardar información de la venta registrada (para deshacer)
                 ventasRegistradas.push({
                     venta_id: ventaInsertada.id,
                     codigo_venta: codigoVenta,
-                    juguete_info: infoJugueteOriginal,
+                    juguete_info: {
+                        juguete_id: fila.id,
+                        juguete_codigo: fila.codigo,
+                        juguete_nombre: fila.nombre,
+                        cantidad_original: anterior,
+                        bodega_id: fila.bodega_id,
+                        tienda_id: fila.tienda_id,
+                        fila_respaldo: fila
+                    },
                     cantidad_vendida: item.cantidad,
-                    precio_venta: item.precio * item.cantidad,
+                    precio_venta: totalItem,
                     empleado_id: item.empleado_id,
                     metodo_pago: item.metodo_pago,
                     cliente_id: clienteId,
                     abono: abonoProporcional,
-                    pago_id: pagoId,
-                    juguete_eliminado: nuevaCantidad === 0
+                    pago_id: null
                 });
             }
 
-            // Guardar información de la última venta al por mayor para poder deshacerla
+            showVentaPorMayorMessage(`Venta al por mayor ${codigoVenta} registrada correctamente`, 'success');
+            ventaPorMayorItems = [];
+            updateVentaPorMayorItemsList();
+            form.reset();
+            if (abonoInput) abonoInput.dataset.numericValue = '';
+            
+            // Recargar dashboard si existe
+            if (typeof loadDashboardSummary === 'function') {
+                loadDashboardSummary();
+            }
+        } catch (error) {
+            console.error('Error al registrar venta al por mayor:', error);
+            if (ventasRegistradas.length > 0) {
+                const guardados = ventasRegistradas.length;
+                ventaPorMayorItems = ventaPorMayorItems.slice(guardados);
+                updateVentaPorMayorItemsList();
+                showVentaPorMayorMessage(`Se registraron ${guardados} item(s) de la venta ${codigoVenta}, pero falló el siguiente: ${error.message}. Puedes deshacer lo registrado.`, 'error');
+            } else {
+                showVentaPorMayorMessage('Error al registrar la venta: ' + error.message, 'error');
+            }
+        } finally {
+            // Permitir deshacer lo registrado (venta completa o parcial)
             if (ventasRegistradas.length > 0) {
                 ultimaVentaPorMayor = {
                     codigo_venta: codigoVenta,
@@ -606,148 +588,11 @@ function initVentaPorMayor() {
                 };
                 actualizarBotonDeshacerVentaPorMayor(true);
             }
+        }
+    });
 
-            showVentaPorMayorMessage('Venta al por mayor registrada correctamente', 'success');
-            ventaPorMayorItems = [];
-            updateVentaPorMayorItemsList();
-            form.reset();
-            
-            // Recargar dashboard si existe
-            if (typeof loadDashboardSummary === 'function') {
-                loadDashboardSummary();
-            }
-            } catch (error) {
-                console.error('Error al registrar venta al por mayor:', error);
-                showVentaPorMayorMessage('Error al registrar la venta: ' + error.message, 'error');
-                // Limpiar última venta en caso de error
-                ultimaVentaPorMayor = null;
-                actualizarBotonDeshacerVentaPorMayor(false);
-            }
-        });
-    } else {
-        // Fallback si la función no está disponible
-        form.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            if (ventaPorMayorItems.length === 0) {
-                showVentaPorMayorMessage('Debes agregar al menos un item a la venta', 'error');
-                return;
-            }
-
-            try {
-                const user = JSON.parse(sessionStorage.getItem('user'));
-                
-                // Generar código de venta
-                const codigoVenta = await generarCodigoVenta();
-                
-                // Obtener cliente y abono
-                const clienteId = clienteSelect ? clienteSelect.value : null;
-                const metodoPago = metodoPagoSelect ? metodoPagoSelect.value : '';
-                let abono = 0;
-                if (abonoInput && metodoPago === 'credito') {
-                    const raw = abonoInput.dataset.numericValue || abonoInput.value.replace(/[^\d]/g, '');
-                    abono = raw ? parseInt(raw, 10) || 0 : 0;
-                }
-
-                // Registrar cada item
-                for (const item of ventaPorMayorItems) {
-                    // Buscar el juguete específico en la ubicación seleccionada
-                    let query = window.supabaseClient
-                        .from('juguetes')
-                        .select('id, cantidad, codigo, nombre, bodega_id, tienda_id')
-                        .eq('codigo', item.juguete_codigo)
-                        .eq('empresa_id', user.empresa_id)
-                        .gt('cantidad', 0);
-                    
-                    // Filtrar por la ubicación específica del item
-                    if (item.ubicacion_tipo === 'tienda' && item.tienda_id) {
-                        query = query.eq('tienda_id', item.tienda_id).is('bodega_id', null);
-                    } else if (item.ubicacion_tipo === 'bodega' && item.bodega_id) {
-                        query = query.eq('bodega_id', item.bodega_id).is('tienda_id', null);
-                    } else {
-                        throw new Error(`Ubicación no válida para el item ${item.juguete_nombre}`);
-                    }
-                    
-                    const { data: juguetesDisponibles, error: juguetesError } = await query;
-
-                    if (juguetesError) throw juguetesError;
-                    if (!juguetesDisponibles || juguetesDisponibles.length === 0) {
-                        throw new Error(`No hay juguetes disponibles con código ${item.juguete_codigo} en la ubicación seleccionada`);
-                    }
-
-                    // Debería haber solo un juguete en la ubicación seleccionada
-                    const juguete = juguetesDisponibles[0];
-                    const cantidadDisponible = juguete.cantidad || 0;
-                    
-                    if (item.cantidad > cantidadDisponible) {
-                        throw new Error(`Cantidad insuficiente en la ubicación seleccionada. Disponible: ${cantidadDisponible}, Solicitado: ${item.cantidad}`);
-                    }
-                    
-                    // Calcular abono proporcional para este item
-                    const totalItem = item.precio * item.cantidad;
-                    const totalVenta = ventaPorMayorItems.reduce((sum, i) => sum + (i.precio * i.cantidad), 0);
-                    const abonoProporcional = totalVenta > 0 ? (abono * totalItem / totalVenta) : 0;
-
-                    // Registrar venta
-                    const { data: ventaInsertada, error: ventaError } = await window.supabaseClient
-                        .from('ventas')
-                        .insert({
-                            codigo_venta: codigoVenta,
-                            juguete_codigo: juguete.codigo,
-                            empleado_id: item.empleado_id,
-                            cantidad: item.cantidad,
-                            precio_venta: item.precio * item.cantidad,
-                            metodo_pago: item.metodo_pago,
-                            empresa_id: user.empresa_id,
-                            es_por_mayor: true,
-                            cliente_id: clienteId || null,
-                            abono: abonoProporcional
-                        })
-                        .select()
-                        .single();
-
-                    if (ventaError) throw ventaError;
-
-                    // NO crear pagos automáticos aquí. El abono ya está guardado en el campo 'abono' de la venta.
-
-                    // Reducir cantidad del juguete
-                    const nuevaCantidad = Math.max(0, cantidadDisponible - item.cantidad);
-                    
-                    if (nuevaCantidad === 0) {
-                        // Si la cantidad llega a 0, eliminar el registro
-                        const { error: deleteError } = await window.supabaseClient
-                            .from('juguetes')
-                            .delete()
-                            .eq('id', juguete.id);
-                        if (deleteError) throw deleteError;
-                    } else {
-                        // Actualizar cantidad
-                        const { error: updateError } = await window.supabaseClient
-                            .from('juguetes')
-                            .update({ cantidad: nuevaCantidad })
-                            .eq('id', juguete.id);
-                        if (updateError) throw updateError;
-                    }
-                }
-
-                showVentaPorMayorMessage('Venta al por mayor registrada correctamente', 'success');
-                ventaPorMayorItems = [];
-                updateVentaPorMayorItemsList();
-                form.reset();
-                
-                // Recargar dashboard si existe
-                if (typeof loadDashboardSummary === 'function') {
-                    loadDashboardSummary();
-                }
-            } catch (error) {
-                console.error('Error al registrar venta al por mayor:', error);
-                showVentaPorMayorMessage('Error al registrar la venta: ' + error.message, 'error');
-            }
-        });
-        
-        // Inicializar botón deshacer
-        inicializarBotonDeshacerVentaPorMayor();
-    }
+    // Inicializar botón deshacer (antes solo se inicializaba en una rama de respaldo y el botón no hacía nada)
+    inicializarBotonDeshacerVentaPorMayor();
 }
 
 // Función para actualizar lista de items al por mayor
@@ -867,7 +712,25 @@ async function deshacerUltimaVentaPorMayor() {
         return;
     }
     
-    if (!confirm('¿Estás seguro de que deseas deshacer la última venta al por mayor? Esta acción revertirá todos los cambios realizados, incluyendo pagos registrados.')) {
+    // Advertir si después de la venta se registraron pagos: al borrar la venta se eliminan en cascada
+    let avisoPagos = '';
+    try {
+        const idsVentas = ultimaVentaPorMayor.ventas.map(v => v.venta_id);
+        const { data: pagosPosteriores, error: errorPagos } = await window.supabaseClient
+            .from('pagos')
+            .select('id, monto')
+            .in('venta_id', idsVentas);
+        if (errorPagos) throw errorPagos;
+        if (pagosPosteriores && pagosPosteriores.length > 0) {
+            const totalPagos = pagosPosteriores.reduce((sum, pg) => sum + parseFloat(pg.monto || 0), 0);
+            avisoPagos = `\n\n⚠️ ATENCIÓN: esta venta tiene ${pagosPosteriores.length} pago(s) registrados por $${totalPagos.toLocaleString('es-CO', { maximumFractionDigits: 0 })} que TAMBIÉN se eliminarán.`;
+        }
+    } catch (error) {
+        console.error('No se pudieron consultar los pagos de la venta:', error);
+        avisoPagos = '\n\n⚠️ No se pudo verificar si la venta tiene pagos registrados; si los tiene, también se eliminarán.';
+    }
+
+    if (!confirm('¿Estás seguro de que deseas deshacer la última venta al por mayor? Esta acción revertirá todos los cambios realizados (stock y abono).' + avisoPagos)) {
         return;
     }
     
@@ -886,40 +749,22 @@ async function deshacerUltimaVentaPorMayor() {
                     .eq('id', ventaInfo.pago_id);
             }
             
-            // 2. Restaurar cantidad del juguete
-            if (ventaInfo.juguete_eliminado) {
-                // Si el juguete fue eliminado (cantidad llegó a 0), recrearlo
-                const nuevoJuguete = {
-                    nombre: ventaInfo.juguete_info.juguete_nombre,
-                    codigo: ventaInfo.juguete_info.juguete_codigo,
-                    cantidad: ventaInfo.juguete_info.cantidad_original,
-                    empresa_id: user.empresa_id
-                };
-                
-                if (ventaInfo.juguete_info.bodega_id) {
-                    nuevoJuguete.bodega_id = ventaInfo.juguete_info.bodega_id;
-                    nuevoJuguete.tienda_id = null;
-                } else if (ventaInfo.juguete_info.tienda_id) {
-                    nuevoJuguete.tienda_id = ventaInfo.juguete_info.tienda_id;
-                    nuevoJuguete.bodega_id = null;
-                }
-                
-                await window.supabaseClient
-                    .from('juguetes')
-                    .insert(nuevoJuguete);
-            } else {
-                // Si solo se redujo la cantidad, restaurarla
-                await window.supabaseClient
-                    .from('juguetes')
-                    .update({ cantidad: ventaInfo.juguete_info.cantidad_original })
-                    .eq('id', ventaInfo.juguete_info.juguete_id);
-            }
-            
-            // 3. Eliminar registro de venta
-            await window.supabaseClient
+            // 2. Eliminar registro de venta (si falla, no se toca el stock)
+            const { error: errorEliminar } = await window.supabaseClient
                 .from('ventas')
                 .delete()
                 .eq('id', ventaInfo.venta_id);
+            if (errorEliminar) throw errorEliminar;
+
+            // 3. Devolver las unidades al mismo registro (sumando a la cantidad actual; si no existe, se recrea)
+            await window.servicioStock.reponer(
+                ventaInfo.juguete_info.juguete_id,
+                ventaInfo.cantidad_vendida,
+                ventaInfo.juguete_info.fila_respaldo || null
+            );
+
+            // Quitar de la lista las ventas ya revertidas (por si falla una intermedia)
+            ultimaVentaPorMayor.ventas.splice(i, 1);
         }
         
         // Limpiar última venta
@@ -948,7 +793,8 @@ function inicializarBotonDeshacerVentaPorMayor() {
         
         // Agregar event listener
         nuevoBtn.addEventListener('click', async function() {
-            await deshacerUltimaVentaPorMayor();
+            // Protegido contra doble clic para no revertir dos veces
+            await preventDoubleClick(nuevoBtn, deshacerUltimaVentaPorMayor, { loadingText: 'Deshaciendo...' }).catch(() => {});
         });
         // Ocultar inicialmente
         nuevoBtn.style.display = ultimaVentaPorMayor ? 'inline-flex' : 'none';
@@ -978,10 +824,12 @@ function showVentaPorMayorMessage(message, type) {
         }
     }
     
-    setTimeout(() => {
+    // Reiniciar el temporizador: antes un mensaje anterior ocultaba antes de tiempo al nuevo
+    clearTimeout(showVentaPorMayorMessage._temporizador);
+    showVentaPorMayorMessage._temporizador = setTimeout(() => {
         if (errorMsg) errorMsg.style.display = 'none';
         if (successMsg) successMsg.style.display = 'none';
-    }, 5000);
+    }, 6000);
 }
 
 // Función para cargar clientes en el select

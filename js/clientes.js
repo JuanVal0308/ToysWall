@@ -16,7 +16,7 @@ function setupClienteModalFormHandler() {
     // Evitar registrar múltiples listeners
     if (clienteModalForm.dataset.listenerAdded === 'true') return;
 
-    clienteModalForm.addEventListener('submit', async function(e) {
+    window.preventFormDoubleSubmit(clienteModalForm, async function(e) { // Protegido contra doble envío
         e.preventDefault();
         await guardarClienteModal();
     });
@@ -44,7 +44,7 @@ function initClientes() {
     // Formulario agregar cliente
     const nuevoClienteForm = document.getElementById('nuevoClienteForm');
     if (nuevoClienteForm) {
-        nuevoClienteForm.addEventListener('submit', async function(e) {
+        window.preventFormDoubleSubmit(nuevoClienteForm, async function(e) { // Protegido contra doble envío
             e.preventDefault();
             await agregarCliente();
         });

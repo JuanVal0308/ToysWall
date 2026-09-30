@@ -77,7 +77,7 @@ async function loadDashboardSummary() {
         // Calcular ganancias
         const totalGanancias = (ventas.data || []).reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0);
         if (totalGananciasEl) {
-            totalGananciasEl.textContent = '$' + totalGanancias.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+            totalGananciasEl.textContent = '$' + totalGanancias.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
         // Cargar ventas recientes (cargar sin relaciones automáticas, usar juguete_codigo)
@@ -122,7 +122,7 @@ async function loadDashboardSummary() {
                                 <strong>${juguete?.nombre || 'N/A'}</strong>
                                 <span>${v.codigo_venta}</span>
                             </div>
-                            <div class="venta-precio">$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</div>
+                            <div class="venta-precio">$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                         </div>
                     `;
                 }).join('');
@@ -226,22 +226,38 @@ function preventFormDoubleSubmit(form, submitHandler) {
         
         if (submitButton) {
             await preventDoubleClick(submitButton, async () => {
-                await submitHandler(e);
+                await submitHandler.call(form, e);
             }, {
                 loadingText: 'Procesando...',
                 showSpinner: true
-            });
+            }).catch(() => { /* el error ya se registró en consola */ });
         } else {
             // Si no hay botón de submit, marcar el formulario directamente
             form.dataset.processing = 'true';
             try {
-                await submitHandler(e);
+                await submitHandler.call(form, e);
             } finally {
                 form.dataset.processing = 'false';
             }
         }
     });
 }
+
+/**
+ * Oculta los mensajes de un formulario a los 6 s. Si se muestra un mensaje nuevo antes,
+ * se reinicia el temporizador (antes el temporizador del mensaje anterior ocultaba el nuevo
+ * casi de inmediato y el usuario no alcanzaba a leer el error).
+ */
+const temporizadoresMensajes = new WeakMap();
+function programarOcultarMensajes(errorMsg, successMsg) {
+    if (!errorMsg) return;
+    clearTimeout(temporizadoresMensajes.get(errorMsg));
+    temporizadoresMensajes.set(errorMsg, setTimeout(() => {
+        errorMsg.style.display = 'none';
+        if (successMsg) successMsg.style.display = 'none';
+    }, 6000));
+}
+window.programarOcultarMensajes = programarOcultarMensajes;
 
 // Hacer funciones disponibles globalmente
 window.preventDoubleClick = preventDoubleClick;
@@ -559,22 +575,37 @@ function initRegistrarVenta() {
         }
     });
 
-    // Agregar item a la venta (solo una vez)
+    // Agregar item a la venta (solo una vez). Se protege contra doble clic para no duplicar items.
     agregarItemBtn.addEventListener('click', async function(e) {
         e.preventDefault();
         e.stopPropagation();
-        
+        await preventDoubleClick(agregarItemBtn, agregarItemVenta, { loadingText: 'Agregando...' }).catch(() => {});
+    });
+
+    async function agregarItemVenta() {
         const jugueteCodigo = jugueteCodigoInput.value.trim();
         const empleadoCodigo = empleadoCodigoInput.value.trim();
-        const cantidad = parseInt(document.getElementById('ventaCantidad')?.value || 1);
+        const cantidadTexto = document.getElementById('ventaCantidad')?.value ?? '1';
+        const cantidad = ReglasInventario.parsearCantidad(cantidadTexto);
         // Obtener el valor numérico real del campo de precio (puede estar formateado)
         const precioInput = document.getElementById('ventaPrecio');
-        const precioRaw = precioInput?.dataset.numericValue || precioInput?.value.replace(/[^\d]/g, '') || '0';
-        const precio = parseFloat(precioRaw);
+        const precio = ReglasInventario.parsearPrecio(precioInput?.dataset.numericValue || precioInput?.value);
         const metodoPago = document.getElementById('ventaMetodoPago').value;
 
-        if (!jugueteCodigo || !precio || !metodoPago || cantidad < 1) {
-            showVentaMessage('Por favor, completa todos los campos correctamente', 'error');
+        if (!jugueteCodigo) {
+            showVentaMessage('Ingresa el código del juguete', 'error');
+            return;
+        }
+        if (cantidad === null) {
+            showVentaMessage('La cantidad debe ser un número entero mayor o igual a 1', 'error');
+            return;
+        }
+        if (!precio || precio <= 0) {
+            showVentaMessage('Ingresa un precio unitario válido (solo números, mayor a 0)', 'error');
+            return;
+        }
+        if (!metodoPago) {
+            showVentaMessage('Selecciona el método de pago', 'error');
             return;
         }
 
@@ -609,17 +640,18 @@ function initRegistrarVenta() {
                 // Empleados especiales que pueden vender en cualquier parte: Jose y Sindy
                 const empleadosEspeciales = ['Jose', 'Sindy'];
                 esEmpleadoEspecial = empleadosEspeciales.includes(empleado.nombre);
-            } else {
-                // Sin empleado especificado, usar usuario actual como admin
-                // Permitir venta desde cualquier ubicación disponible
-                esEmpleadoEspecial = true;
-                console.log('Venta sin empleado específico, usando usuario actual');
-            }
 
-            // Buscar TODOS los juguetes con ese código (puede haber múltiples registros en diferentes ubicaciones)
+                if (!esEmpleadoEspecial && !empleado.tienda_id) {
+                    showVentaMessage('El empleado no tiene una tienda asignada. No puede realizar ventas.', 'error');
+                    return;
+                }
+            }
+            // Sin empleado: el usuario actual (admin) puede vender desde cualquier ubicación
+
+            // Buscar TODOS los registros con ese código (uno por ubicación)
             const { data: juguetesData, error: jugueteError } = await window.supabaseClient
                 .from('juguetes')
-                .select('*')
+                .select('*, tiendas(nombre), bodegas(nombre)')
                 .eq('codigo', jugueteCodigo)
                 .eq('empresa_id', user.empresa_id);
 
@@ -629,64 +661,33 @@ function initRegistrarVenta() {
                 return;
             }
 
-            if (!juguetesData || juguetesData.length === 0) {
-                showVentaMessage('Juguete no encontrado', 'error');
-                return;
-            }
+            // Unidades ya reservadas por items anteriores de esta misma venta (por registro)
+            const reservado = {};
+            ventaItems.forEach(it => {
+                if (it.juguete_id) reservado[it.juguete_id] = (reservado[it.juguete_id] || 0) + it.cantidad;
+            });
 
-            // Seleccionar el juguete correcto según la ubicación del empleado
-            let juguete = null;
-
-            if (!esEmpleadoEspecial && empleado) {
-                // Empleado normal: debe buscar el juguete en su tienda
-                if (!empleado.tienda_id) {
-                    showVentaMessage('El empleado no tiene una tienda asignada. No puede realizar ventas.', 'error');
-                return;
-                }
-
-                // Buscar juguete en la tienda del empleado
-                juguete = juguetesData.find(j => j.tienda_id === empleado.tienda_id);
-                
-                if (!juguete) {
-                    showVentaMessage('El juguete no está disponible en la tienda del empleado.', 'error');
-                    return;
-                }
-            } else {
-                // Empleado especial o admin: puede vender desde cualquier ubicación
-                // Priorizar tiendas sobre bodegas, o tomar el primero disponible
-                juguete = juguetesData.find(j => j.tienda_id) || juguetesData.find(j => j.bodega_id);
-                
-                if (!juguete) {
-                    showVentaMessage('El juguete no tiene una ubicación asignada.', 'error');
-                    return;
-                }
-            }
-
-            // Verificar que haya suficiente cantidad
-            if (juguete.cantidad < cantidad) {
-                showVentaMessage(`No hay suficiente cantidad. Disponible: ${juguete.cantidad}`, 'error');
+            // Seleccionar la ubicación de la que se descontará (regla de dominio)
+            const { fila: juguete, error: errorUbicacion } = ReglasInventario.seleccionarUbicacionVenta(juguetesData, {
+                cantidad,
+                tiendaEmpleadoId: empleado && !esEmpleadoEspecial ? empleado.tienda_id : null,
+                reservado
+            });
+            if (!juguete) {
+                showVentaMessage(errorUbicacion, 'error');
                 return;
             }
 
             // Validar precio según tipo de usuario
             if (juguete.precio_min !== null && juguete.precio_min !== undefined) {
-                if (isEmpleado) {
+                if (isEmpleado && precio < juguete.precio_min) {
                     // Empleados solo pueden usar precio mayor o igual al precio mínimo
-                    if (precio < juguete.precio_min) {
-                        const precioMinFormateado = juguete.precio_min.toLocaleString('es-CO', { 
-                            minimumFractionDigits: 0, 
-                            maximumFractionDigits: 0 
-                        });
-                        const precioIngresadoFormateado = precio.toLocaleString('es-CO', { 
-                            minimumFractionDigits: 0, 
-                            maximumFractionDigits: 0 
-                        });
-                        showVentaMessage(
-                            `El precio debe ser mayor o igual al precio mínimo ($${precioMinFormateado}). Precio ingresado: $${precioIngresadoFormateado}`, 
-                            'error'
-                        );
-                        return;
-                    }
+                    const fmt = n => Number(n).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                    showVentaMessage(
+                        `El precio debe ser mayor o igual al precio mínimo ($${fmt(juguete.precio_min)}). Precio ingresado: $${fmt(precio)}`,
+                        'error'
+                    );
+                    return;
                 }
                 // Administradores pueden usar cualquier precio (mayor, igual o menor al mínimo) - sin validación
             } else if (isEmpleado) {
@@ -695,22 +696,24 @@ function initRegistrarVenta() {
                 return;
             }
 
-            // Agregar item
+            // Agregar item (se guarda el registro/ubicación exacta de la que se descontará)
             ventaItems.push({
+                juguete_id: juguete.id,
+                ubicacion_nombre: ReglasInventario.describirUbicacion(juguete),
                 juguete_codigo: juguete.codigo,
                 juguete_nombre: juguete.nombre,
                 juguete_item: juguete.item || null,
                 juguete_foto_url: juguete.foto_url || null,
-                empleado_id: empleado.id,
-                empleado_nombre: empleado.nombre,
-                empleado_codigo: empleado.codigo,
+                empleado_id: empleado ? empleado.id : null,
+                empleado_nombre: empleado ? empleado.nombre : 'Sin empleado',
+                empleado_codigo: empleado ? empleado.codigo : null,
                 cantidad: cantidad,
                 precio: precio,
                 metodo_pago: metodoPago
             });
 
             // Actualizar lista de items (esto también removerá los atributos required)
-                updateVentaItemsList();
+            updateVentaItemsList();
             
             // Asegurarse de que el formulario tenga novalidate cuando hay items
             const form = document.getElementById('registrarVentaForm');
@@ -718,27 +721,23 @@ function initRegistrarVenta() {
                 form.setAttribute('novalidate', 'novalidate');
             }
             
-            // Limpiar campos
+            // Limpiar campos del juguete (se conservan empleado y método de pago para agilizar)
             jugueteCodigoInput.value = '';
-            empleadoCodigoInput.value = '';
+            if (jugueteItemInput) jugueteItemInput.value = '';
             document.getElementById('ventaCantidad').value = '1';
-            const precioInput = document.getElementById('ventaPrecio');
             if (precioInput) {
                 precioInput.value = '';
                 precioInput.dataset.numericValue = '';
             }
-            document.getElementById('ventaMetodoPago').value = '';
             const jugueteInfo = document.getElementById('jugueteInfo');
-            const empleadoInfo = document.getElementById('empleadoInfo');
             if (jugueteInfo) jugueteInfo.style.display = 'none';
-            if (empleadoInfo) empleadoInfo.style.display = 'none';
 
-            showVentaMessage('Item agregado correctamente', 'success');
+            showVentaMessage(`Item agregado correctamente (se descontará de ${ReglasInventario.describirUbicacion(juguete)})`, 'success');
         } catch (error) {
             console.error('Error al agregar item:', error);
             showVentaMessage('Error al agregar item: ' + error.message, 'error');
         }
-    });
+    }
 
 
     // Registrar venta - con protección contra clics múltiples
@@ -750,50 +749,28 @@ function initRegistrarVenta() {
 
         // El formulario ya debería tener novalidate y los campos sin required
         // si hay items (manejado en updateVentaItemsList)
-        // Pero por si acaso, asegurémonos de que no haya validación HTML5
         if (!form.hasAttribute('novalidate')) {
             form.setAttribute('novalidate', 'novalidate');
         }
+
+        // Array para almacenar información de cada venta registrada (para deshacer)
+        const ventasRegistradas = [];
+        let codigoVenta = null;
 
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
             
             // Generar un solo código de venta para todos los items
-            const codigoVenta = await generarCodigoVenta();
-            
-            // Array para almacenar información de cada venta registrada (para deshacer)
-            const ventasRegistradas = [];
+            codigoVenta = await generarCodigoVenta();
             
             // Registrar cada item como parte de la misma venta
             for (const item of ventaItems) {
-                const cantidad = item.cantidad || 1;
-                
-                // Obtener juguete actual para verificar cantidad (buscar por código)
-                const { data: juguetes, error: jugueteError } = await window.supabaseClient
-                    .from('juguetes')
-                    .select('id, cantidad, codigo, nombre, bodega_id, tienda_id')
-                    .eq('codigo', item.juguete_codigo)
-                    .eq('empresa_id', user.empresa_id)
-                    .limit(1);
+                const cantidad = item.cantidad;
 
-                if (jugueteError) throw jugueteError;
-                if (!juguetes || juguetes.length === 0 || juguetes[0].cantidad < cantidad) {
-                    throw new Error(`No hay suficiente cantidad del juguete ${item.juguete_nombre}`);
-                }
+                // 1. Descontar del registro exacto elegido al agregar el item (valida stock y concurrencia)
+                const { anterior, fila } = await window.servicioStock.descontar(item.juguete_id, cantidad);
 
-                const juguete = juguetes[0];
-                
-                // Guardar información del juguete antes de modificar (para deshacer)
-                const infoJugueteOriginal = {
-                    juguete_id: juguete.id,
-                    juguete_codigo: juguete.codigo,
-                    juguete_nombre: juguete.nombre,
-                    cantidad_original: juguete.cantidad,
-                    bodega_id: juguete.bodega_id,
-                    tienda_id: juguete.tienda_id
-                };
-
-                // Registrar venta
+                // 2. Registrar venta; si falla, devolver el stock descontado
                 const { data: ventaInsertada, error } = await window.supabaseClient
                     .from('ventas')
                     .insert({
@@ -808,40 +785,33 @@ function initRegistrarVenta() {
                     .select()
                     .single();
 
-                if (error) throw error;
-
-                // Reducir cantidad del juguete
-                const nuevaCantidad = juguete.cantidad - cantidad;
-                await window.supabaseClient
-                    .from('juguetes')
-                    .update({ cantidad: nuevaCantidad })
-                    .eq('id', juguete.id);
+                if (error) {
+                    await window.servicioStock.reponer(item.juguete_id, cantidad, fila).catch(err => console.error('No se pudo reponer el stock:', err));
+                    throw error;
+                }
                 
                 // Guardar información de la venta registrada (para deshacer y logging)
                 ventasRegistradas.push({
                     venta_id: ventaInsertada.id,
                     codigo_venta: codigoVenta,
-                    juguete_info: infoJugueteOriginal,
+                    juguete_info: {
+                        juguete_id: fila.id,
+                        juguete_codigo: fila.codigo,
+                        juguete_nombre: fila.nombre,
+                        cantidad_original: anterior,
+                        bodega_id: fila.bodega_id,
+                        tienda_id: fila.tienda_id,
+                        fila_respaldo: fila
+                    },
                     cantidad_vendida: cantidad,
                     precio_venta: item.precio * cantidad,
                     empleado_id: item.empleado_id,
                     empleado_codigo: item.empleado_codigo,
-                    metodo_pago: item.metodo_pago,
-                    juguete_eliminado: nuevaCantidad === 0 // Si la cantidad llegó a 0, el juguete fue eliminado
+                    metodo_pago: item.metodo_pago
                 });
             }
-            
-            // Guardar información de la última venta para poder deshacerla
-            if (ventasRegistradas.length > 0) {
-                ultimaVenta = {
-                    codigo_venta: codigoVenta,
-                    ventas: ventasRegistradas,
-                    timestamp: new Date().toISOString()
-                };
-                actualizarBotonDeshacerVenta(true);
-            }
 
-            showVentaMessage('Venta registrada correctamente', 'success');
+            showVentaMessage(`Venta ${codigoVenta} registrada correctamente`, 'success');
             ventaItems = [];
             updateVentaItemsList(); // Esto restaurará los atributos required automáticamente
             form.reset();
@@ -852,18 +822,34 @@ function initRegistrarVenta() {
             }
         } catch (error) {
             console.error('Error al registrar venta:', error);
-            showVentaMessage('Error al registrar la venta: ' + error.message, 'error');
-            // Limpiar última venta en caso de error
-            ultimaVenta = null;
-            actualizarBotonDeshacerVenta(false);
+            if (ventasRegistradas.length > 0) {
+                // Registro parcial: quitar de la lista los items ya guardados y permitir deshacerlos
+                const guardados = ventasRegistradas.length;
+                ventaItems = ventaItems.slice(guardados);
+                updateVentaItemsList();
+                showVentaMessage(`Se registraron ${guardados} item(s) de la venta ${codigoVenta}, pero falló el siguiente: ${error.message}. Puedes deshacer lo registrado o corregir y volver a intentar.`, 'error');
+            } else {
+                showVentaMessage('Error al registrar la venta: ' + error.message, 'error');
+            }
+        } finally {
+            // Guardar información de la última venta (completa o parcial) para poder deshacerla
+            if (ventasRegistradas.length > 0) {
+                ultimaVenta = {
+                    codigo_venta: codigoVenta,
+                    ventas: ventasRegistradas,
+                    timestamp: new Date().toISOString()
+                };
+                actualizarBotonDeshacerVenta(true);
+            }
         }
     });
 
     // Botón facturar - ahora permite facturar ventas ya registradas
     facturarBtn.addEventListener('click', async function() {
-        // Si hay items en la venta actual, facturar esos items
+        // Si hay items sin registrar, pedir registrar primero: antes se facturaban items que nunca
+        // se guardaban como venta ni descontaban stock (factura sin venta).
         if (ventaItems.length > 0) {
-            showFacturarView();
+            showVentaMessage('Primero registra la venta con "Registrar Venta" y luego usa "Facturar" para seleccionarla.', 'error');
             return;
         }
         
@@ -929,21 +915,31 @@ async function deshacerUltimaVenta() {
                 }
                 
                 // Registrar en logs_deshacer_ventas
-                const { data: logInsertado, error: logError } = await window.supabaseClient
+                const datosLog = {
+                    empresa_id: user.empresa_id,
+                    usuario_id: user.id || null,
+                    codigo_venta: ultimaVenta.codigo_venta,
+                    codigo_vendedor: codigoVendedor || null,
+                    empleado_id: ventaInfo.empleado_id || null,
+                    juguete_codigo: ventaInfo.juguete_info?.juguete_codigo || null,
+                    juguete_nombre: ventaInfo.juguete_info?.juguete_nombre || null,
+                    precio_venta: ventaInfo.precio_venta || 0,
+                    cantidad: ventaInfo.cantidad_vendida || 1
+                };
+                let { data: logInsertado, error: logError } = await window.supabaseClient
                     .from('logs_deshacer_ventas')
-                    .insert({
-                        empresa_id: user.empresa_id,
-                        usuario_id: user.id || null,
-                        codigo_venta: ultimaVenta.codigo_venta,
-                        codigo_vendedor: codigoVendedor || null,
-                        empleado_id: ventaInfo.empleado_id || null,
-                        juguete_codigo: ventaInfo.juguete_info?.juguete_codigo || null,
-                        juguete_nombre: ventaInfo.juguete_info?.juguete_nombre || null,
-                        precio_venta: ventaInfo.precio_venta || 0,
-                        cantidad: ventaInfo.cantidad_vendida || 1
-                    })
+                    .insert(datosLog)
                     .select()
                     .single();
+                // La columna usuario_id es INTEGER pero los usuarios tienen id UUID (error 22P02):
+                // reintentar sin usuario para que el log no se pierda. Ver migrations/corregir_usuario_id_logs_deshacer.sql
+                if (logError && logError.code === '22P02') {
+                    ({ data: logInsertado, error: logError } = await window.supabaseClient
+                        .from('logs_deshacer_ventas')
+                        .insert({ ...datosLog, usuario_id: null })
+                        .select()
+                        .single());
+                }
                 
                 if (logError) {
                     console.error('Error al registrar log de deshacer venta:', logError);
@@ -957,40 +953,24 @@ async function deshacerUltimaVenta() {
                 // No bloquear el deshacer por un error de log
             }
 
-            // 2. Restaurar cantidad del juguete
-            if (ventaInfo.juguete_eliminado) {
-                // Si el juguete fue eliminado (cantidad llegó a 0), recrearlo
-                const nuevoJuguete = {
-                    nombre: ventaInfo.juguete_info.juguete_nombre,
-                    codigo: ventaInfo.juguete_info.juguete_codigo,
-                    cantidad: ventaInfo.juguete_info.cantidad_original,
-                    empresa_id: user.empresa_id
-                };
-                
-                if (ventaInfo.juguete_info.bodega_id) {
-                    nuevoJuguete.bodega_id = ventaInfo.juguete_info.bodega_id;
-                    nuevoJuguete.tienda_id = null;
-                } else if (ventaInfo.juguete_info.tienda_id) {
-                    nuevoJuguete.tienda_id = ventaInfo.juguete_info.tienda_id;
-                    nuevoJuguete.bodega_id = null;
-                }
-                
-                await window.supabaseClient
-                    .from('juguetes')
-                    .insert(nuevoJuguete);
-            } else {
-                // Si solo se redujo la cantidad, restaurarla
-                await window.supabaseClient
-                    .from('juguetes')
-                    .update({ cantidad: ventaInfo.juguete_info.cantidad_original })
-                    .eq('id', ventaInfo.juguete_info.juguete_id);
-            }
-            
-            // 3. Eliminar registro de venta
-            await window.supabaseClient
+            // 2. Eliminar el registro de venta (si falla, no se toca el stock)
+            const { error: errorEliminar } = await window.supabaseClient
                 .from('ventas')
                 .delete()
                 .eq('id', ventaInfo.venta_id);
+            if (errorEliminar) throw errorEliminar;
+
+            // 3. Devolver las unidades al mismo registro/ubicación de donde salieron.
+            //    Se suma a la cantidad ACTUAL (no se sobrescribe con la original) para no pisar
+            //    ventas o movimientos hechos después; si el registro ya no existe, se recrea.
+            await window.servicioStock.reponer(
+                ventaInfo.juguete_info.juguete_id,
+                ventaInfo.cantidad_vendida,
+                ventaInfo.juguete_info.fila_respaldo || null
+            );
+
+            // Quitar de la lista las ventas ya revertidas (por si falla una intermedia)
+            ultimaVenta.ventas.splice(i, 1);
         }
         
         // Limpiar última venta
@@ -1019,7 +999,8 @@ function inicializarBotonDeshacerVenta() {
         
         // Agregar event listener
         nuevoBtn.addEventListener('click', async function() {
-            await deshacerUltimaVenta();
+            // Protegido contra doble clic para no revertir dos veces
+            await preventDoubleClick(nuevoBtn, deshacerUltimaVenta, { loadingText: 'Deshaciendo...' }).catch(() => {});
         });
         // Ocultar inicialmente
         nuevoBtn.style.display = ultimaVenta ? 'inline-flex' : 'none';
@@ -1083,7 +1064,7 @@ window.updateVentaItemsList = function() {
             ${imagenHTML}
             <div class="item-info" style="flex: 1;">
                 <strong>${item.juguete_nombre}</strong> (${item.juguete_codigo})${itemCode}<br>
-                <small>Precio Unitario: $${item.precio.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} | Cantidad: ${cantidad} | Empleado: ${item.empleado_nombre} | Método: ${item.metodo_pago}</small>
+                <small>Precio Unitario: $${item.precio.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} | Cantidad: ${cantidad} | Empleado: ${item.empleado_nombre} | Método: ${item.metodo_pago}${item.ubicacion_nombre ? ` | Sale de: ${item.ubicacion_nombre}` : ''}</small>
             </div>
             <div class="item-actions">
                 <span class="item-precio">$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
@@ -1097,7 +1078,7 @@ window.updateVentaItemsList = function() {
         <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-top: 2px solid #8b5cf6;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <strong style="color: #1e293b; font-size: 16px;">Total de la Venta:</strong>
-                <strong style="color: #10b981; font-size: 20px;">$${totalVenta.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</strong>
+                <strong style="color: #10b981; font-size: 20px;">$${totalVenta.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
             </div>
         </div>
     `;
@@ -1130,10 +1111,12 @@ function showVentaMessage(message, type) {
         successMsg.style.display = 'flex';
     }
     
-    setTimeout(() => {
+    // Reiniciar el temporizador: antes un mensaje anterior ocultaba antes de tiempo al nuevo
+    clearTimeout(showVentaMessage._temporizador);
+    showVentaMessage._temporizador = setTimeout(() => {
         errorMsg.style.display = 'none';
         successMsg.style.display = 'none';
-    }, 5000);
+    }, 6000);
 }
 
 async function generarCodigoVenta() {
@@ -1250,7 +1233,7 @@ async function showVentasParaFacturar() {
                                         <p style="color: #64748b; font-size: 14px; margin: 5px 0;">${fecha}</p>
                                         <p style="color: #64748b; font-size: 14px;">Empleado: ${empleado}</p>
                                     </div>
-                                    <strong style="color: #10b981; font-size: 18px;">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</strong>
+                                    <strong style="color: #10b981; font-size: 18px;">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                                 </div>
                                 <div style="border-top: 1px solid #e2e8f0; padding-top: 10px; margin-top: 10px;">
                                     <small style="color: #64748b;">${grupoVentas.length} item(s)</small>
@@ -1376,9 +1359,9 @@ async function facturarVentaRegistrada(codigoVenta) {
             return `
             <tr>
                 <td>${item.juguete_nombre}</td>
-                <td>$${precioBase.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                <td>$${precioBase.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 <td>${item.cantidad}</td>
-                <td>$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                <td>$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>
         `;
         }).join('');
@@ -1387,10 +1370,10 @@ async function facturarVentaRegistrada(codigoVenta) {
         const facturaIvaElement = document.getElementById('facturaIva');
         const facturaTotalElement = document.getElementById('facturaTotal');
         if (facturaIvaElement) {
-            facturaIvaElement.textContent = '$' + ivaTotal.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+            facturaIvaElement.textContent = '$' + ivaTotal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
         if (facturaTotalElement) {
-            facturaTotalElement.textContent = '$' + totalConIva.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+            facturaTotalElement.textContent = '$' + totalConIva.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
         
         // Guardar datos para enviar (total con IVA incluido)
@@ -1454,9 +1437,9 @@ function showFacturarView() {
         return `
         <tr>
             <td>${item.juguete_nombre} (${item.juguete_codigo})${itemCode}</td>
-            <td>$${precioBase.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+            <td>$${precioBase.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             <td>${cantidad}</td>
-            <td>$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+            <td>$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
         </tr>
     `;
     }).join('');
@@ -1465,10 +1448,10 @@ function showFacturarView() {
     const facturaIvaElement = document.getElementById('facturaIva');
     const facturaTotalElement = document.getElementById('facturaTotal');
     if (facturaIvaElement) {
-        facturaIvaElement.textContent = '$' + ivaTotal.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+        facturaIvaElement.textContent = '$' + ivaTotal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     if (facturaTotalElement) {
-        facturaTotalElement.textContent = '$' + totalConIva.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+        facturaTotalElement.textContent = '$' + totalConIva.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     
     // Guardar datos para enviar (total con IVA incluido)
@@ -1702,9 +1685,9 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, clienteDocume
             <tr style="border-bottom: 1px solid #e2e8f0;">
                 <td style="padding: 10px 8px; text-align: center; color: #64748b; font-size: 13px;">${index + 1}</td>
                 <td style="padding: 10px 8px; font-weight: 600; color: #1e293b; font-size: 13px; word-wrap: break-word;">${item.juguete_nombre}</td>
-                <td style="padding: 10px 8px; text-align: right; color: #1e293b; font-size: 13px;">$${precioBase.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 10px 8px; text-align: right; color: #1e293b; font-size: 13px;">$${precioBase.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 <td style="padding: 10px 8px; text-align: center; color: #1e293b; font-weight: 600; font-size: 13px;">${cantidad}</td>
-                <td style="padding: 10px 8px; text-align: right; color: #10b981; font-weight: 700; font-size: 14px;">$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 10px 8px; text-align: right; color: #10b981; font-weight: 700; font-size: 14px;">$${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>
         `;
     }).join('');
@@ -1805,11 +1788,11 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, clienteDocume
                             <tfoot style="background: #f8f9fa; border-top: 3px solid #8b5cf6;">
                                 <tr>
                                     <td colspan="4" style="text-align: right; padding: 12px 10px; color: #1e293b; font-size: 15px; font-weight: 600;">IVA (19%):</td>
-                                    <td style="text-align: right; padding: 12px 10px; color: #64748b; font-size: 15px; font-weight: 600;">$${ivaTotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                                    <td style="text-align: right; padding: 12px 10px; color: #64748b; font-size: 15px; font-weight: 600;">$${ivaTotal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </tr>
                                 <tr>
                                     <td colspan="4" style="text-align: right; padding: 15px 10px; color: #1e293b; font-size: 16px; font-weight: 700;">TOTAL A PAGAR:</td>
-                                    <td style="text-align: right; padding: 15px 10px; color: #10b981; font-size: 20px; font-weight: 700;">$${totalConIva.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                                    <td style="text-align: right; padding: 15px 10px; color: #10b981; font-size: 20px; font-weight: 700;">$${totalConIva.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -1858,7 +1841,7 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, clienteDocume
             const cantidad = item.cantidad || 1;
             const precio = item.precio || 0;
             const subtotal = item.subtotal || (precio * cantidad);
-            return `${index + 1}. ${item.juguete_nombre} (${item.juguete_codigo}) - Cantidad: ${cantidad} x $${precio.toLocaleString('es-CO', { minimumFractionDigits: 2 })} = $${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`;
+            return `${index + 1}. ${item.juguete_nombre} (${item.juguete_codigo}) - Cantidad: ${cantidad} x $${precio.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = $${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         }).join('\n');
 
         // Preparar parámetros para EmailJS
@@ -1958,7 +1941,7 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, clienteDocume
             message_html: facturaHTML + xmlSectionHTML,
             message: facturaHTML + `\n\nARCHIVO XML DE FACTURA:\n\n${facturaXML}\n\nPara guardar el XML, copia el texto de arriba y guárdalo en un archivo con extensión .xml`, // Versión texto plano
             factura_codigo: facturaData.codigo_factura,
-            factura_total: `$${facturaData.total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`,
+            factura_total: `$${facturaData.total.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
             factura_fecha: new Date().toLocaleString('es-CO'),
             items_detalle: itemsTexto,
             cliente_nombre: clienteNombre || 'Cliente',
@@ -2942,6 +2925,15 @@ window.generarPlanMovimiento = function() {
 
 // Función para guardar el plan de movimiento en la base de datos
 window.guardarPlanMovimiento = async function() {
+    // Protección contra doble clic: sin esto se guardaban dos planes idénticos
+    const boton = document.querySelector('button[onclick="guardarPlanMovimiento()"]');
+    if (boton) {
+        return preventDoubleClick(boton, guardarPlanMovimientoInterno, { loadingText: 'Guardando plan...' }).catch(() => {});
+    }
+    return guardarPlanMovimientoInterno();
+};
+
+async function guardarPlanMovimientoInterno() {
     if (!planActualData) {
         showAbastecerMessage('No hay un plan para guardar', 'error');
         return;
@@ -2997,7 +2989,7 @@ window.guardarPlanMovimiento = async function() {
         console.error('Error al guardar plan:', error);
         showAbastecerMessage('Error al guardar el plan: ' + error.message, 'error');
     }
-};
+}
 
 // Función para actualizar el badge de planes pendientes
 async function actualizarBadgePlanesPendientes() {
@@ -3290,6 +3282,7 @@ async function ejecutarPlanMovimientoInterno(planId) {
         
         const items = plan.items || [];
         let itemsProcesados = 0;
+        const itemsOmitidos = [];
         
         // Procesar cada item del plan
         for (const item of items) {
@@ -3313,6 +3306,7 @@ async function ejecutarPlanMovimientoInterno(planId) {
 
                 if (!jugueteActualData || jugueteActualData.length === 0) {
                     console.warn(`Juguete con código ${jugueteCodigo} no encontrado, saltando...`);
+                    itemsOmitidos.push(`${jugueteCodigo}: no está en el origen`);
                     continue;
                 }
 
@@ -3320,131 +3314,18 @@ async function ejecutarPlanMovimientoInterno(planId) {
 
                 if (jugueteActual.cantidad < item.cantidad) {
                     console.warn(`No hay suficiente cantidad del juguete ${jugueteActual.nombre}`);
+                    itemsOmitidos.push(`${jugueteActual.nombre}: stock insuficiente (${jugueteActual.cantidad} de ${item.cantidad})`);
                     continue;
                 }
 
-                // Verificar si existe en destino
-                const campoDestino = plan.tipo_destino === 'bodega' ? 'bodega_id' : 'tienda_id';
-                const { data: jugueteExistenteData } = await window.supabaseClient
-                    .from('juguetes')
-                    .select('*')
-                    .eq('codigo', jugueteActual.codigo)
-                    .eq('nombre', jugueteActual.nombre)
-                    .eq('empresa_id', user.empresa_id)
-                    .eq(campoDestino, plan.destino_id)
-                    .limit(1);
-
-                // Guardar todos los datos del juguete original para heredar
-                const datosJugueteOriginal = {
-                    nombre: jugueteActual.nombre,
-                    codigo: jugueteActual.codigo,
-                    item: jugueteActual.item || null,
-                    foto_url: jugueteActual.foto_url || null,
-                    precio_min: jugueteActual.precio_min || null,
-                    precio_por_mayor: jugueteActual.precio_por_mayor || null,
-                    numero_bultos: jugueteActual.numero_bultos || null,
-                    cantidad_por_bulto: jugueteActual.cantidad_por_bulto || null
-                };
-
-                // Calcular cantidad restante en origen
-                const nuevaCantidadOrigen = jugueteActual.cantidad - item.cantidad;
-
-                // PRIMERO: Eliminar el registro original
-                await window.supabaseClient
-                    .from('juguetes')
-                    .delete()
-                    .eq('id', jugueteActual.id);
-
-                // SEGUNDO: Crear nuevo registro en origen si hay cantidad restante
-                if (nuevaCantidadOrigen > 0) {
-                    const nuevoJugueteOrigen = {
-                        nombre: datosJugueteOriginal.nombre,
-                        codigo: datosJugueteOriginal.codigo,
-                        item: datosJugueteOriginal.item,
-                        cantidad: nuevaCantidadOrigen,
-                        foto_url: datosJugueteOriginal.foto_url,
-                        precio_min: datosJugueteOriginal.precio_min,
-                        precio_por_mayor: datosJugueteOriginal.precio_por_mayor,
-                        numero_bultos: datosJugueteOriginal.numero_bultos,
-                        cantidad_por_bulto: datosJugueteOriginal.cantidad_por_bulto,
-                        empresa_id: user.empresa_id
-                    };
-                    
-                    if (plan.tipo_origen === 'bodega') {
-                        nuevoJugueteOrigen.bodega_id = plan.origen_id;
-                        nuevoJugueteOrigen.tienda_id = null;
-                    } else {
-                        nuevoJugueteOrigen.tienda_id = plan.origen_id;
-                        nuevoJugueteOrigen.bodega_id = null;
-                    }
-                    
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .insert(nuevoJugueteOrigen);
-                }
-
-                // TERCERO: Crear o actualizar registro en destino
-                if (jugueteExistenteData && jugueteExistenteData.length > 0) {
-                    // Si ya existe un juguete con el mismo código en el destino, actualizar cantidad y completar datos faltantes
-                    const jugueteExistente = jugueteExistenteData[0];
-                    const nuevaCantidadDestino = jugueteExistente.cantidad + item.cantidad;
-                    
-                    // Actualizar cantidad y completar datos faltantes (precios, item, bultos)
-                    const updateData = { 
-                        cantidad: nuevaCantidadDestino
-                    };
-                    
-                    // Completar campos si el existente no los tiene pero el origen sí
-                    if (!jugueteExistente.item && datosJugueteOriginal.item) {
-                        updateData.item = datosJugueteOriginal.item;
-                    }
-                    if (!jugueteExistente.precio_min && datosJugueteOriginal.precio_min) {
-                        updateData.precio_min = datosJugueteOriginal.precio_min;
-                    }
-                    if (!jugueteExistente.precio_por_mayor && datosJugueteOriginal.precio_por_mayor) {
-                        updateData.precio_por_mayor = datosJugueteOriginal.precio_por_mayor;
-                    }
-                    if (!jugueteExistente.numero_bultos && datosJugueteOriginal.numero_bultos) {
-                        updateData.numero_bultos = datosJugueteOriginal.numero_bultos;
-                    }
-                    if (!jugueteExistente.cantidad_por_bulto && datosJugueteOriginal.cantidad_por_bulto) {
-                        updateData.cantidad_por_bulto = datosJugueteOriginal.cantidad_por_bulto;
-                    }
-                    if (!jugueteExistente.foto_url && datosJugueteOriginal.foto_url) {
-                        updateData.foto_url = datosJugueteOriginal.foto_url;
-                    }
-                    
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .update(updateData)
-                        .eq('id', jugueteExistente.id);
-                } else {
-                    // Si no existe, crear un nuevo registro en el destino con todos los datos
-                    const nuevoJuguete = {
-                        nombre: datosJugueteOriginal.nombre,
-                        codigo: datosJugueteOriginal.codigo,
-                        item: datosJugueteOriginal.item,
-                        cantidad: item.cantidad,
-                        foto_url: datosJugueteOriginal.foto_url,
-                        precio_min: datosJugueteOriginal.precio_min,
-                        precio_por_mayor: datosJugueteOriginal.precio_por_mayor,
-                        numero_bultos: datosJugueteOriginal.numero_bultos,
-                        cantidad_por_bulto: datosJugueteOriginal.cantidad_por_bulto,
-                        empresa_id: user.empresa_id
-                    };
-                    
-                    if (plan.tipo_destino === 'bodega') {
-                        nuevoJuguete.bodega_id = plan.destino_id;
-                        nuevoJuguete.tienda_id = null;
-                    } else {
-                        nuevoJuguete.tienda_id = plan.destino_id;
-                        nuevoJuguete.bodega_id = null;
-                    }
-                    
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .insert(nuevoJuguete);
-                }
+                // Mover unidades actualizando los registros en su lugar (servicio compartido con Abastecer)
+                await window.servicioStock.transferir({
+                    jugueteOrigenId: jugueteActual.id,
+                    cantidad: item.cantidad,
+                    destinoTipo: plan.tipo_destino,
+                    destinoId: plan.destino_id,
+                    empresaId: user.empresa_id
+                });
 
                 // Registrar movimiento
                 await window.supabaseClient
@@ -3462,11 +3343,18 @@ async function ejecutarPlanMovimientoInterno(planId) {
                 itemsProcesados++;
             } catch (itemError) {
                 console.error('Error procesando item:', itemError);
+                itemsOmitidos.push(`${item.nombre || item.codigo || 'item'}: ${itemError.message}`);
             }
         }
         
+        // Si no se pudo mover nada, el plan queda pendiente para corregirlo y reintentar
+        if (itemsProcesados === 0 && items.length > 0) {
+            alert('No se pudo ejecutar ningún item del plan; sigue pendiente.\n\n' + itemsOmitidos.join('\n'));
+            return;
+        }
+
         // Actualizar estado del plan
-        await window.supabaseClient
+        const { error: errorEstado } = await window.supabaseClient
             .from('planes_movimiento')
             .update({
                 estado: 'ejecutado',
@@ -3474,8 +3362,10 @@ async function ejecutarPlanMovimientoInterno(planId) {
                 ejecutado_at: new Date().toISOString()
             })
             .eq('id', planId);
+        if (errorEstado) console.error('No se pudo actualizar el estado del plan:', errorEstado);
         
-        alert(`Plan ejecutado correctamente. ${itemsProcesados} de ${items.length} items procesados.`);
+        alert(`Plan ejecutado. ${itemsProcesados} de ${items.length} items procesados.` +
+            (itemsOmitidos.length ? `\n\nItems omitidos:\n${itemsOmitidos.join('\n')}` : ''));
         
         // Limpiar tabla de juguetes a mover en la vista de abastecer
         itemsMovimientoAbastecer = [];
@@ -3799,10 +3689,7 @@ function showAbastecerMessage(message, type) {
         successMsg.style.display = 'flex';
     }
     
-    setTimeout(() => {
-        errorMsg.style.display = 'none';
-        successMsg.style.display = 'none';
-    }, 5000);
+    programarOcultarMensajes(errorMsg, successMsg); // reinicia el temporizador si ya había un mensaje
 }
 
 // ============================================
@@ -3829,7 +3716,7 @@ async function loadAnalisis() {
         document.getElementById('totalJuguetesVendidos').textContent = totalVentas;
         
         const ganancias = ventas.data?.reduce((sum, v) => sum + parseFloat(v.precio_venta || 0), 0) || 0;
-        document.getElementById('gananciasTotales').textContent = '$' + ganancias.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+        document.getElementById('gananciasTotales').textContent = '$' + ganancias.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         // Cargar y mostrar gráficos
         await cargarGraficosAnalisis();
@@ -3956,7 +3843,7 @@ async function exportarAExcel(tipo) {
                     'Cliente': f.cliente_nombre || '',
                     'Documento': f.cliente_documento || '',
                     'Email': f.cliente_email || '',
-                    'Total': f.total ? parseFloat(f.total).toLocaleString('es-CO', { minimumFractionDigits: 2 }) : '0.00',
+                    'Total': f.total ? parseFloat(f.total).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00',
                     'Fecha': f.created_at ? new Date(f.created_at).toLocaleString('es-CO') : ''
                 }));
                 filename = 'facturas.xlsx';
@@ -4002,8 +3889,8 @@ async function exportarAExcel(tipo) {
                     'Juguete': v.juguetes?.nombre || '',
                     'Código Juguete': v.juguetes?.codigo || '',
                     'Cantidad': v.cantidad || 1,
-                    'Precio Unitario': v.precio_venta ? parseFloat(v.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2 }) : '0.00',
-                    'Total': v.precio_venta ? parseFloat(v.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2 }) : '0.00',
+                    'Precio Unitario': v.precio_venta ? parseFloat(v.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00',
+                    'Total': v.precio_venta ? parseFloat(v.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00',
                     'Método de Pago': v.metodo_pago || '',
                     'Empleado': v.empleados?.nombre || v.empleados?.codigo || '',
                     'Fecha': v.created_at ? new Date(v.created_at).toLocaleString('es-CO') : ''
@@ -4118,7 +4005,7 @@ function setupUsuarioForm() {
 const nuevoUsuarioForm = document.getElementById('nuevoUsuarioForm');
     if (nuevoUsuarioForm && !nuevoUsuarioForm.hasAttribute('data-listener-added')) {
         nuevoUsuarioForm.setAttribute('data-listener-added', 'true');
-    nuevoUsuarioForm.addEventListener('submit', async function(e) {
+    window.preventFormDoubleSubmit(nuevoUsuarioForm, async function(e) { // Protegido contra doble envío
         e.preventDefault();
         
             const nombre = capitalizarPrimeraLetra(document.getElementById('usuarioNombre').value.trim());
@@ -4178,7 +4065,7 @@ function setupTiendaForm() {
     const nuevaTiendaForm = document.getElementById('nuevaTiendaForm');
     if (nuevaTiendaForm && !nuevaTiendaForm.hasAttribute('data-listener-added')) {
         nuevaTiendaForm.setAttribute('data-listener-added', 'true');
-        nuevaTiendaForm.addEventListener('submit', async function(e) {
+        window.preventFormDoubleSubmit(nuevaTiendaForm, async function(e) { // Protegido contra doble envío
             e.preventDefault();
             
             const nombre = document.getElementById('tiendaNombre').value.trim();
@@ -4241,7 +4128,7 @@ async function openEditUsuarioModal(usuarioId) {
 // Formulario para editar usuario
 const editUsuarioForm = document.getElementById('editUsuarioForm');
 if (editUsuarioForm) {
-    editUsuarioForm.addEventListener('submit', async function(e) {
+    window.preventFormDoubleSubmit(editUsuarioForm, async function(e) { // Protegido contra doble envío
         e.preventDefault();
         
         const nombre = capitalizarPrimeraLetra(document.getElementById('editUsuarioNombre').value.trim());
@@ -4410,10 +4297,7 @@ function showUsuarioMessage(message, type) {
         successMsg.style.display = 'flex';
     }
     
-    setTimeout(() => {
-        errorMsg.style.display = 'none';
-        successMsg.style.display = 'none';
-    }, 5000);
+    programarOcultarMensajes(errorMsg, successMsg); // reinicia el temporizador si ya había un mensaje
 }
 
 function showTiendaMessage(message, type) {
@@ -4433,10 +4317,7 @@ function showTiendaMessage(message, type) {
         successMsg.style.display = 'flex';
     }
     
-    setTimeout(() => {
-        errorMsg.style.display = 'none';
-        successMsg.style.display = 'none';
-    }, 5000);
+    programarOcultarMensajes(errorMsg, successMsg); // reinicia el temporizador si ya había un mensaje
 }
 
 // Manejar clicks en el menú de tiendas
@@ -4530,7 +4411,7 @@ async function openEditTiendaModal(tiendaId) {
 // Formulario para editar tienda
 const editTiendaForm = document.getElementById('editTiendaForm');
 if (editTiendaForm) {
-    editTiendaForm.addEventListener('submit', async function(e) {
+    window.preventFormDoubleSubmit(editTiendaForm, async function(e) { // Protegido contra doble envío
         e.preventDefault();
         
         const nombre = document.getElementById('editTiendaNombre').value.trim();
@@ -4621,6 +4502,19 @@ async function deleteTienda(tiendaId) {
         return;
     }
     
+    // No permitir borrar una tienda con juguetes: quedarían sin ubicación (ON DELETE SET NULL)
+    try {
+        const resumen = await window.servicioStock.resumenUbicacion('tienda', tiendaId);
+        if (resumen.registros > 0) {
+            alert(`No se puede eliminar: la tienda tiene ${resumen.registros} juguete(s) registrados (${resumen.unidades} unidades). Muévelos primero con "Abastecer" o elimínalos.`);
+            return;
+        }
+    } catch (error) {
+        console.error('Error al verificar el inventario de la tienda:', error);
+        alert('No se pudo verificar el inventario de la tienda. Intenta de nuevo.');
+        return;
+    }
+
     if (!confirm('¿Estás seguro de que deseas eliminar esta tienda? Esta acción no se puede deshacer.')) {
         return;
     }
@@ -4711,6 +4605,11 @@ function initAbastecer() {
             return;
         }
 
+        if (origenTipoVal === destinoTipoVal && origenId === destinoId) {
+            showAbastecerMessage('El origen y el destino no pueden ser la misma ubicación', 'error');
+            return;
+        }
+
         // Obtener juguetes seleccionados desde la tabla de movimiento
         const juguetesSeleccionados = (itemsMovimientoAbastecer || [])
             .map(it => ({
@@ -4729,203 +4628,44 @@ function initAbastecer() {
             
             // Guardar información del movimiento para poder deshacerlo
             const movimientosDetalle = [];
+            const errores = [];
             
             for (const juguete of juguetesSeleccionados) {
-                // Obtener juguete actual del origen
-                const { data: jugueteActualData } = await window.supabaseClient
-                    .from('juguetes')
-                    .select('*')
-                    .eq('id', juguete.id)
-                    .limit(1);
+                try {
+                    // Mover unidades actualizando los registros en su lugar (sin borrar/recrear el origen)
+                    const detalle = await window.servicioStock.transferir({
+                        jugueteOrigenId: juguete.id,
+                        cantidad: juguete.cantidad,
+                        destinoTipo: destinoTipoVal,
+                        destinoId: destinoId,
+                        empresaId: user.empresa_id
+                    });
 
-                if (!jugueteActualData || jugueteActualData.length === 0) {
-                    showAbastecerMessage(`Juguete no encontrado`, 'error');
-                    continue;
-                }
-
-                const jugueteActual = jugueteActualData[0];
-
-                if (jugueteActual.cantidad < juguete.cantidad) {
-                    showAbastecerMessage(`No hay suficiente cantidad del juguete ${jugueteActual.nombre || ''}`, 'error');
-                    continue;
-                }
-
-                // Verificar si ya existe un juguete con el mismo código Y nombre en el destino
-                const campoDestino = destinoTipoVal === 'bodega' ? 'bodega_id' : 'tienda_id';
-                const { data: jugueteExistenteData } = await window.supabaseClient
-                    .from('juguetes')
-                    .select('*')
-                    .eq('codigo', jugueteActual.codigo)
-                    .eq('nombre', jugueteActual.nombre)
-                    .eq('empresa_id', user.empresa_id)
-                    .eq(campoDestino, destinoId)
-                    .limit(1);
-
-                // Guardar información completa del juguete original para heredar todos los datos
-                const datosJugueteOriginal = {
-                    nombre: jugueteActual.nombre,
-                    codigo: jugueteActual.codigo,
-                    item: jugueteActual.item || null,
-                    foto_url: jugueteActual.foto_url || null,
-                    precio_min: jugueteActual.precio_min || null,
-                    precio_por_mayor: jugueteActual.precio_por_mayor || null,
-                    numero_bultos: jugueteActual.numero_bultos || null,
-                    cantidad_por_bulto: jugueteActual.cantidad_por_bulto || null
-                };
-
-                // Guardar información para deshacer
-                const movimientoDetalle = {
-                    juguete_id_origen: juguete.id,
-                    juguete_codigo: jugueteActual.codigo,
-                    juguete_nombre: jugueteActual.nombre,
-                    cantidad_movida: juguete.cantidad,
-                    cantidad_origen_original: jugueteActual.cantidad,
-                    origen_tipo: origenTipoVal,
-                    origen_id: origenId,
-                    destino_tipo: destinoTipoVal,
-                    destino_id: destinoId,
-                    juguete_existia_en_destino: jugueteExistenteData && jugueteExistenteData.length > 0,
-                    juguete_id_destino: jugueteExistenteData && jugueteExistenteData.length > 0 ? jugueteExistenteData[0].id : null,
-                    cantidad_destino_original: jugueteExistenteData && jugueteExistenteData.length > 0 ? jugueteExistenteData[0].cantidad : 0,
-                    juguete_eliminado_origen: true, // Siempre eliminamos el original
-                    juguete_creado_destino: false,
-                    juguete_id_origen_creado: null, // ID del nuevo registro creado en origen
-                    datos_completos: datosJugueteOriginal // Guardar todos los datos para recrear
-                };
-
-                // Calcular cantidad restante en origen
-                const nuevaCantidadOrigen = jugueteActual.cantidad - juguete.cantidad;
-
-                // PRIMERO: Eliminar el registro original
-                await window.supabaseClient
-                    .from('juguetes')
-                    .delete()
-                    .eq('id', juguete.id);
-
-                // SEGUNDO: Crear nuevo registro en origen si hay cantidad restante
-                if (nuevaCantidadOrigen > 0) {
-                    const nuevoJugueteOrigen = {
-                        nombre: datosJugueteOriginal.nombre,
-                        codigo: datosJugueteOriginal.codigo,
-                        item: datosJugueteOriginal.item,
-                        cantidad: nuevaCantidadOrigen,
-                        foto_url: datosJugueteOriginal.foto_url,
-                        precio_min: datosJugueteOriginal.precio_min,
-                        precio_por_mayor: datosJugueteOriginal.precio_por_mayor,
-                        numero_bultos: datosJugueteOriginal.numero_bultos,
-                        cantidad_por_bulto: datosJugueteOriginal.cantidad_por_bulto,
-                        empresa_id: user.empresa_id
-                    };
-                    
-                    if (origenTipoVal === 'bodega') {
-                        nuevoJugueteOrigen.bodega_id = origenId;
-                        nuevoJugueteOrigen.tienda_id = null;
-                    } else {
-                        nuevoJugueteOrigen.tienda_id = origenId;
-                        nuevoJugueteOrigen.bodega_id = null;
-                    }
-                    
-                    const { data: nuevoJugueteOrigenInsertado } = await window.supabaseClient
-                        .from('juguetes')
-                        .insert(nuevoJugueteOrigen)
+                    // Registrar movimiento (auditoría)
+                    const { data: movimientoInsertado, error: errorMovimiento } = await window.supabaseClient
+                        .from('movimientos')
+                        .insert({
+                            tipo_origen: origenTipoVal,
+                            origen_id: origenId,
+                            tipo_destino: destinoTipoVal,
+                            destino_id: destinoId,
+                            juguete_codigo: detalle.origen.codigo,
+                            cantidad: juguete.cantidad,
+                            empresa_id: user.empresa_id
+                        })
                         .select()
                         .single();
-                    
-                    if (nuevoJugueteOrigenInsertado) {
-                        movimientoDetalle.juguete_id_origen_creado = nuevoJugueteOrigenInsertado.id;
-                    }
-                }
+                    if (errorMovimiento) console.error('No se pudo registrar el movimiento de auditoría:', errorMovimiento);
 
-                // TERCERO: Crear o actualizar registro en destino
-                if (jugueteExistenteData && jugueteExistenteData.length > 0) {
-                    // Si ya existe un juguete con el mismo código en el destino, actualizar cantidad y completar datos faltantes
-                    const jugueteExistente = jugueteExistenteData[0];
-                    const nuevaCantidadDestino = jugueteExistente.cantidad + juguete.cantidad;
-                    
-                    // Actualizar cantidad y completar datos faltantes (precios, item, bultos)
-                    const updateData = { 
-                        cantidad: nuevaCantidadDestino
-                    };
-                    
-                    // Completar campos si el existente no los tiene pero el origen sí
-                    if (!jugueteExistente.item && datosJugueteOriginal.item) {
-                        updateData.item = datosJugueteOriginal.item;
-                    }
-                    if (!jugueteExistente.precio_min && datosJugueteOriginal.precio_min) {
-                        updateData.precio_min = datosJugueteOriginal.precio_min;
-                    }
-                    if (!jugueteExistente.precio_por_mayor && datosJugueteOriginal.precio_por_mayor) {
-                        updateData.precio_por_mayor = datosJugueteOriginal.precio_por_mayor;
-                    }
-                    if (!jugueteExistente.numero_bultos && datosJugueteOriginal.numero_bultos) {
-                        updateData.numero_bultos = datosJugueteOriginal.numero_bultos;
-                    }
-                    if (!jugueteExistente.cantidad_por_bulto && datosJugueteOriginal.cantidad_por_bulto) {
-                        updateData.cantidad_por_bulto = datosJugueteOriginal.cantidad_por_bulto;
-                    }
-                    if (!jugueteExistente.foto_url && datosJugueteOriginal.foto_url) {
-                        updateData.foto_url = datosJugueteOriginal.foto_url;
-                    }
-                    
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .update(updateData)
-                        .eq('id', jugueteExistente.id);
-                } else {
-                    // Si no existe, crear un nuevo registro en el destino con todos los datos
-                    movimientoDetalle.juguete_creado_destino = true;
-                    const nuevoJugueteData = {
-                        nombre: datosJugueteOriginal.nombre,
-                        codigo: datosJugueteOriginal.codigo,
-                        item: datosJugueteOriginal.item,
-                        cantidad: juguete.cantidad,
-                        foto_url: datosJugueteOriginal.foto_url,
-                        precio_min: datosJugueteOriginal.precio_min,
-                        precio_por_mayor: datosJugueteOriginal.precio_por_mayor,
-                        numero_bultos: datosJugueteOriginal.numero_bultos,
-                        cantidad_por_bulto: datosJugueteOriginal.cantidad_por_bulto,
-                        empresa_id: user.empresa_id
-                    };
-                    
-                    if (destinoTipoVal === 'bodega') {
-                        nuevoJugueteData.bodega_id = destinoId;
-                        nuevoJugueteData.tienda_id = null;
-                    } else {
-                        nuevoJugueteData.tienda_id = destinoId;
-                        nuevoJugueteData.bodega_id = null;
-                    }
-                    
-                    const { data: nuevoJugueteInsertado } = await window.supabaseClient
-                        .from('juguetes')
-                        .insert(nuevoJugueteData)
-                        .select()
-                        .single();
-                    
-                    if (nuevoJugueteInsertado) {
-                        movimientoDetalle.juguete_id_destino = nuevoJugueteInsertado.id;
-                    }
+                    movimientosDetalle.push({
+                        ...detalle,
+                        juguete_nombre: detalle.origen.nombre,
+                        movimiento_id: movimientoInsertado ? movimientoInsertado.id : null
+                    });
+                } catch (errorItem) {
+                    console.error('Error al mover juguete:', errorItem);
+                    errores.push(errorItem.message);
                 }
-
-                // TERCERO: Crear registro de movimiento (solo para auditoría)
-                const { data: movimientoInsertado } = await window.supabaseClient
-                    .from('movimientos')
-                    .insert({
-                        tipo_origen: origenTipoVal,
-                        origen_id: origenId,
-                        tipo_destino: destinoTipoVal,
-                        destino_id: destinoId,
-                        juguete_codigo: jugueteActual.codigo,
-                        cantidad: juguete.cantidad,
-                        empresa_id: user.empresa_id
-                    })
-                    .select()
-                    .single();
-                
-                if (movimientoInsertado) {
-                    movimientoDetalle.movimiento_id = movimientoInsertado.id;
-                }
-                
-                movimientosDetalle.push(movimientoDetalle);
             }
             
             // Guardar el último movimiento para poder deshacerlo
@@ -4943,7 +4683,11 @@ function initAbastecer() {
                 actualizarBotonDeshacerAbastecer(true);
             }
 
-            showAbastecerMessage('Movimiento realizado correctamente', 'success');
+            if (errores.length > 0) {
+                showAbastecerMessage(`Se movieron ${movimientosDetalle.length} de ${juguetesSeleccionados.length} juguete(s). Errores: ${errores.join(' | ')}`, 'error');
+            } else {
+                showAbastecerMessage('Movimiento realizado correctamente', 'success');
+            }
             
             // Guardar valores de origen y destino antes de resetear
             const origenTipoValGuardado = origenTipo.value;
@@ -5019,7 +4763,8 @@ function inicializarBotonDeshacerAbastecer() {
         
         // Agregar event listener
         nuevoBtn.addEventListener('click', async function() {
-            await deshacerUltimoMovimientoAbastecer();
+            // Protegido contra doble clic para no revertir dos veces
+            await preventDoubleClick(nuevoBtn, deshacerUltimoMovimientoAbastecer, { loadingText: 'Deshaciendo...' }).catch(() => {});
         });
         // Ocultar inicialmente
         nuevoBtn.style.display = ultimoMovimientoAbastecer ? 'inline-flex' : 'none';
@@ -5044,78 +4789,24 @@ async function deshacerUltimoMovimientoAbastecer() {
         for (let i = ultimoMovimientoAbastecer.movimientos.length - 1; i >= 0; i--) {
             const movimiento = ultimoMovimientoAbastecer.movimientos[i];
             
-            // 1. Eliminar registros creados en origen (si existe)
-            if (movimiento.juguete_id_origen_creado) {
-                await window.supabaseClient
-                    .from('juguetes')
-                    .delete()
-                    .eq('id', movimiento.juguete_id_origen_creado);
-            }
-            
-            // 2. Revertir destino
-            if (movimiento.juguete_creado_destino) {
-                // Si se creó un nuevo registro, eliminarlo
-                if (movimiento.juguete_id_destino) {
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .delete()
-                        .eq('id', movimiento.juguete_id_destino);
-                }
-            } else if (movimiento.juguete_existia_en_destino) {
-                // Si existía, restaurar la cantidad original
-                if (movimiento.juguete_id_destino) {
-                    await window.supabaseClient
-                        .from('juguetes')
-                        .update({ cantidad: movimiento.cantidad_destino_original })
-                        .eq('id', movimiento.juguete_id_destino);
-                }
-            }
-            
-            // 3. Recrear el registro original con todos sus datos
-            // Usar datos_completos si está disponible, sino usar los campos individuales guardados
-            const datosCompletos = movimiento.datos_completos || {
-                nombre: movimiento.juguete_nombre,
-                codigo: movimiento.juguete_codigo,
-                item: null,
-                foto_url: movimiento.foto_url,
-                precio_min: null,
-                precio_por_mayor: null,
-                numero_bultos: null,
-                cantidad_por_bulto: null
-            };
-            
-            const jugueteOriginal = {
-                nombre: datosCompletos.nombre,
-                codigo: datosCompletos.codigo,
-                item: datosCompletos.item || null,
-                cantidad: movimiento.cantidad_origen_original,
-                foto_url: datosCompletos.foto_url || null,
-                precio_min: datosCompletos.precio_min || null,
-                precio_por_mayor: datosCompletos.precio_por_mayor || null,
-                numero_bultos: datosCompletos.numero_bultos || null,
-                cantidad_por_bulto: datosCompletos.cantidad_por_bulto || null,
-                empresa_id: user.empresa_id
-            };
-            
-            if (movimiento.origen_tipo === 'bodega') {
-                jugueteOriginal.bodega_id = movimiento.origen_id;
-                jugueteOriginal.tienda_id = null;
+            // 1. Revertir las cantidades (destino -> origen) sobre los registros actuales
+            if (movimiento.jugueteOrigenId) {
+                await window.servicioStock.revertirTransferencia(movimiento);
             } else {
-                jugueteOriginal.tienda_id = movimiento.origen_id;
-                jugueteOriginal.bodega_id = null;
+                throw new Error('Este movimiento se hizo con una versión anterior y no se puede deshacer automáticamente.');
             }
             
-            await window.supabaseClient
-                .from('juguetes')
-                .insert(jugueteOriginal);
-            
-            // 4. Eliminar registro de movimiento de auditoría
+            // 2. Eliminar registro de movimiento de auditoría
             if (movimiento.movimiento_id) {
-                await window.supabaseClient
+                const { error: errorMov } = await window.supabaseClient
                     .from('movimientos')
                     .delete()
                     .eq('id', movimiento.movimiento_id);
+                if (errorMov) console.error('No se pudo eliminar el registro de movimiento:', errorMov);
             }
+
+            // Quitar de la lista lo ya revertido (por si falla uno intermedio)
+            ultimoMovimientoAbastecer.movimientos.splice(i, 1);
         }
         
         // Limpiar último movimiento
@@ -5221,7 +4912,7 @@ async function aplicarFiltroVentas(filtro) {
                                 <td>${v.codigo_venta || 'N/A'}</td>
                             <td>${v.juguetes?.nombre || 'N/A'}</td>
                             <td>${v.empleados?.nombre || 'N/A'}</td>
-                                <td>$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                                <td>$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 <td>${v.metodo_pago || 'N/A'}</td>
                                 <td>${new Date(v.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
                         </tr>
@@ -5283,7 +4974,7 @@ async function aplicarFiltroGanancias(filtro) {
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 24px;">
                 <div class="stat-card" style="text-align: center;">
                     <h3 style="font-size: 16px; margin-bottom: 12px; color: #64748b;">Ganancias ${tituloFiltro}</h3>
-                    <p class="stat-number" style="color: #059669; font-size: 32px;">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</p>
+                    <p class="stat-number" style="color: #059669; font-size: 32px;">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
                 <div class="stat-card" style="text-align: center;">
                     <h3 style="font-size: 16px; margin-bottom: 12px; color: #64748b;">Total Ventas</h3>
@@ -5291,7 +4982,7 @@ async function aplicarFiltroGanancias(filtro) {
                 </div>
                 <div class="stat-card" style="text-align: center;">
                     <h3 style="font-size: 16px; margin-bottom: 12px; color: #64748b;">Promedio por Venta</h3>
-                    <p class="stat-number" style="color: #764ba2; font-size: 32px;">$${promedio.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</p>
+                    <p class="stat-number" style="color: #764ba2; font-size: 32px;">$${promedio.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
             </div>
         `;
@@ -5395,7 +5086,7 @@ async function cargarVentasRecientesAjustes() {
                             <strong>${v.juguetes?.nombre || 'N/A'}</strong>
                             <span>${v.codigo_venta || 'Sin código'} - ${new Date(v.created_at).toLocaleString('es-CO')}</span>
                         </div>
-                        <div class="venta-precio">$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</div>
+                        <div class="venta-precio">$${parseFloat(v.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                     </div>
                 `).join('');
             } else {
@@ -5477,7 +5168,7 @@ async function buscarVentaParaDevolucion() {
                         <h3 style="color: #8b5cf6; margin-bottom: 10px;">${codigoVenta}</h3>
                         <p style="color: #64748b; margin: 5px 0;"><strong>Fecha:</strong> ${fecha}</p>
                         <p style="color: #64748b; margin: 5px 0;"><strong>Empleado:</strong> ${empleado}</p>
-                        <p style="color: #64748b; margin: 5px 0;"><strong>Total Venta:</strong> <span style="color: #10b981; font-weight: bold; font-size: 18px;">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span></p>
+                        <p style="color: #64748b; margin: 5px 0;"><strong>Total Venta:</strong> <span style="color: #10b981; font-weight: bold; font-size: 18px;">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
                         <p style="color: #64748b; margin: 5px 0;" id="totalSeleccionadoDevolucion"><strong>Total Seleccionado:</strong> <span style="color: #ef4444; font-weight: bold;">$0.00</span> (0 items)</p>
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 10px;">
@@ -5534,8 +5225,8 @@ async function buscarVentaParaDevolucion() {
                                                 onchange="toggleSeleccionItem()"
                                             >
                                         </td>
-                                        <td>$${precioUnitario.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
-                                        <td>$${parseFloat(venta.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                                        <td>$${precioUnitario.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                        <td>$${parseFloat(venta.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                     </tr>
                                 `;
                             }).join('')}
@@ -5596,7 +5287,7 @@ window.toggleSeleccionItem = function() {
     }
     
     if (totalSeleccionadoEl) {
-        totalSeleccionadoEl.innerHTML = `<strong>Total Seleccionado:</strong> <span style="color: #ef4444; font-weight: bold;">$${totalSeleccionado.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span> (${itemsSeleccionados} item${itemsSeleccionados !== 1 ? 's' : ''})`;
+        totalSeleccionadoEl.innerHTML = `<strong>Total Seleccionado:</strong> <span style="color: #ef4444; font-weight: bold;">$${totalSeleccionado.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> (${itemsSeleccionados} item${itemsSeleccionados !== 1 ? 's' : ''})`;
     }
 };
 
@@ -5645,7 +5336,22 @@ window.procesarDevolucionSelectiva = async function(codigoVenta) {
 };
 
 // Función global para procesar devolución
+let devolucionEnCurso = false;
 window.procesarDevolucion = async function(codigoVenta, itemsSeleccionados = null) {
+    // Evitar doble clic: dos ejecuciones simultáneas podían devolver el stock dos veces
+    if (devolucionEnCurso) return;
+    devolucionEnCurso = true;
+    const botonesDevolucion = document.querySelectorAll('#ventasListContainer button');
+    botonesDevolucion.forEach(b => { b.disabled = true; });
+    try {
+        await procesarDevolucionInterna(codigoVenta, itemsSeleccionados);
+    } finally {
+        devolucionEnCurso = false;
+        document.querySelectorAll('#ventasListContainer button').forEach(b => { b.disabled = false; });
+    }
+};
+
+async function procesarDevolucionInterna(codigoVenta, itemsSeleccionados = null) {
     // Mensaje de confirmación diferente según si es selectiva o total
     const esSelectiva = Array.isArray(itemsSeleccionados) && itemsSeleccionados.length > 0;
     const mensajeConfirmacion = esSelectiva 
@@ -5897,7 +5603,7 @@ window.procesarDevolucion = async function(codigoVenta, itemsSeleccionados = nul
         console.error('Error al procesar devolución:', error);
         showAjustesMessage('Error al procesar la devolución: ' + error.message + '. Verifica que la política DELETE esté habilitada en Supabase para la tabla ventas.', 'error');
     }
-};
+}
 
 function showAjustesMessage(message, type) {
     const errorMsg = document.getElementById('ajustesErrorMessage');
@@ -5916,10 +5622,7 @@ function showAjustesMessage(message, type) {
         successMsg.style.display = 'flex';
     }
     
-    setTimeout(() => {
-        errorMsg.style.display = 'none';
-        successMsg.style.display = 'none';
-    }, 5000);
+    programarOcultarMensajes(errorMsg, successMsg); // reinicia el temporizador si ya había un mensaje
 }
 
 // Exportar función
@@ -6094,7 +5797,7 @@ function crearGraficoVentasPorDia(ventasPorDia) {
                             if (context.datasetIndex === 0) {
                                 return `Cantidad: ${context.parsed.y} juguetes`;
                             } else {
-                                return `Total: $${context.parsed.y.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`;
+                                return `Total: $${context.parsed.y.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                             }
                         }
                     }
@@ -6191,7 +5894,7 @@ function crearGraficoVentasPorHora(ventasPorHora) {
                             if (context.datasetIndex === 0) {
                                 return `Cantidad: ${context.parsed.y} juguetes`;
                             } else {
-                                return `Total: $${context.parsed.y.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`;
+                                return `Total: $${context.parsed.y.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                             }
                         }
                     }
@@ -6259,8 +5962,8 @@ function actualizarInfoVentasPorDia(ventasPorDia) {
     if (infoDiv) {
         if (diaMax !== null) {
             infoDiv.innerHTML = `
-                <p><strong>Día con más ventas:</strong> <span style="color: #10b981;">Día ${diaMax}</span> (${cantidadMax} juguetes - $${ventasPorDia[diaMax].total.toLocaleString('es-CO', { minimumFractionDigits: 2 })})</p>
-                <p><strong>Día con menos ventas:</strong> <span style="color: ${cantidadMin === 0 ? '#ef4444' : '#f59e0b'};">Día ${diaMin}</span> (${cantidadMin} juguetes - $${ventasPorDia[diaMin].total.toLocaleString('es-CO', { minimumFractionDigits: 2 })})</p>
+                <p><strong>Día con más ventas:</strong> <span style="color: #10b981;">Día ${diaMax}</span> (${cantidadMax} juguetes - $${ventasPorDia[diaMax].total.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</p>
+                <p><strong>Día con menos ventas:</strong> <span style="color: ${cantidadMin === 0 ? '#ef4444' : '#f59e0b'};">Día ${diaMin}</span> (${cantidadMin} juguetes - $${ventasPorDia[diaMin].total.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</p>
             `;
         } else {
             infoDiv.innerHTML = '<p style="color: #64748b;">No hay datos disponibles</p>';
@@ -6291,8 +5994,8 @@ function actualizarInfoVentasPorHora(ventasPorHora) {
     if (infoDiv) {
         if (horaMax !== null) {
             infoDiv.innerHTML = `
-                <p><strong>Hora con más ventas:</strong> <span style="color: #10b981;">${horaMax}:00 - ${parseInt(horaMax) + 1}:00</span> (${cantidadMax} juguetes - $${ventasPorHora[horaMax].total.toLocaleString('es-CO', { minimumFractionDigits: 2 })})</p>
-                <p><strong>Hora con menos ventas:</strong> <span style="color: ${cantidadMin === 0 ? '#ef4444' : '#f59e0b'};">${horaMin}:00 - ${parseInt(horaMin) + 1}:00</span> (${cantidadMin} juguetes - $${ventasPorHora[horaMin].total.toLocaleString('es-CO', { minimumFractionDigits: 2 })})</p>
+                <p><strong>Hora con más ventas:</strong> <span style="color: #10b981;">${horaMax}:00 - ${parseInt(horaMax) + 1}:00</span> (${cantidadMax} juguetes - $${ventasPorHora[horaMax].total.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</p>
+                <p><strong>Hora con menos ventas:</strong> <span style="color: ${cantidadMin === 0 ? '#ef4444' : '#f59e0b'};">${horaMin}:00 - ${parseInt(horaMin) + 1}:00</span> (${cantidadMin} juguetes - $${ventasPorHora[horaMin].total.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</p>
             `;
         } else {
             infoDiv.innerHTML = '<p style="color: #64748b;">No hay datos disponibles</p>';
@@ -6722,13 +6425,7 @@ function showTiendaMessage(message, type) {
 
     
 
-    setTimeout(() => {
-
-        errorMsg.style.display = 'none';
-
-        successMsg.style.display = 'none';
-
-    }, 5000);
+    programarOcultarMensajes(errorMsg, successMsg); // reinicia el temporizador si ya había un mensaje
 
 }
 
@@ -6849,7 +6546,7 @@ async function aplicarFiltroVentas(filtro) {
 
                             <td>${v.empleados?.nombre || 'N/A'}</td>
 
-                            <td>$${parseFloat(v.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                            <td>$${parseFloat(v.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
 
                             <td>${v.metodo_pago}</td>
 
@@ -6943,7 +6640,7 @@ async function aplicarFiltroGanancias(filtro) {
 
                 <h3>Ganancias ${filtro === 'dia' ? 'del Día' : filtro === 'semana' ? 'de la Semana' : 'Totales'}</h3>
 
-                <p class="stat-number">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</p>
+                <p class="stat-number">$${total.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
 
             </div>
 

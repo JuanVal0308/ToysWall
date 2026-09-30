@@ -359,6 +359,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     let ultimoJugueteAgregado = null; // Variable global para guardar el último juguete agregado (para deshacer)
 
     function showView(viewName) {
+        // Cerrar cualquier modal abierto: antes quedaban encima de la nueva vista y bloqueaban los clics
+        document.querySelectorAll('.modal-overlay').forEach(modal => {
+            modal.style.display = 'none';
+        });
+
         // Ocultar todas las vistas
         defaultView.style.display = 'none';
         ventaView.style.display = 'none';
@@ -816,7 +821,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Formulario para agregar nueva bodega
     const nuevaBodegaForm = document.getElementById('nuevaBodegaForm');
-    nuevaBodegaForm.addEventListener('submit', async function(e) {
+    window.preventFormDoubleSubmit(nuevaBodegaForm, async function(e) { // Protegido contra doble envío
         e.preventDefault();
         
         const nombre = document.getElementById('bodegaNombre').value.trim();
@@ -863,10 +868,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             successMsg.style.display = 'flex';
         }
         
-        setTimeout(() => {
-            errorMsg.style.display = 'none';
-            successMsg.style.display = 'none';
-        }, 5000);
+        programarOcultarMensajes(errorMsg, successMsg); // reinicia el temporizador si ya había un mensaje
     }
 
     // Abrir modal para editar bodega
@@ -906,7 +908,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Formulario para editar bodega
     const editBodegaForm = document.getElementById('editBodegaForm');
-    editBodegaForm.addEventListener('submit', async function(e) {
+    window.preventFormDoubleSubmit(editBodegaForm, async function(e) { // Protegido contra doble envío
         e.preventDefault();
         
         const nombre = document.getElementById('editBodegaNombre').value.trim();
@@ -983,6 +985,19 @@ document.addEventListener('DOMContentLoaded', async function() {
             return;
         }
         
+        // No permitir borrar una bodega con juguetes: quedarían sin ubicación (ON DELETE SET NULL)
+        try {
+            const resumen = await window.servicioStock.resumenUbicacion('bodega', bodegaId);
+            if (resumen.registros > 0) {
+                alert(`No se puede eliminar: la bodega tiene ${resumen.registros} juguete(s) registrados (${resumen.unidades} unidades). Muévelos primero con "Abastecer" o elimínalos.`);
+                return;
+            }
+        } catch (error) {
+            console.error('Error al verificar el inventario de la bodega:', error);
+            alert('No se pudo verificar el inventario de la bodega. Intenta de nuevo.');
+            return;
+        }
+
         if (!confirm('¿Estás seguro de que deseas eliminar esta bodega? Esta acción no se puede deshacer.')) {
             return;
         }
@@ -1036,7 +1051,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Formulario para agregar juguetes (desde modal de bodega - obsoleto, usar formulario principal)
     const agregarJuguetesForm = document.getElementById('agregarJuguetesForm');
     if (agregarJuguetesForm) {
-    agregarJuguetesForm.addEventListener('submit', async function(e) {
+    window.preventFormDoubleSubmit(agregarJuguetesForm, async function(e) { // Protegido contra doble envío
         e.preventDefault();
         
             const nombre = capitalizarPrimeraLetra(document.getElementById('jugueteNombre')?.value.trim());
@@ -1699,7 +1714,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             });
         }
         
-        agregarJugueteForm.addEventListener('submit', async function(e) {
+        window.preventFormDoubleSubmit(agregarJugueteForm, async function(e) { // Protegido contra doble envío
             e.preventDefault();
             
             const nombre = capitalizarPrimeraLetra(document.getElementById('jugueteNombreInput').value.trim());
@@ -1880,6 +1895,11 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
 
                 agregarJugueteForm.reset();
+                // reset() no limpia los valores numéricos guardados en data-*: limpiarlos para no reutilizar precios anteriores
+                ['juguetePrecioMinInput', 'juguetePrecioPorMayorInput'].forEach(id => {
+                    const campo = document.getElementById(id);
+                    if (campo) campo.dataset.numericValue = '';
+                });
                 document.getElementById('jugueteUbicacionContainer').style.display = 'none';
                 // Limpiar vista previa de foto
                 const fotoPreview = document.getElementById('fotoPreview');
@@ -2139,10 +2159,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             successMsg.style.display = 'flex';
         }
         
-        setTimeout(() => {
-            errorMsg.style.display = 'none';
-            successMsg.style.display = 'none';
-        }, 5000);
+        programarOcultarMensajes(errorMsg, successMsg); // reinicia el temporizador si ya había un mensaje
     }
 
     // ============================================
@@ -2800,6 +2817,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             // Llenar el formulario con datos de la base de datos
             document.getElementById('editarJugueteId').value = data.id;
+            // Guardar la ubicación para mostrarla al confirmar la eliminación
+            document.getElementById('editarJugueteForm').dataset.ubicacion = data.tiendas?.nombre
+                ? `Tienda ${data.tiendas.nombre}`
+                : (data.bodegas?.nombre ? `Bodega ${data.bodegas.nombre}` : 'Sin ubicación');
             document.getElementById('editarJugueteNombre').value = data.nombre;
             document.getElementById('editarJugueteCodigo').value = data.codigo;
             document.getElementById('editarJugueteCantidad').value = data.cantidad;
@@ -2895,11 +2916,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         const jugueteCodigo = document.getElementById('editarJugueteCodigo').value;
         
         // Confirmación con detalles del juguete
+        const ubicacion = document.getElementById('editarJugueteForm')?.dataset.ubicacion || '';
         const confirmacion = confirm(
             `¿Está seguro de que desea eliminar este juguete?\n\n` +
             `Nombre: ${jugueteNombre}\n` +
-            `Código: ${jugueteCodigo}\n\n` +
-            `Esta acción no se puede deshacer.`
+            `Código: ${jugueteCodigo}\n` +
+            (ubicacion ? `Ubicación: ${ubicacion} (solo se elimina el registro de esta ubicación)\n` : '') +
+            `\nEsta acción no se puede deshacer.`
         );
         
         if (!confirmacion) {
@@ -2962,7 +2985,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Configurar formulario de edición (ya estamos dentro de DOMContentLoaded del dashboard)
     const editarJugueteForm = document.getElementById('editarJugueteForm');
     if (editarJugueteForm) {
-        editarJugueteForm.addEventListener('submit', async function(e) {
+        window.preventFormDoubleSubmit(editarJugueteForm, async function(e) { // Protegido contra doble envío
             e.preventDefault();
             
                 const jugueteId = parseInt(document.getElementById('editarJugueteId').value);
@@ -3333,7 +3356,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Formulario para agregar empleado
     const nuevoEmpleadoForm = document.getElementById('nuevoEmpleadoForm');
     if (nuevoEmpleadoForm) {
-        nuevoEmpleadoForm.addEventListener('submit', async function(e) {
+        window.preventFormDoubleSubmit(nuevoEmpleadoForm, async function(e) { // Protegido contra doble envío
             e.preventDefault();
             
             const nombre = capitalizarPrimeraLetra(document.getElementById('empleadoNombre').value.trim());
@@ -3348,6 +3371,19 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
 
             try {
+                // El código del empleado identifica al vendedor en las ventas: debe ser único
+                const { data: codigoExistente, error: errorCodigo } = await window.supabaseClient
+                    .from('empleados')
+                    .select('id, nombre')
+                    .eq('codigo', codigo)
+                    .eq('empresa_id', user.empresa_id)
+                    .limit(1);
+                if (errorCodigo) throw errorCodigo;
+                if (codigoExistente && codigoExistente.length > 0) {
+                    showEmpleadoMessage(`El código "${codigo}" ya está asignado a ${codigoExistente[0].nombre}. Usa un código diferente.`, 'error');
+                    return;
+                }
+
                 const empleadoData = {
                     nombre: nombre,
                     telefono: telefono,
@@ -3399,10 +3435,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             successMsg.style.display = 'flex';
         }
         
-        setTimeout(() => {
-            errorMsg.style.display = 'none';
-            successMsg.style.display = 'none';
-        }, 5000);
+        programarOcultarMensajes(errorMsg, successMsg); // reinicia el temporizador si ya había un mensaje
     }
 
     // Abrir modal para editar empleado
@@ -3454,7 +3487,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Formulario para editar empleado
     const editEmpleadoForm = document.getElementById('editEmpleadoForm');
     if (editEmpleadoForm) {
-        editEmpleadoForm.addEventListener('submit', async function(e) {
+        window.preventFormDoubleSubmit(editEmpleadoForm, async function(e) { // Protegido contra doble envío
             e.preventDefault();
             
             const nombre = capitalizarPrimeraLetra(document.getElementById('editEmpleadoNombre').value.trim());
@@ -3469,6 +3502,20 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
 
             try {
+                // Validar que el código no esté asignado a otro empleado
+                const { data: codigoExistente, error: errorCodigo } = await window.supabaseClient
+                    .from('empleados')
+                    .select('id, nombre')
+                    .eq('codigo', codigo)
+                    .eq('empresa_id', user.empresa_id)
+                    .neq('id', currentEmpleadoId)
+                    .limit(1);
+                if (errorCodigo) throw errorCodigo;
+                if (codigoExistente && codigoExistente.length > 0) {
+                    showEditEmpleadoMessage(`El código "${codigo}" ya está asignado a ${codigoExistente[0].nombre}. Usa un código diferente.`, 'error');
+                    return;
+                }
+
                 const updateData = {
                     nombre: nombre,
                     telefono: telefono,
