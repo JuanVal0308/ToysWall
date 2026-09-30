@@ -26,8 +26,12 @@ las cuentas solo se crean desde la app (RPC `admin_crear_usuario`).
 
 ```js
 // js/config.js
-const USAR_SUPABASE_AUTH_POR_DEFECTO = false;   // ← cambiar a true en el paso 3
+const USAR_SUPABASE_AUTH_POR_DEFECTO = true;   // ← en main ya está en true (paso 3)
 ```
+
+Estado en producción (30/09/2026): 01–05 aplicadas (con respaldo previo en el esquema `respaldo_20260930`)
+y el flag en `true` en `main`. Pendiente: 06 y 07. Para volver temporalmente al login antiguo basta poner el
+flag en `false` (solo mientras 06 no esté aplicada, o tras su rollback).
 
 También se puede sobrescribir con `window.ENV.USAR_SUPABASE_AUTH` o `CONFIG_LOCAL.USAR_SUPABASE_AUTH`
 (ver `js/config.example.js`). Con `false` todo funciona como antes (tabla `usuarios`, operaciones de stock
@@ -47,6 +51,10 @@ desde el navegador).
   un Super Admin toca Super Admins) y `actualizar_mi_perfil` (exige la contraseña actual). Mínimo 6 caracteres.
 - **Verificar:** la consulta final debe mostrar todos los usuarios con `tiene_auth`, `correo_confirmado`
   y `clave_coincide` en `true` e `identidades = 1`.
+- **Nota:** producción tenía un trigger heredado `on_auth_user_created` en `auth.users` que llamaba a
+  `public.handle_new_user()` e insertaba en una columna inexistente (`usuarios.auth_user_id`), lo que
+  abortaba cualquier alta en Auth. La migración redefine esa función como no-op (`RETURN NEW`) al inicio;
+  la vinculación la hace ahora `usuarios.auth_id`.
 
 ### 02 · `2026_09_30_02_ventas_ubicacion.sql`
 - `ventas.juguete_id`, `tienda_id`, `bodega_id` (de qué registro/ubicación salió el stock) y
