@@ -387,21 +387,32 @@ function initVentaPorMayor() {
                 return;
             }
 
-            // Buscar empleado
-            const { data: empleados, error: empleadoError } = await window.supabaseClient
-                .from('empleados')
-                .select('*')
-                .eq('codigo', codigoEmpleado)
-                .eq('empresa_id', user.empresa_id)
-                .limit(1);
+            // Buscar empleado (opcional)
+            let empleado = null;
+            if (codigoEmpleado) {
+                const { data: empleados, error: empleadoError } = await window.supabaseClient
+                    .from('empleados')
+                    .select('*')
+                    .eq('codigo', codigoEmpleado)
+                    .eq('empresa_id', user.empresa_id)
+                    .limit(1);
 
-            if (empleadoError) throw empleadoError;
-            if (!empleados || empleados.length === 0) {
-                showVentaPorMayorMessage('Empleado no encontrado', 'error');
-                return;
+                if (empleadoError) throw empleadoError;
+                if (!empleados || empleados.length === 0) {
+                    showVentaPorMayorMessage('Empleado no encontrado', 'error');
+                    return;
+                }
+                empleado = empleados[0];
+            } else {
+                // Sin empleado especificado, crear objeto placeholder
+                empleado = {
+                    id: null,
+                    nombre: 'Admin',
+                    codigo: 'ADMIN'
+                };
+                console.log('Venta por mayor sin empleado específico, usando usuario actual');
             }
 
-            const empleado = empleados[0];
             const precio = juguete.precio_por_mayor;
 
             // Verificar cantidad disponible en la ubicación seleccionada

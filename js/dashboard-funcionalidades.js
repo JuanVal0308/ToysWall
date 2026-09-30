@@ -573,7 +573,7 @@ function initRegistrarVenta() {
         const precio = parseFloat(precioRaw);
         const metodoPago = document.getElementById('ventaMetodoPago').value;
 
-        if (!jugueteCodigo || !empleadoCodigo || !precio || !metodoPago || cantidad < 1) {
+        if (!jugueteCodigo || !precio || !metodoPago || cantidad < 1) {
             showVentaMessage('Por favor, completa todos los campos correctamente', 'error');
             return;
         }
@@ -581,30 +581,40 @@ function initRegistrarVenta() {
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
             
-            // Verificar empleado primero (usar limit en lugar de single)
-            const { data: empleadosData, error: empleadoError } = await window.supabaseClient
-                .from('empleados')
-                .select('*')
-                .eq('codigo', empleadoCodigo)
-                .eq('empresa_id', user.empresa_id)
-                .limit(1);
+            let empleado = null;
+            let esEmpleadoEspecial = false;
+            
+            // Si se proporcionó código de empleado, validarlo
+            if (empleadoCodigo) {
+                const { data: empleadosData, error: empleadoError } = await window.supabaseClient
+                    .from('empleados')
+                    .select('*')
+                    .eq('codigo', empleadoCodigo)
+                    .eq('empresa_id', user.empresa_id)
+                    .limit(1);
 
-            if (empleadoError) {
-                console.error('Error al buscar empleado:', empleadoError);
-                showVentaMessage('Error al buscar empleado: ' + empleadoError.message, 'error');
-                return;
+                if (empleadoError) {
+                    console.error('Error al buscar empleado:', empleadoError);
+                    showVentaMessage('Error al buscar empleado: ' + empleadoError.message, 'error');
+                    return;
+                }
+
+                if (!empleadosData || empleadosData.length === 0) {
+                    showVentaMessage('Empleado no encontrado', 'error');
+                    return;
+                }
+
+                empleado = empleadosData[0];
+                
+                // Empleados especiales que pueden vender en cualquier parte: Jose y Sindy
+                const empleadosEspeciales = ['Jose', 'Sindy'];
+                esEmpleadoEspecial = empleadosEspeciales.includes(empleado.nombre);
+            } else {
+                // Sin empleado especificado, usar usuario actual como admin
+                // Permitir venta desde cualquier ubicación disponible
+                esEmpleadoEspecial = true;
+                console.log('Venta sin empleado específico, usando usuario actual');
             }
-
-            if (!empleadosData || empleadosData.length === 0) {
-                showVentaMessage('Empleado no encontrado', 'error');
-                return;
-            }
-
-            const empleado = empleadosData[0];
-
-            // Empleados especiales que pueden vender en cualquier parte: Jose y Sindy
-            const empleadosEspeciales = ['Jose', 'Sindy'];
-            const esEmpleadoEspecial = empleadosEspeciales.includes(empleado.nombre);
 
             // Buscar TODOS los juguetes con ese código (puede haber múltiples registros en diferentes ubicaciones)
             const { data: juguetesData, error: jugueteError } = await window.supabaseClient
@@ -627,7 +637,7 @@ function initRegistrarVenta() {
             // Seleccionar el juguete correcto según la ubicación del empleado
             let juguete = null;
 
-            if (!esEmpleadoEspecial) {
+            if (!esEmpleadoEspecial && empleado) {
                 // Empleado normal: debe buscar el juguete en su tienda
                 if (!empleado.tienda_id) {
                     showVentaMessage('El empleado no tiene una tienda asignada. No puede realizar ventas.', 'error');
@@ -642,7 +652,7 @@ function initRegistrarVenta() {
                     return;
                 }
             } else {
-                // Empleado especial: puede vender desde cualquier ubicación
+                // Empleado especial o admin: puede vender desde cualquier ubicación
                 // Priorizar tiendas sobre bodegas, o tomar el primero disponible
                 juguete = juguetesData.find(j => j.tienda_id) || juguetesData.find(j => j.bodega_id);
                 
