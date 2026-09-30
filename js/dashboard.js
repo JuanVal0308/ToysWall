@@ -2778,87 +2778,68 @@ document.addEventListener('DOMContentLoaded', async function() {
         event.stopPropagation();
         
         try {
-            // Buscar el juguete en todosLosJuguetes
-            const juguete = todosLosJuguetes.find(j => j.id === jugueteId);
+            // Buscar el juguete en todosLosJuguetes usando id_principal
+            const jugueteAgrupado = todosLosJuguetes.find(j => j.id_principal === jugueteId);
             
-            if (!juguete) {
-                // Si no está en la lista, buscarlo en la base de datos
-                const { data, error } = await window.supabaseClient
-                    .from('juguetes')
-                    .select(`
-                        *,
-                        bodegas(nombre, direccion),
-                        tiendas(nombre, direccion)
-                    `)
-                    .eq('id', jugueteId)
+            // Siempre buscar en la base de datos para obtener datos actualizados y completos
+            const { data, error } = await window.supabaseClient
+                .from('juguetes')
+                .select(`
+                    *,
+                    bodegas(nombre, direccion),
+                    tiendas(nombre, direccion)
+                `)
+                .eq('id', jugueteId)
                 .single();
 
-                if (error || !data) {
-                    alert('Error al cargar el juguete');
-                    return;
-                }
-                
-                // Llenar el formulario
-                document.getElementById('editarJugueteId').value = data.id;
-                document.getElementById('editarJugueteNombre').value = data.nombre;
-                document.getElementById('editarJugueteCodigo').value = data.codigo;
-                document.getElementById('editarJugueteCantidad').value = data.cantidad;
-                document.getElementById('editarJuguetePrecioMin').value = data.precio_min || '';
-                const editarPrecioPorMayorInputDb = document.getElementById('editarJuguetePrecioPorMayor');
-                if (editarPrecioPorMayorInputDb) {
-                    editarPrecioPorMayorInputDb.value = data.precio_por_mayor || '';
-                }
-                // Llenar campos de bultos si existen
-                const numeroBultosInput = document.getElementById('editarJugueteNumeroBultos');
-                const cantidadPorBultoInput = document.getElementById('editarJugueteCantidadPorBulto');
-                if (numeroBultosInput) {
-                    numeroBultosInput.value = data.numero_bultos || '';
-                }
-                if (cantidadPorBultoInput) {
-                    cantidadPorBultoInput.value = data.cantidad_por_bulto || '';
-                }
-                const fotoUrlInput = document.getElementById('editarJugueteFotoUrl');
-                const fotoPreview = document.getElementById('editarFotoPreview');
-                const fotoPreviewImg = document.getElementById('editarFotoPreviewImg');
-                if (fotoUrlInput) {
-                    fotoUrlInput.value = data.foto_url || '';
-                    // Mostrar vista previa si hay URL
-                    if (data.foto_url && fotoPreviewImg && fotoPreview) {
-                        fotoPreviewImg.src = data.foto_url;
-                        fotoPreview.style.display = 'block';
-                        fotoPreviewImg.onerror = function() {
-                            fotoPreview.style.display = 'none';
-                        };
-                    } else if (fotoPreview) {
+            if (error || !data) {
+                console.error('Error al cargar juguete:', error);
+                alert('Error al cargar el juguete');
+                return;
+            }
+            
+            // Llenar el formulario con datos de la base de datos
+            document.getElementById('editarJugueteId').value = data.id;
+            document.getElementById('editarJugueteNombre').value = data.nombre;
+            document.getElementById('editarJugueteCodigo').value = data.codigo;
+            document.getElementById('editarJugueteCantidad').value = data.cantidad;
+            document.getElementById('editarJuguetePrecioMin').value = data.precio_min || '';
+            
+            const editarPrecioPorMayorInput = document.getElementById('editarJuguetePrecioPorMayor');
+            if (editarPrecioPorMayorInput) {
+                editarPrecioPorMayorInput.value = data.precio_por_mayor || '';
+            }
+            
+            // Llenar campos de bultos si existen
+            const numeroBultosInput = document.getElementById('editarJugueteNumeroBultos');
+            const cantidadPorBultoInput = document.getElementById('editarJugueteCantidadPorBulto');
+            if (numeroBultosInput) {
+                numeroBultosInput.value = data.numero_bultos || '';
+            }
+            if (cantidadPorBultoInput) {
+                cantidadPorBultoInput.value = data.cantidad_por_bulto || '';
+            }
+            
+            // Llenar campo ITEM si existe
+            const itemInput = document.getElementById('editarJugueteItem');
+            if (itemInput) {
+                itemInput.value = data.item || '';
+            }
+            
+            const fotoUrlInput = document.getElementById('editarJugueteFotoUrl');
+            const fotoPreview = document.getElementById('editarFotoPreview');
+            const fotoPreviewImg = document.getElementById('editarFotoPreviewImg');
+            if (fotoUrlInput) {
+                fotoUrlInput.value = data.foto_url || '';
+                // Mostrar vista previa si hay URL
+                if (data.foto_url && fotoPreviewImg && fotoPreview) {
+                    fotoPreviewImg.src = data.foto_url;
+                    fotoPreview.style.display = 'block';
+                    fotoPreviewImg.onerror = function() {
                         fotoPreview.style.display = 'none';
-                    }
-                }
-            } else {
-                // Llenar el formulario con datos del juguete
-                document.getElementById('editarJugueteId').value = juguete.id;
-                document.getElementById('editarJugueteNombre').value = juguete.nombre;
-                document.getElementById('editarJugueteCodigo').value = juguete.codigo;
-                document.getElementById('editarJugueteCantidad').value = juguete.cantidad;
-                document.getElementById('editarJuguetePrecioMin').value = juguete.precio_min || '';
-                const editarPrecioPorMayorInput = document.getElementById('editarJuguetePrecioPorMayor');
-                if (editarPrecioPorMayorInput) {
-                    editarPrecioPorMayorInput.value = juguete.precio_por_mayor || '';
-                }
-                const fotoUrlInput = document.getElementById('editarJugueteFotoUrl');
-                const fotoPreview = document.getElementById('editarFotoPreview');
-                const fotoPreviewImg = document.getElementById('editarFotoPreviewImg');
-                if (fotoUrlInput) {
-                    fotoUrlInput.value = juguete.foto_url || '';
-                    // Mostrar vista previa si hay URL
-                    if (juguete.foto_url && fotoPreviewImg && fotoPreview) {
-                        fotoPreviewImg.src = juguete.foto_url;
-                        fotoPreview.style.display = 'block';
-                        fotoPreviewImg.onerror = function() {
-                            fotoPreview.style.display = 'none';
-                        };
-                    } else if (fotoPreview) {
-                        fotoPreview.style.display = 'none';
-                    }
+                    };
+                } else if (fotoPreview) {
+                    fotoPreview.style.display = 'none';
                 }
             }
             
@@ -2959,6 +2940,12 @@ document.addEventListener('DOMContentLoaded', async function() {
                     
                     if (fotoUrl !== null) {
                         updateData.foto_url = fotoUrl || null;
+                    }
+                    
+                    // Agregar campo ITEM si existe en el formulario (campo compartido)
+                    const itemInput = document.getElementById('editarJugueteItem');
+                    if (itemInput) {
+                        updateData.item = itemInput.value.trim() || null;
                     }
                     
                     // Agregar campos de bultos si se proporcionan
