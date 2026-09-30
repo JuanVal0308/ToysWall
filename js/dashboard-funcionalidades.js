@@ -1543,42 +1543,61 @@ function initFacturar() {
         
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
-            
-            // Crear factura
+            const usarAuth = window.APP_CONFIG?.USAR_SUPABASE_AUTH === true;
+
+            // 1. Generar y subir el XML primero: así la factura se guarda con su ruta en una sola escritura
+            //    (con RLS, un empleado puede crear facturas pero no modificarlas después).
+            const fechaISO = new Date().toISOString();
+            const totales = calcularTotalesFactura(currentFacturaData);
+            const facturaXML = generarXMLFactura(currentFacturaData, clienteNombre, clienteDocumento, clienteEmail,
+                fechaISO, totales.totalConIva, totales.totalBase, totales.ivaTotal);
+            const estadoXml = window.servicioFacturaXml
+                ? await window.servicioFacturaXml.subir(currentFacturaData.codigo_factura, facturaXML)
+                : { ok: false, ruta: null, url: null, motivo: 'servicio de almacenamiento no disponible' };
+            if (!estadoXml.ok) console.error('No se pudo subir el XML de la factura:', estadoXml.motivo);
+
+            // 2. Crear factura
+            const datosFactura = {
+                codigo_factura: currentFacturaData.codigo_factura,
+                cliente_nombre: clienteNombre,
+                cliente_documento: clienteDocumento,
+                cliente_email: clienteEmail,
+                total: currentFacturaData.total,
+                empresa_id: user.empresa_id
+            };
+            if (usarAuth && estadoXml.ok) {
+                datosFactura.xml_path = estadoXml.ruta; // columna creada por la migración 2026_09_30_05
+            }
             const { data: factura, error: facturaError } = await window.supabaseClient
                 .from('facturas')
-                .insert({
-                    codigo_factura: currentFacturaData.codigo_factura,
-                    cliente_nombre: clienteNombre,
-                    cliente_documento: clienteDocumento,
-                    cliente_email: clienteEmail,
-                    total: currentFacturaData.total,
-                    empresa_id: user.empresa_id
-                })
+                .insert(datosFactura)
                 .select()
                 .single();
             
             if (facturaError) throw facturaError;
             
-            // Crear items de factura
-            for (const item of currentFacturaData.items) {
+            // 3. Crear items de factura en un solo INSERT (todo o nada); antes los errores se ignoraban
+            const filasItems = currentFacturaData.items.map(item => {
                 const cantidad = item.cantidad || 1;
                 const precio = item.precio || 0;
-                const subtotal = item.subtotal || (precio * cantidad);
-                
-                await window.supabaseClient
-                    .from('facturas_items')
-                    .insert({
-                        factura_id: factura.id,
-                        juguete_nombre: item.juguete_nombre,
-                        juguete_codigo: item.juguete_codigo,
-                        precio: precio,
-                        cantidad: cantidad,
-                        subtotal: subtotal
-                    });
+                return {
+                    factura_id: factura.id,
+                    juguete_nombre: item.juguete_nombre,
+                    juguete_codigo: item.juguete_codigo,
+                    precio: precio,
+                    cantidad: cantidad,
+                    subtotal: item.subtotal || (precio * cantidad)
+                };
+            });
+            const { error: itemsError } = await window.supabaseClient.from('facturas_items').insert(filasItems);
+            if (itemsError) {
+                console.error('Error al guardar los items de la factura:', itemsError);
+                throw new Error(`la factura ${currentFacturaData.codigo_factura} se creó, pero no se guardaron sus items (${itemsError.message}). ` +
+                    'Pide a un administrador que la revise antes de volver a facturar.');
             }
             
-            // Marcar las ventas como facturadas para evitar que se facturen nuevamente
+            // 4. Marcar las ventas como facturadas para evitar que se facturen nuevamente
+            let avisoVentas = '';
             if (currentFacturaData.codigo_venta) {
                 const { error: updateError } = await window.supabaseClient
                     .from('ventas')
@@ -1589,18 +1608,32 @@ function initFacturar() {
                 
                 if (updateError) {
                     console.error('Error al marcar ventas como facturadas:', updateError);
-                    // No lanzar error aquí, la factura ya se creó
+                    avisoVentas = ` · Ventas: no se pudieron marcar como facturadas (${updateError.message})`;
                 }
             }
             
-            // Enviar correo electrónico con la factura
+            // 5. Enviar correo electrónico con la factura (usa el enlace del XML si se subió)
+            let estadoCorreo = { ok: true, motivo: null };
             try {
-                await enviarFacturaPorCorreo(clienteEmail, clienteNombre, clienteDocumento, currentFacturaData, factura.id);
-                showFacturaMessage('Factura creada y enviada por correo correctamente.', 'success');
+                await enviarFacturaPorCorreo(clienteEmail, clienteNombre, clienteDocumento, currentFacturaData, factura.id, {
+                    facturaXML,
+                    xmlDownloadUrl: estadoXml.url
+                });
             } catch (emailError) {
                 console.error('Error al enviar correo:', emailError);
-                showFacturaMessage('Factura creada correctamente, pero hubo un error al enviar el correo: ' + emailError.message, 'error');
+                estadoCorreo = { ok: false, motivo: emailError.message };
             }
+
+            // 6. Informar el estado real de cada paso
+            const partes = [
+                `Factura ${currentFacturaData.codigo_factura} guardada ✓`,
+                estadoXml.ok
+                    ? (estadoXml.motivo ? `XML subido, pero ${estadoXml.motivo}` : 'XML subido ✓')
+                    : `XML no subido ✗ (${estadoXml.motivo}); el correo incluye el XML como texto`,
+                estadoCorreo.ok ? 'Correo enviado ✓' : `Correo no enviado ✗ (${estadoCorreo.motivo})`
+            ];
+            const todoOk = estadoXml.ok && !estadoXml.motivo && estadoCorreo.ok && !avisoVentas;
+            showFacturaMessage(partes.join(' · ') + avisoVentas, todoOk ? 'success' : 'error');
             
             setTimeout(() => {
                 document.getElementById('facturarView').style.display = 'none';
@@ -1608,7 +1641,7 @@ function initFacturar() {
                 form.reset();
                 ventaItems = [];
                 currentFacturaData = null;
-            }, 2000);
+            }, todoOk ? 2000 : 6000);
             
         } catch (error) {
             console.error('Error al crear factura:', error);
@@ -1701,7 +1734,23 @@ function escapeXML(str) {
 }
 
 // Función para enviar factura por correo
-async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, clienteDocumento, facturaData, facturaId) {
+/** Totales de la factura: los precios ingresados incluyen IVA (19%). */
+function calcularTotalesFactura(facturaData) {
+    const totalConIva = facturaData.total;
+    const totalBase = facturaData.items.reduce((sum, item) => {
+        const cantidad = item.cantidad || 1;
+        const precioConIva = item.precio || 0;
+        return sum + ((precioConIva / 1.19) * cantidad);
+    }, 0);
+    return { totalConIva, totalBase, ivaTotal: totalConIva - totalBase };
+}
+
+/**
+ * @param {Object} [opciones]
+ * @param {string} [opciones.facturaXML] - XML ya generado (si no, se genera aquí)
+ * @param {string|null} [opciones.xmlDownloadUrl] - Enlace de descarga del XML subido a Storage
+ */
+async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, clienteDocumento, facturaData, facturaId, opciones = {}) {
     // Validar que el correo del cliente no esté vacío
     if (!clienteEmail || clienteEmail.trim() === '') {
         throw new Error('El correo del cliente no puede estar vacío');
@@ -1739,60 +1788,17 @@ async function enviarFacturaPorCorreo(clienteEmail, clienteNombre, clienteDocume
     }).join('');
     
     // Calcular totales
-    const totalConIva = facturaData.total; // Total con IVA (precio original ingresado)
-    const totalBase = facturaData.items.reduce((sum, item) => {
-        const cantidad = item.cantidad || 1;
-        const precioConIva = item.precio || 0;
-        const precioBase = precioConIva / 1.19;
-        return sum + (precioBase * cantidad);
-    }, 0);
-    const ivaTotal = totalConIva - totalBase;
+    const { totalConIva, totalBase, ivaTotal } = calcularTotalesFactura(facturaData);
 
     const fecha = new Date().toLocaleString('es-CO');
     const fechaISO = new Date().toISOString();
     // URL del logo - debe ser accesible públicamente
     const logoUrl = 'https://i.imgur.com/RBbjVnp.jpeg';
     
-    // Verificar que el logo URL sea válida
-    if (!logoUrl || logoUrl.trim() === '') {
-        console.warn('Logo URL no definida, usando placeholder');
-    }
-    
-    // Generar XML de la factura
-    const facturaXML = generarXMLFactura(facturaData, clienteNombre, clienteDocumento, clienteEmail, fechaISO, totalConIva, totalBase, ivaTotal);
-    const xmlBase64 = btoa(unescape(encodeURIComponent(facturaXML)));
-    
-    // Subir XML a Supabase Storage para crear un enlace de descarga directa
-    let xmlDownloadUrl = null;
-    try {
-        const fileName = `facturas/factura_${facturaData.codigo_factura}_${Date.now()}.xml`;
-        const xmlBlob = new Blob([facturaXML], { type: 'application/xml;charset=utf-8' });
-        
-        // Subir a Supabase Storage
-        const { data: uploadData, error: uploadError } = await window.supabaseClient.storage
-            .from('facturas') // Bucket para facturas
-            .upload(fileName, xmlBlob, {
-                contentType: 'application/xml',
-                upsert: false
-            });
-        
-        if (!uploadError && uploadData) {
-            // Obtener URL pública del archivo
-            const { data: urlData } = window.supabaseClient.storage
-                .from('facturas')
-                .getPublicUrl(fileName);
-            
-            if (urlData) {
-                xmlDownloadUrl = urlData.publicUrl;
-                console.log('XML subido exitosamente a Supabase Storage:', xmlDownloadUrl);
-            }
-        } else {
-            console.warn('No se pudo subir XML a Supabase Storage, usando método alternativo:', uploadError);
-        }
-    } catch (storageError) {
-        console.warn('Error al subir XML a Supabase Storage, usando método alternativo:', storageError);
-        // Continuar sin el enlace de descarga directa
-    }
+    // XML de la factura (la subida a Storage se hace antes, en initFacturar, para informar su estado real)
+    const facturaXML = opciones.facturaXML ||
+        generarXMLFactura(facturaData, clienteNombre, clienteDocumento, clienteEmail, fechaISO, totalConIva, totalBase, ivaTotal);
+    const xmlDownloadUrl = opciones.xmlDownloadUrl || null;
     
     // Generar HTML solo con el contenido del body (sin DOCTYPE, html, head)
     // Usar estilos inline para mejor compatibilidad con clientes de correo

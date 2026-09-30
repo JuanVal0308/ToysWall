@@ -43,6 +43,33 @@ function generarNombreUnico(archivo) {
     return `juguete_${timestamp}_${random}.${extension}`;
 }
 
+/**
+ * Traduce un error de Supabase Storage a un mensaje claro para el usuario.
+ * @param {Object} error - Error devuelto por supabase.storage
+ * @param {string} bucket - Nombre del bucket
+ * @returns {string}
+ */
+function describirErrorStorage(error, bucket) {
+    const mensaje = (error && (error.message || error.error)) || String(error || 'error desconocido');
+    const estado = String((error && (error.statusCode || error.status)) || '');
+    if (/bucket not found/i.test(mensaje)) {
+        return `el bucket "${bucket}" no existe en Supabase Storage (aplica migrations/2026_09_30_05_storage_facturas.sql)`;
+    }
+    if (/row-level security|unauthorized|not authorized|permission/i.test(mensaje) || estado === '403' || estado === '401') {
+        return `sin permiso para subir al bucket "${bucket}" (inicia sesión con Supabase Auth y revisa las políticas de Storage)`;
+    }
+    if (/mime|content.type/i.test(mensaje) || estado === '415') {
+        return `tipo de archivo no permitido en el bucket "${bucket}" (${mensaje})`;
+    }
+    if (/exceeded|too large|size/i.test(mensaje) || estado === '413') {
+        return `el archivo supera el tamaño máximo del bucket "${bucket}"`;
+    }
+    if (/failed to fetch|network/i.test(mensaje)) {
+        return 'error de conexión con Supabase Storage';
+    }
+    return mensaje + (estado ? ` (código ${estado})` : '');
+}
+
 // Función principal para subir imagen
 async function subirImagen(archivo) {
     if (!window.supabaseClient) {
@@ -67,10 +94,8 @@ async function subirImagen(archivo) {
         });
 
     if (error) {
-        if (error.message.includes('bucket') || error.statusCode === 400 || error.message.includes('not found')) {
-            throw new Error('Bucket no existe. Crea el bucket "juguetes" en Supabase Storage (público).');
-        }
-        throw error;
+        // Antes cualquier error 400 se reportaba como "bucket no existe", ocultando la causa real
+        throw new Error('No se pudo subir la imagen: ' + describirErrorStorage(error, 'juguetes'));
     }
 
     // Obtener URL pública
@@ -83,17 +108,6 @@ async function subirImagen(archivo) {
 
 // Exportar funciones
 window.subirImagen = subirImagen;
+window.describirErrorStorage = describirErrorStorage;
 window.convertirHeicAJpeg = convertirHeicAJpeg;
 window.esHeic = esHeic;
-
-
-
-
-
-
-
-
-
-
-
-
