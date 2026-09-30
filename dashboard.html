@@ -543,6 +543,38 @@
                             </button>
                         </div>
                     </form>
+
+                    <!-- Importar inventario desde Excel (solo administradores) -->
+                    <section id="importarInventarioSection" class="bodega-form" style="margin-top: 32px;">
+                        <h2 style="margin-top: 0;"><i class="fas fa-file-excel"></i> Importar inventario desde Excel</h2>
+                        <p class="form-help" style="margin-bottom: 16px;">
+                            Descarga la plantilla, llénala (una fila por juguete y ubicación) y súbela. Verás una vista previa
+                            con los errores de cada fila antes de guardar. Si el código ya existe en esa tienda/bodega se actualiza;
+                            si no, se crea.
+                        </p>
+                        <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+                            <button type="button" id="importarDescargarPlantillaBtn" class="btn-secondary" style="padding: 12px 20px; border-radius: 8px;">
+                                <i class="fas fa-download"></i> Descargar plantilla
+                            </button>
+                            <div class="form-group" style="flex: 1; min-width: 220px; margin: 0;">
+                                <label for="importarArchivoInput"><i class="fas fa-upload"></i> Archivo (.xlsx, .xls, .csv)</label>
+                                <input type="file" id="importarArchivoInput" accept=".xlsx,.xls,.csv">
+                            </div>
+                            <div class="form-group" style="min-width: 220px; margin: 0;">
+                                <label for="importarModoSelect"><i class="fas fa-sliders"></i> Si el juguete ya existe en la ubicación</label>
+                                <select id="importarModoSelect" class="form-select">
+                                    <option value="reemplazar">Reemplazar la cantidad</option>
+                                    <option value="sumar">Sumar a la cantidad actual</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="importarMensaje" class="error-message" style="display: none; margin-top: 16px;"></div>
+                        <div id="importarVistaPrevia" style="margin-top: 16px;"></div>
+                        <button type="button" id="importarConfirmarBtn" class="btn-primary" style="width: 100%; margin-top: 16px; display: none;">
+                            <i class="fas fa-file-import"></i> Importar filas válidas
+                        </button>
+                        <div id="importarResultado" style="margin-top: 16px;"></div>
+                    </section>
                 </div>
 
                 <!-- Vista de Inventario -->
@@ -2320,14 +2352,17 @@
     <!-- Arquitectura Clean - Capa de Presentación -->
     <script src="js/presentacion/controladores/ControladorInventario.js"></script>
     <script src="js/presentacion/vistas/inventario-por-ubicacion.js"></script>
+    <script src="js/presentacion/vistas/importar-inventario.js"></script>
     
     <!-- Scripts legacy (usando arquitectura Clean internamente) -->
     <!-- Reglas de inventario (dominio), servicio de stock (infraestructura) -->
     <script src="js/dominio/servicios/ReglasInventario.js"></script>
+    <script src="js/dominio/servicios/ReglasImportacionInventario.js"></script>
     <script src="js/infraestructura/servicios/ServicioStockSupabase.js"></script>
     <script src="js/infraestructura/servicios/ServicioStockRpc.js"></script>
     <script src="js/infraestructura/servicios/ServicioUsuariosRpc.js"></script>
     <script src="js/infraestructura/servicios/ServicioFacturaXml.js"></script>
+    <script src="js/infraestructura/servicios/ServicioImportacionInventario.js"></script>
     <script src="js/email-config.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/dashboard-funcionalidades.js"></script>
