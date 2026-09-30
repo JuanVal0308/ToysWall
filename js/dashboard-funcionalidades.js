@@ -759,6 +759,42 @@ function initRegistrarVenta() {
 
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
+
+            if (window.usarStockRpc && window.usarStockRpc()) {
+                // Una sola transacción en la BD: descuenta stock y registra todas las líneas (o nada)
+                const resultado = await window.servicioStockRpc.registrarVenta({
+                    items: ventaItems.map(item => ({
+                        juguete_id: item.juguete_id,
+                        cantidad: item.cantidad,
+                        precio_unitario: item.precio,
+                        empleado_id: item.empleado_id,
+                        metodo_pago: item.metodo_pago
+                    })),
+                    metodoPago: ventaItems[0].metodo_pago
+                });
+                codigoVenta = resultado.codigo_venta;
+                (resultado.ventas || []).forEach(v => ventasRegistradas.push({
+                    venta_id: v.venta_id,
+                    codigo_venta: codigoVenta,
+                    juguete_info: {
+                        juguete_id: v.juguete_id,
+                        juguete_codigo: v.juguete_codigo,
+                        juguete_nombre: v.juguete_nombre,
+                        tienda_id: v.tienda_id,
+                        bodega_id: v.bodega_id
+                    },
+                    cantidad_vendida: v.cantidad,
+                    precio_venta: v.precio_venta,
+                    empleado_id: v.empleado_id,
+                    metodo_pago: v.metodo_pago
+                }));
+                showVentaMessage(`Venta ${codigoVenta} registrada correctamente`, 'success');
+                ventaItems = [];
+                updateVentaItemsList();
+                form.reset();
+                if (typeof loadDashboardSummary === 'function') loadDashboardSummary();
+                return;
+            }
             
             // Generar un solo código de venta para todos los items
             codigoVenta = await generarCodigoVenta();
@@ -892,6 +928,16 @@ async function deshacerUltimaVenta() {
     
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
+
+        if (window.usarStockRpc && window.usarStockRpc()) {
+            // La BD repone cada línea en su ubicación de origen, registra el log y elimina la venta (todo o nada)
+            await window.servicioStockRpc.deshacerVenta(ultimaVenta.codigo_venta);
+            ultimaVenta = null;
+            actualizarBotonDeshacerVenta(false);
+            showVentaMessage('Venta deshecha correctamente', 'success');
+            if (typeof loadDashboardSummary === 'function') await loadDashboardSummary();
+            return;
+        }
         
         // Revertir cada venta en orden inverso
         for (let i = ultimaVenta.ventas.length - 1; i >= 0; i--) {
@@ -3279,6 +3325,23 @@ async function ejecutarPlanMovimientoInterno(planId) {
             cargarPlanesPendientes();
             return;
         }
+
+        if (window.usarStockRpc && window.usarStockRpc()) {
+            // La BD mueve los items con stock, registra movimientos y marca el plan (una transacción)
+            const resultado = await window.servicioStockRpc.ejecutarPlan(planId);
+            const omitidos = resultado.omitidos || [];
+            if (!resultado.ejecutado) {
+                alert('No se pudo ejecutar ningún item del plan; sigue pendiente.\n\n' + omitidos.join('\n'));
+                return;
+            }
+            alert(`Plan ejecutado. ${resultado.procesados} de ${resultado.total} items procesados.` +
+                (omitidos.length ? `\n\nItems omitidos:\n${omitidos.join('\n')}` : ''));
+            await actualizarBadgePlanesPendientes();
+            cargarPlanesPendientes();
+            if (typeof loadInventario === 'function') await loadInventario();
+            if (typeof loadDashboardSummary === 'function') await loadDashboardSummary();
+            return;
+        }
         
         const items = plan.items || [];
         let itemsProcesados = 0;
@@ -4658,8 +4721,20 @@ function initAbastecer() {
             // Guardar información del movimiento para poder deshacerlo
             const movimientosDetalle = [];
             const errores = [];
+
+            const usarRpc = window.usarStockRpc && window.usarStockRpc();
+            if (usarRpc) {
+                // Todo o nada en una transacción: stock origen/destino + registros de movimientos
+                const resultado = await window.servicioStockRpc.transferir(
+                    juguetesSeleccionados.map(j => ({ juguete_id: j.id, cantidad: j.cantidad })),
+                    destinoTipoVal,
+                    destinoId
+                );
+                (resultado.movimientos || []).forEach(m => movimientosDetalle.push({ ...m, via_rpc: true }));
+            }
             
-            for (const juguete of juguetesSeleccionados) {
+            // Modo anterior: un juguete a la vez
+            for (const juguete of usarRpc ? [] : juguetesSeleccionados) {
                 try {
                     // Mover unidades actualizando los registros en su lugar (sin borrar/recrear el origen)
                     const detalle = await window.servicioStock.transferir({
@@ -4813,6 +4888,13 @@ async function deshacerUltimoMovimientoAbastecer() {
     
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
+
+        const movimientosRpc = ultimoMovimientoAbastecer.movimientos.filter(m => m.via_rpc);
+        if (movimientosRpc.length > 0) {
+            // Descuenta del destino, repone el origen y borra los movimientos en una sola transacción
+            await window.servicioStockRpc.revertirTransferencia(movimientosRpc.map(m => m.movimiento_id));
+            ultimoMovimientoAbastecer.movimientos = ultimoMovimientoAbastecer.movimientos.filter(m => !m.via_rpc);
+        }
         
         // Revertir cada movimiento en orden inverso
         for (let i = ultimoMovimientoAbastecer.movimientos.length - 1; i >= 0; i--) {
@@ -5380,6 +5462,54 @@ window.procesarDevolucion = async function(codigoVenta, itemsSeleccionados = nul
     }
 };
 
+/** Nombres legibles ("Tienda X", "Bodega Y") de las ubicaciones donde se repuso el stock. */
+async function describirUbicacionesDevolucion(detalle) {
+    const idsTiendas = [...new Set(detalle.map(d => d.tienda_id).filter(Boolean))];
+    const idsBodegas = [...new Set(detalle.map(d => d.bodega_id).filter(Boolean))];
+    const [tiendas, bodegas] = await Promise.all([
+        idsTiendas.length ? window.supabaseClient.from('tiendas').select('id, nombre').in('id', idsTiendas) : { data: [] },
+        idsBodegas.length ? window.supabaseClient.from('bodegas').select('id, nombre').in('id', idsBodegas) : { data: [] }
+    ]);
+    const nombres = [
+        ...(tiendas.data || []).map(t => `Tienda ${t.nombre}`),
+        ...(bodegas.data || []).map(b => `Bodega ${b.nombre}`)
+    ];
+    return nombres.length ? nombres : ['su ubicación original'];
+}
+
+/**
+ * Devolución con la RPC revertir_venta: repone cada unidad en la ubicación exacta de la que salió
+ * (registro guardado en la venta), ajusta o elimina las ventas y registra el log, todo en una transacción.
+ */
+async function procesarDevolucionRpc(codigoVenta, itemsSeleccionados) {
+    try {
+        const items = itemsSeleccionados
+            ? itemsSeleccionados.map(it => ({ venta_id: it.ventaId, cantidad: it.cantidadDevolver }))
+            : null;
+        const resultado = await window.servicioStockRpc.devolverVenta(codigoVenta, items);
+
+        const ubicaciones = await describirUbicacionesDevolucion(resultado.detalle || []);
+        showAjustesMessage(
+            `Devolución procesada: ${resultado.unidades_repuestas} unidad(es) repuestas en ${ubicaciones.join(', ')}. ` +
+            `${resultado.ventas_eliminadas} línea(s) eliminada(s), ${resultado.ventas_parciales} ajustada(s).`, 'success');
+
+        if (itemsSeleccionados) {
+            await buscarVentaParaDevolucion();
+        } else {
+            document.getElementById('buscarVentaCodigo').value = '';
+            document.getElementById('ventasListContainer').innerHTML = `
+                <p style="text-align: center; color: #64748b; padding: 40px;">
+                    Ingresa un código de venta para buscar y realizar una devolución.
+                </p>
+            `;
+        }
+        if (typeof loadDashboardSummary === 'function') loadDashboardSummary();
+    } catch (error) {
+        console.error('Error al procesar devolución:', error);
+        showAjustesMessage('Error al procesar la devolución: ' + error.message, 'error');
+    }
+}
+
 async function procesarDevolucionInterna(codigoVenta, itemsSeleccionados = null) {
     // Mensaje de confirmación diferente según si es selectiva o total
     const esSelectiva = Array.isArray(itemsSeleccionados) && itemsSeleccionados.length > 0;
@@ -5388,6 +5518,11 @@ async function procesarDevolucionInterna(codigoVenta, itemsSeleccionados = null)
         : '¿Estás seguro de que deseas procesar la devolución COMPLETA?\n\nEsta acción:\n- Agregará TODOS los juguetes nuevamente al inventario\n- Eliminará la venta completa del sistema\n\nEsta acción no se puede deshacer.';
     
     if (!confirm(mensajeConfirmacion)) {
+        return;
+    }
+
+    if (window.usarStockRpc && window.usarStockRpc()) {
+        await procesarDevolucionRpc(codigoVenta, esSelectiva ? itemsSeleccionados : null);
         return;
     }
 

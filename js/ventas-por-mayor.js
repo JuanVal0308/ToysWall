@@ -498,6 +498,49 @@ function initVentaPorMayor() {
 
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
+
+            if (window.usarStockRpc && window.usarStockRpc()) {
+                // Una sola transacción en la BD: stock, líneas de venta y abono proporcional (o nada)
+                const resultado = await window.servicioStockRpc.registrarVenta({
+                    items: ventaPorMayorItems.map(item => ({
+                        juguete_id: item.juguete_id,
+                        cantidad: item.cantidad,
+                        precio_unitario: item.precio,
+                        empleado_id: item.empleado_id,
+                        metodo_pago: item.metodo_pago
+                    })),
+                    metodoPago,
+                    clienteId: clienteId ? parseInt(clienteId, 10) : null,
+                    esPorMayor: true,
+                    abono
+                });
+                codigoVenta = resultado.codigo_venta;
+                (resultado.ventas || []).forEach(v => ventasRegistradas.push({
+                    venta_id: v.venta_id,
+                    codigo_venta: codigoVenta,
+                    juguete_info: {
+                        juguete_id: v.juguete_id,
+                        juguete_codigo: v.juguete_codigo,
+                        juguete_nombre: v.juguete_nombre,
+                        tienda_id: v.tienda_id,
+                        bodega_id: v.bodega_id
+                    },
+                    cantidad_vendida: v.cantidad,
+                    precio_venta: v.precio_venta,
+                    empleado_id: v.empleado_id,
+                    metodo_pago: v.metodo_pago,
+                    cliente_id: clienteId,
+                    abono: v.abono,
+                    pago_id: null
+                }));
+                showVentaPorMayorMessage(`Venta al por mayor ${codigoVenta} registrada correctamente`, 'success');
+                ventaPorMayorItems = [];
+                updateVentaPorMayorItemsList();
+                form.reset();
+                if (abonoInput) abonoInput.dataset.numericValue = '';
+                if (typeof loadDashboardSummary === 'function') loadDashboardSummary();
+                return;
+            }
             
             // Generar código de venta
             codigoVenta = await generarCodigoVenta();
@@ -736,6 +779,16 @@ async function deshacerUltimaVentaPorMayor() {
     
     try {
         const user = JSON.parse(sessionStorage.getItem('user'));
+
+        if (window.usarStockRpc && window.usarStockRpc()) {
+            // La BD repone cada línea en su ubicación de origen, registra el log y elimina la venta (todo o nada)
+            await window.servicioStockRpc.deshacerVenta(ultimaVentaPorMayor.codigo_venta);
+            ultimaVentaPorMayor = null;
+            actualizarBotonDeshacerVentaPorMayor(false);
+            showVentaPorMayorMessage('Venta al por mayor deshecha correctamente', 'success');
+            if (typeof loadDashboardSummary === 'function') await loadDashboardSummary();
+            return;
+        }
         
         // Revertir cada venta en orden inverso
         for (let i = ultimaVentaPorMayor.ventas.length - 1; i >= 0; i--) {
