@@ -42,6 +42,8 @@ js/
 │   │   ├── Juguete.js               # Entidad Juguete
 │   │   ├── Ubicacion.js             # Entidad Ubicación
 │   │   └── InventarioUbicacion.js   # Entidad Inventario por Ubicación
+│   ├── servicios/                    # Reglas puras de dominio (sin Supabase ni DOM)
+│   │   └── ReglasInventario.js      # Parseo de cantidades/precios, selección de ubicación de venta
 │   ├── repositorios/                 # Interfaces de repositorios (contratos)
 │   │   ├── IRepositorioJuguetes.js
 │   │   ├── IRepositorioUbicaciones.js
@@ -61,6 +63,8 @@ js/
 │   │   ├── RepositorioJuguetesSupabase.js
 │   │   ├── RepositorioUbicacionesSupabase.js
 │   │   └── RepositorioInventarioSupabase.js
+│   ├── servicios/                    # Servicios técnicos sobre Supabase
+│   │   └── ServicioStockSupabase.js # Descontar/reponer/transferir stock con control de concurrencia
 │   └── configuracion/                # Configuración del sistema
 │       ├── inyeccion-dependencias.js # Wire-up de dependencias
 │       └── adaptador-legacy.js       # Compatibilidad con código legacy
