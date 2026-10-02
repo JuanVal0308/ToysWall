@@ -581,7 +581,15 @@
                 <div id="inventarioView" style="display: none;">
                     <h1>Inventario</h1>
                     <div class="inventario-filters" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
-                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <!-- Selector de ubicación: General (consolidado) o una tienda/bodega específica -->
+                        <div class="inventario-ubicacion-selector">
+                            <label for="inventarioUbicacionSelect"><i class="fas fa-store"></i> Ver inventario de:</label>
+                            <select id="inventarioUbicacionSelect" class="form-select">
+                                <option value="general">General (todas las ubicaciones)</option>
+                            </select>
+                            <span id="inventarioUbicacionResumen" class="inventario-ubicacion-resumen"></span>
+                        </div>
+                        <div class="inventario-busqueda-fila" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                         <input 
                             type="text" 
                             id="inventarioSearch" 
@@ -597,7 +605,7 @@
                                 style="width: 200px;"
                             >
                             <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 10px 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                                <span style="color: #64748b; font-size: 14px;">Total:</span>
+                                <span style="color: #64748b; font-size: 14px;" id="totalInventarioEtiqueta">Total:</span>
                                 <span style="font-size: 18px; font-weight: bold; color: #3b82f6;" id="totalJuguetesInventario">0</span>
                             </div>
                         </div>
@@ -610,7 +618,7 @@
                                     <th>Código</th>
                                     <th>ITEM</th>
                                     <th>Foto</th>
-                                    <th>Cantidad</th>
+                                    <th id="inventarioColumnaCantidad">Cantidad</th>
                                     <th>Ubicación</th>
                                     <th>Acciones</th>
                                 </tr>
@@ -2358,6 +2366,7 @@
     <!-- Reglas de inventario (dominio), servicio de stock (infraestructura) -->
     <script src="js/dominio/servicios/ReglasInventario.js"></script>
     <script src="js/dominio/servicios/ReglasAltaJuguete.js"></script>
+    <script src="js/dominio/servicios/ReglasInventarioUbicacion.js"></script>
     <script src="js/dominio/servicios/ReglasImportacionInventario.js"></script>
     <script src="js/infraestructura/servicios/ServicioStockSupabase.js"></script>
     <script src="js/infraestructura/servicios/ServicioStockRpc.js"></script>

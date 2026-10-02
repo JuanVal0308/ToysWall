@@ -2160,6 +2160,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Variable global para almacenar todos los juguetes y la página actual
     let todosLosJuguetes = [];
+    // Inventario por ubicación: 'general' (consolidado) o la clave de una tienda/bodega ("tienda-7")
+    let ubicacionInventario = 'general';
+    let productosInventarioVisibles = null; // lista actual (ubicación + búsqueda), usada por la paginación
+    let tiendasInventario = [];
+    let bodegasInventario = [];
+    let aplicarFiltrosInventario = null;
     let paginaActualInventario = 1;
     const productosPorPagina = 10;
     
@@ -2353,7 +2359,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                         tipo: juguete.bodega_id ? 'bodega' : 'tienda',
                         id: juguete.bodega_id || juguete.tienda_id,
                         nombre: ubicacionNombre,
-                        cantidad: juguete.cantidad
+                        cantidad: juguete.cantidad,
+                        registro: true // hay una fila real en esta ubicación
                     });
                 }
             });
@@ -2380,7 +2387,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                             tipo: 'tienda',
                             id: tienda.id,
                             nombre: tienda.nombre,
-                            cantidad: 0
+                            cantidad: 0,
+                            registro: false // solo para mostrar: no hay fila en esta ubicación
                         });
         }
                 });
@@ -2393,7 +2401,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                             tipo: 'bodega',
                             id: bodega.id,
                             nombre: bodega.nombre,
-                            cantidad: 0
+                            cantidad: 0,
+                            registro: false // solo para mostrar: no hay fila en esta ubicación
                         });
                     }
                 });
@@ -2409,20 +2418,17 @@ document.addEventListener('DOMContentLoaded', async function() {
                 return j;
     });
 
-            // Calcular totales
-            const totalJuguetes = todosLosJuguetes.reduce((sum, j) => sum + j.cantidadTotal, 0);
-            
-            // Actualizar resumen
-            document.getElementById('totalJuguetesInventario').textContent = totalJuguetes;
+            // Selector de ubicación con las tiendas y bodegas actuales
+            tiendasInventario = todasLasTiendas;
+            bodegasInventario = todasLasBodegas;
+            poblarSelectorUbicacionInventario();
 
             // Resetear a página 1 cuando se carga el inventario
             paginaActualInventario = 1;
-            
-            // Renderizar la primera página
-            renderizarPaginaInventario();
 
-            // Configurar búsqueda
+            // Configurar búsqueda y mostrar la ubicación elegida (aplica también los filtros escritos)
             configurarBusquedaInventario();
+            aplicarFiltrosInventario();
         } catch (error) {
             console.error('Error al cargar inventario:', error);
             tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #ef4444;">Error al cargar el inventario</td></tr>';
@@ -2430,12 +2436,62 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
+    /** Llena el selector de ubicación (General / tiendas / bodegas) conservando la opción elegida. */
+    function poblarSelectorUbicacionInventario() {
+        const select = document.getElementById('inventarioUbicacionSelect');
+        if (!select) return;
+        const R = window.ReglasInventarioUbicacion;
+        const escapar = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const grupo = (etiqueta, tipo, lista) => lista.length === 0 ? '' :
+            `<optgroup label="${etiqueta}">` +
+            lista.map(u => `<option value="${R.clave(tipo, u.id)}">${escapar(capitalizarPrimeraLetra(u.nombre))}</option>`).join('') +
+            '</optgroup>';
+        select.innerHTML = '<option value="general">General (todas las ubicaciones)</option>' +
+            grupo('Tiendas', 'tienda', tiendasInventario) +
+            grupo('Bodegas', 'bodega', bodegasInventario);
+        // Si la ubicación elegida ya no existe, volver a General
+        if (!R.describir(ubicacionInventario, tiendasInventario, bodegasInventario)) ubicacionInventario = 'general';
+        select.value = ubicacionInventario;
+
+        if (select.dataset.listenerAdded !== 'true') {
+            select.addEventListener('change', function() {
+                ubicacionInventario = this.value || 'general';
+                paginaActualInventario = 1;
+                if (aplicarFiltrosInventario) aplicarFiltrosInventario();
+            });
+            select.dataset.listenerAdded = 'true';
+        }
+    }
+
+    /** Nombre de la ubicación elegida para mostrar ("Tienda San victoriano") o null si es General. */
+    function describirUbicacionInventario() {
+        const descripcion = window.ReglasInventarioUbicacion.describir(ubicacionInventario, tiendasInventario, bodegasInventario);
+        return descripcion ? descripcion.replace(/^(Tienda|Bodega) (.*)$/, (m, tipo, nombre) => `${tipo} ${capitalizarPrimeraLetra(nombre)}`) : null;
+    }
+
+    /** Total, etiqueta y encabezado según la ubicación elegida (antes de la búsqueda por texto). */
+    function actualizarResumenInventario(productosUbicacion) {
+        const descripcion = describirUbicacionInventario();
+        const etiqueta = document.getElementById('totalInventarioEtiqueta');
+        const total = document.getElementById('totalJuguetesInventario');
+        const columna = document.getElementById('inventarioColumnaCantidad');
+        const resumen = document.getElementById('inventarioUbicacionResumen');
+        if (etiqueta) etiqueta.textContent = descripcion ? `Total en ${descripcion}:` : 'Total:';
+        if (total) total.textContent = window.ReglasInventarioUbicacion.total(productosUbicacion);
+        if (columna) columna.textContent = descripcion ? 'Cantidad aquí' : 'Cantidad';
+        if (resumen) resumen.textContent = descripcion ? `${productosUbicacion.length} producto(s) registrados en esta ubicación` : '';
+    }
+
     function renderizarPaginaInventario(juguetesFiltrados = null) {
         const tbody = document.getElementById('inventarioTableBody');
-        const productos = juguetesFiltrados || todosLosJuguetes;
+        // La paginación vuelve a llamar sin argumentos: se conserva la lista filtrada actual
+        if (juguetesFiltrados) productosInventarioVisibles = juguetesFiltrados;
+        const productos = productosInventarioVisibles || todosLosJuguetes;
         
         if (!productos || productos.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">No hay juguetes para mostrar</td></tr>';
+            const descripcion = describirUbicacionInventario();
+            const texto = descripcion ? `No hay juguetes para mostrar en ${descripcion}` : 'No hay juguetes para mostrar';
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">${texto}</td></tr>`;
             document.getElementById('inventarioPagination').innerHTML = '';
             return;
         }
@@ -2543,7 +2599,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 <td>${juguete.codigo}</td>
                 <td>${juguete.item ? `<code style="background: #fef3c7; padding: 4px 8px; border-radius: 4px; font-size: 11px; color: #92400e;">${juguete.item}</code>` : '<span style="color: #94a3b8;">-</span>'}</td>
                 <td>${foto}</td>
-                <td>${juguete.cantidadTotal || 0}</td>
+                <td>${juguete.cantidadMostrada ?? juguete.cantidadTotal ?? 0}</td>
                 <td>${ubicacionesHTML}</td>
                 <td style="text-align: center;">${accionesHTML}</td>
             `;
@@ -2677,7 +2733,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             const searchTerm = currentSearchInput.value.trim();
             const codigoFilter = currentCodigoFilterInput.value.trim();
         
-            let juguetesFiltrados = todosLosJuguetes;
+            // Primero la ubicación elegida (General o una tienda/bodega); el total no depende de la búsqueda
+            let juguetesFiltrados = window.ReglasInventarioUbicacion.filtrar(todosLosJuguetes, ubicacionInventario);
+            actualizarResumenInventario(juguetesFiltrados);
             
             // Aplicar filtro de búsqueda general
             if (searchTerm !== '') {
@@ -2753,6 +2811,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             renderizarPaginaInventario(juguetesFiltrados);
         }
         
+        aplicarFiltrosInventario = aplicarFiltros;
+
         // Remover listeners anteriores si existen (usando una bandera para evitar duplicados)
         if (searchInput.dataset.listenerAdded === 'true') {
             // Ya tiene listeners, remover los anteriores y agregar nuevos
