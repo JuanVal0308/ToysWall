@@ -25,8 +25,9 @@ class ServicioStockRpc {
 
     /**
      * Registra una venta (normal o al por mayor) descontando stock.
+     * Cada item puede llevar su vendedor (empleado_id) y su método de pago; la RPC los guarda por línea.
      * @param {Object} p
-     * @param {Array<{juguete_id:number, cantidad:number, precio_unitario:number}>} p.items
+     * @param {Array<{juguete_id:number, cantidad:number, precio_unitario:number, empleado_id?:number|null, metodo_pago?:string}>} p.items
      * @param {string} p.metodoPago
      * @param {number|null} [p.empleadoId]
      * @param {number|null} [p.clienteId]
@@ -39,7 +40,10 @@ class ServicioStockRpc {
             p_items: items.map(i => ({
                 juguete_id: i.juguete_id,
                 cantidad: i.cantidad,
-                precio_unitario: i.precio_unitario
+                precio_unitario: i.precio_unitario,
+                // Antes se descartaban: las ventas quedaban sin vendedor y con el método de pago del primer item
+                empleado_id: i.empleado_id ?? null,
+                metodo_pago: i.metodo_pago || null
             })),
             p_metodo_pago: metodoPago,
             p_empleado_id: empleadoId,
@@ -88,3 +92,4 @@ if (typeof window !== 'undefined') {
     window.usarStockRpc = () => window.APP_CONFIG?.USAR_SUPABASE_AUTH === true && !!window.servicioStockRpc;
     if (window.supabaseClient) window.servicioStockRpc = new ServicioStockRpc(window.supabaseClient);
 }
+if (typeof module !== 'undefined') module.exports = ServicioStockRpc;
