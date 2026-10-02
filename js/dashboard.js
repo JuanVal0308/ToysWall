@@ -1825,145 +1825,80 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
 
             try {
-                const campoUbicacion = ubicacionTipo === 'bodega' ? 'bodega_id' : 'tienda_id';
-                
-                // Primero verificar si existe un juguete con el mismo código pero diferente nombre
-                const { data: jugueteConMismoCodigo } = await window.supabaseClient
+                // Todas las filas con este código (en cualquier tienda/bodega). El código se busca sin
+                // distinguir mayúsculas; los comodines de ILIKE se escapan para que la coincidencia sea exacta.
+                const { data: filasMismoCodigo, error: errorCodigo } = await window.supabaseClient
                     .from('juguetes')
-                    .select('nombre')
-                    .eq('codigo', codigo)
+                    .select('id, codigo, nombre, cantidad, tienda_id, bodega_id, item, foto_url, precio_min, precio_por_mayor, numero_bultos, cantidad_por_bulto')
                     .eq('empresa_id', user.empresa_id)
-                    .neq('nombre', nombre)
-                    .limit(1);
-                
-                if (jugueteConMismoCodigo && jugueteConMismoCodigo.length > 0) {
-                    showJugueteFormMessage(`Error: El código "${codigo}" ya está asignado a otro juguete con nombre diferente. El código debe ser único por tipo de juguete.`, 'error');
+                    .ilike('codigo', codigo.replace(/[\\%_]/g, '\\$&'));
+                if (errorCodigo) throw errorCodigo;
+
+                const plan = window.ReglasAltaJuguete.planificar(filasMismoCodigo, {
+                    codigo,
+                    nombre,
+                    cantidad,
+                    tipoUbicacion: ubicacionTipo,
+                    ubicacionId,
+                    empresaId: user.empresa_id,
+                    campos: {
+                        item,
+                        foto_url: fotoUrl || null,
+                        precio_min: precioMin,
+                        precio_por_mayor: precioPorMayor,
+                        numero_bultos: numeroBultos,
+                        cantidad_por_bulto: cantidadPorBulto
+                    }
+                });
+
+                const selectUbicacion = document.getElementById('jugueteUbicacionSelect');
+                const nombreUbicacion = selectUbicacion.options[selectUbicacion.selectedIndex]?.textContent || 'la ubicación elegida';
+
+                if (plan.accion === 'error') {
+                    showJugueteFormMessage(plan.mensaje, 'error');
                     return;
                 }
-                
-                // Verificar si ya existe un juguete con el mismo código en la misma ubicación
-                // Nota: Ahora permitimos nombres duplicados, solo verificamos código + ubicación
-                const { data: jugueteExistenteData } = await window.supabaseClient
-                    .from('juguetes')
-                    .select('*')
-                    .eq('codigo', codigo)
-                    .eq('empresa_id', user.empresa_id)
-                    .eq(campoUbicacion, ubicacionId)
-                    .limit(1);
 
-                if (jugueteExistenteData && jugueteExistenteData.length > 0) {
-                    // Si existe, sumar la cantidad al registro existente
-                    const jugueteExistente = jugueteExistenteData[0];
-                    const cantidadOriginal = jugueteExistente.cantidad;
-                    const nuevaCantidad = jugueteExistente.cantidad + cantidad;
-                    
-                    const updateData = { 
-                        cantidad: nuevaCantidad,
-                        precio_min: precioMin
-                    };
-                    
-                    // Actualizar precio_por_mayor si se proporciona
-                    if (precioPorMayor !== null) {
-                        updateData.precio_por_mayor = precioPorMayor;
+                if (plan.accion === 'sumar') {
+                    // Ya existe en esta ubicación: sumar a su cantidad (con control de concurrencia)
+                    const { anterior, nueva } = await window.servicioStock.ajustarCantidad(plan.fila.id, plan.cantidad);
+                    if (Object.keys(plan.actualizar).length > 0) {
+                        const { error: updateError } = await window.supabaseClient
+                            .from('juguetes')
+                            .update(plan.actualizar)
+                            .eq('id', plan.fila.id);
+                        if (updateError) throw updateError;
                     }
-                    
-                    // Actualizar item si se proporciona
-                    if (item !== null) {
-                        updateData.item = item;
-                    }
-                    
-                    // Actualizar campos de bultos si se proporcionan
-                    if (numeroBultos !== null && !isNaN(numeroBultos)) {
-                        updateData.numero_bultos = numeroBultos;
-                    }
-                    if (cantidadPorBulto !== null && !isNaN(cantidadPorBulto)) {
-                        updateData.cantidad_por_bulto = cantidadPorBulto;
-                    }
-                    
-                    // Actualizar foto_url si se proporciona una nueva
-                    if (fotoUrl) {
-                        updateData.foto_url = fotoUrl;
-                    }
-                    
-                    const { error: updateError } = await window.supabaseClient
-                        .from('juguetes')
-                        .update(updateData)
-                        .eq('id', jugueteExistente.id);
 
-                    if (updateError) throw updateError;
-                    
-                    // Guardar información para deshacer
                     ultimoJugueteAgregado = {
-                        id: jugueteExistente.id,
+                        id: plan.fila.id,
                         tipo: 'update',
-                        cantidadOriginal: cantidadOriginal,
-                        cantidadAgregada: cantidad
+                        cantidadOriginal: anterior,
+                        cantidadAgregada: plan.cantidad
                     };
-                    
-                    // Habilitar botón deshacer
                     if (window.actualizarEstadoBotonDeshacer) {
                         window.actualizarEstadoBotonDeshacer(true);
                     }
-                    
-                    showJugueteFormMessage(`Juguete actualizado: se agregaron ${cantidad} unidades (Total: ${nuevaCantidad})`, 'success');
+                    showJugueteFormMessage(`"${plan.fila.nombre}" ya estaba en ${nombreUbicacion}: se sumaron ${plan.cantidad} unidades (total en esta ubicación: ${nueva}).`, 'success');
                 } else {
-                    // Si no existe, crear un nuevo registro
-                const jugueteData = {
-                    nombre: nombre,
-                    codigo: codigo,
-                    cantidad: cantidad,
-                    precio_min: precioMin,
-                    empresa_id: user.empresa_id
-                };
-
-                    if (item) {
-                        jugueteData.item = item;
-                    }
-                    
-                    if (precioPorMayor !== null) {
-                        jugueteData.precio_por_mayor = precioPorMayor;
-                    }
-
-                    if (fotoUrl) {
-                        jugueteData.foto_url = fotoUrl;
-                    }
-
-                    // Agregar campos de bultos si se proporcionan
-                    if (numeroBultos !== null && !isNaN(numeroBultos)) {
-                        jugueteData.numero_bultos = numeroBultos;
-                    }
-                    if (cantidadPorBulto !== null && !isNaN(cantidadPorBulto)) {
-                        jugueteData.cantidad_por_bulto = cantidadPorBulto;
-                    }
-
-                if (ubicacionTipo === 'bodega') {
-                    jugueteData.bodega_id = ubicacionId;
-                } else if (ubicacionTipo === 'tienda') {
-                    jugueteData.tienda_id = ubicacionId;
-                }
-
+                    // No existe en esta ubicación: crear su fila (con los datos compartidos si el código ya existía)
                     const { data: nuevoJuguete, error: jugueteError } = await window.supabaseClient
-                    .from('juguetes')
-                    .insert(jugueteData)
-                    .select()
-                    .single();
+                        .from('juguetes')
+                        .insert(plan.registro)
+                        .select('id')
+                        .single();
+                    if (jugueteError) throw jugueteError;
 
-                if (jugueteError) throw jugueteError;
-
-                    // Guardar información para deshacer
                     ultimoJugueteAgregado = {
                         id: nuevoJuguete.id,
                         tipo: 'insert'
                     };
-                    
-                    console.log('Nuevo juguete guardado para deshacer:', ultimoJugueteAgregado);
-                    
-                    // Habilitar botón deshacer
                     if (window.actualizarEstadoBotonDeshacer) {
                         window.actualizarEstadoBotonDeshacer(true);
-                }
-
-                showJugueteFormMessage('Juguete agregado correctamente', 'success');
+                    }
+                    showJugueteFormMessage(plan.existiaEnOtraUbicacion
+                        ? `"${plan.registro.nombre}" agregado a ${nombreUbicacion} con ${plan.cantidad} unidades (mismos datos que en las demás ubicaciones).`
+                        : 'Juguete agregado correctamente', 'success');
                 }
 
                 agregarJugueteForm.reset();
@@ -2089,27 +2024,12 @@ document.addEventListener('DOMContentLoaded', async function() {
                 console.log('Restaurando cantidad del juguete con ID:', ultimoJugueteAgregado.id);
                 console.log('Cantidad original:', ultimoJugueteAgregado.cantidadOriginal);
                 
-                const { data: jugueteActualizado, error } = await window.supabaseClient
-                    .from('juguetes')
-                    .update({ cantidad: ultimoJugueteAgregado.cantidadOriginal })
-                    .eq('id', ultimoJugueteAgregado.id)
-                    .eq('empresa_id', user.empresa_id)
-                    .select();
-
-                if (error) {
-                    console.error('Error al actualizar:', error);
-                    throw new Error('Error al restaurar la cantidad: ' + (error.message || 'Error desconocido') + '. Código: ' + (error.code || 'N/A'));
-                }
-                
-                if (jugueteActualizado && jugueteActualizado.length > 0) {
-                    operacionExitosa = true;
-                    console.log('Cantidad restaurada exitosamente');
-                    if (typeof showJugueteFormMessage === 'function') {
-                        showJugueteFormMessage(`Cantidad restaurada a ${ultimoJugueteAgregado.cantidadOriginal}. Actualizando inventario...`, 'success');
-                    }
-                } else {
-                    console.warn('No se pudo actualizar el juguete');
-                    throw new Error('No se pudo restaurar la cantidad del juguete. El juguete puede no existir.');
+                // Restar solo las unidades agregadas: si entre medio hubo ventas, no se pierden
+                const { nueva } = await window.servicioStock.ajustarCantidad(
+                    ultimoJugueteAgregado.id, -Math.abs(ultimoJugueteAgregado.cantidadAgregada || 0));
+                operacionExitosa = true;
+                if (typeof showJugueteFormMessage === 'function') {
+                    showJugueteFormMessage(`Se quitaron las ${ultimoJugueteAgregado.cantidadAgregada} unidades agregadas (cantidad actual: ${nueva}). Actualizando inventario...`, 'success');
                 }
             } else {
                 throw new Error('Tipo de operación desconocido: ' + ultimoJugueteAgregado.tipo);
