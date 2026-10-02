@@ -296,59 +296,8 @@ function initRegistrarVenta() {
 
     // Configurar formato de precio con separadores de miles
     const ventaPrecioInput = document.getElementById('ventaPrecio');
-    if (ventaPrecioInput) {
-        // Configurar formato de precio para todos los usuarios
-        ventaPrecioInput.addEventListener('input', function(e) {
-            let value = e.target.value;
-            // Remover todos los caracteres que no sean números
-            const numericValue = value.replace(/[^\d]/g, '');
-            
-            if (numericValue === '') {
-                e.target.value = '';
-                e.target.dataset.numericValue = '';
-                return;
-            }
-            
-            // Guardar el valor numérico
-            const numValue = parseInt(numericValue);
-            e.target.dataset.numericValue = numValue;
-            
-            // Formatear con separadores de miles
-            const formatted = numValue.toLocaleString('es-CO', {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 0
-            });
-            
-            // Actualizar el valor mostrado
-            e.target.value = formatted;
-        });
-        
-        // Al hacer blur, asegurar que el valor esté formateado
-        ventaPrecioInput.addEventListener('blur', function(e) {
-            const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
-            if (numericValue && numericValue !== '') {
-                const numValue = parseInt(numericValue);
-                e.target.value = numValue.toLocaleString('es-CO', {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0
-                });
-                e.target.dataset.numericValue = numValue;
-            }
-        });
-        
-        // Al hacer focus, mantener el valor formateado pero permitir edición
-        ventaPrecioInput.addEventListener('focus', function(e) {
-            const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
-            if (numericValue && numericValue !== '') {
-                // Mantener formateado para mejor visualización
-                const numValue = parseInt(numericValue);
-                e.target.value = numValue.toLocaleString('es-CO', {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0
-                });
-            }
-        });
-    }
+    // Precio en pesos colombianos ($28.000); el número queda en dataset.numericValue
+    window.FormatoMoneda.configurarInput(ventaPrecioInput);
 
     // Buscar juguete por código
     jugueteCodigoInput.addEventListener('blur', async function() {

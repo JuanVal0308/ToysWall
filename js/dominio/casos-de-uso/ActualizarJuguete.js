@@ -59,18 +59,41 @@ class ActualizarJuguete {
                 };
             }
 
-            // Verificar si el código ya existe en otro juguete
-            const codigoExiste = await this.repositorioJuguetes.existeCodigo(
-                datosActualizacion.codigo,
-                empresaId,
-                id
+            // Verificar el código: solo se rechaza si lo usa un producto DISTINTO.
+            // Las filas del mismo juguete en otras tiendas/bodegas (mismo código y nombre,
+            // sin distinguir mayúsculas, tildes ni espacios) no cuentan como duplicado.
+            const reglas = window.ReglasEdicionJuguete;
+            const original = await this.repositorioJuguetes.obtenerFilaParaEdicion(id);
+            const empresaReal = original.empresa_id ?? empresaId;
+            const filasProducto = reglas.filasDelProducto(
+                await this.repositorioJuguetes.buscarFilasPorCodigo(original.codigo, empresaReal),
+                original
             );
+            const filasCodigoNuevo = reglas.mismoTexto(datosActualizacion.codigo, original.codigo)
+                ? []
+                : await this.repositorioJuguetes.buscarFilasPorCodigo(datosActualizacion.codigo, empresaReal);
+            const validacion = reglas.validarCodigo(filasCodigoNuevo, {
+                original,
+                codigoNuevo: datosActualizacion.codigo,
+                nombreNuevo: datosActualizacion.nombre,
+                filasProducto
+            });
 
-            if (codigoExiste) {
+            if (!validacion.valido) {
                 return {
                     exito: false,
-                    mensaje: `El código "${datosActualizacion.codigo}" ya está asignado a otro juguete`
+                    mensaje: validacion.mensaje
                 };
+            }
+
+            if (datosActualizacion.cantidad !== undefined) {
+                const cantidad = Number(datosActualizacion.cantidad);
+                if (!Number.isInteger(cantidad) || cantidad < 0) {
+                    return {
+                        exito: false,
+                        mensaje: 'La cantidad debe ser un número entero mayor o igual a 0'
+                    };
+                }
             }
 
             // Ejecutar actualización

@@ -87,115 +87,90 @@ class RepositorioJuguetesSupabase extends IRepositorioJuguetes {
      * @inheritdoc
      */
     async actualizar(id, datosActualizacion, empresaId) {
-        // Convertir ID a entero
         const idNumerico = parseInt(id);
         if (isNaN(idNumerico)) {
             throw new Error('ID de juguete inválido');
         }
+        const R = window.ReglasEdicionJuguete;
 
-        // PASO 1: Obtener la fila original para saber código, empresa_id y valores anteriores
-        const { data: filaOriginal, error: fetchError } = await this.cliente
-            .from('juguetes')
-            .select('codigo, empresa_id, nombre, precio_min, precio_por_mayor, item, foto_url, cantidad_por_bulto')
-            .eq('id', idNumerico)
-            .single();
+        // PASO 1: fila editada tal como está en la BD (código, nombre y empresa reales)
+        const filaOriginal = await this.obtenerFilaParaEdicion(idNumerico);
 
-        if (fetchError) {
-            throw new Error(`Error al obtener juguete: ${fetchError.message}`);
-        }
-        
-        if (!filaOriginal) {
-            throw new Error(`No se encontró el juguete con ID ${idNumerico}`);
-        }
+        // PASO 2: filas del MISMO producto (mismo código y nombre normalizados) en otras ubicaciones
+        const candidatas = await this.buscarFilasPorCodigo(filaOriginal.codigo, filaOriginal.empresa_id);
+        const idsProducto = R.filasDelProducto(candidatas, filaOriginal)
+            .map(f => f.id)
+            .filter(otroId => otroId !== idNumerico);
 
-        const codigoOriginal = filaOriginal.codigo;
-        const empresaIdReal = filaOriginal.empresa_id; // Usar el de la BD, no de sesión
-
-        // PASO 2: Actualizar la fila editada por ID (todos los campos que vienen en datosActualizacion)
+        // PASO 3: la fila editada recibe todo (cantidad = valor absoluto de ESTA ubicación)
+        const { compartidos, porUbicacion } = R.separarCampos(datosActualizacion);
         const { data: filaActualizada, error: updateError } = await this.cliente
             .from('juguetes')
-            .update(datosActualizacion)
+            .update({ ...compartidos, ...porUbicacion })
             .eq('id', idNumerico)
             .select();
 
         if (updateError) {
             throw new Error(`Error al actualizar juguete: ${updateError.message}`);
         }
-        
         if (!filaActualizada || filaActualizada.length === 0) {
             throw new Error(`No se pudo actualizar el juguete con ID ${idNumerico}. Verifica permisos.`);
         }
 
-        // PASO 3: Detectar si cambiaron campos COMPARTIDOS
-        const camposCompartidos = {};
-        let hayCambiosCompartidos = false;
-
-        // Nombre
-        if (datosActualizacion.nombre !== undefined && datosActualizacion.nombre !== filaOriginal.nombre) {
-            camposCompartidos.nombre = datosActualizacion.nombre;
-            hayCambiosCompartidos = true;
-        }
-
-        // Precio mínimo
-        if (datosActualizacion.precio_min !== undefined && datosActualizacion.precio_min !== filaOriginal.precio_min) {
-            camposCompartidos.precio_min = datosActualizacion.precio_min;
-            hayCambiosCompartidos = true;
-        }
-
-        // Precio por mayor
-        if (datosActualizacion.precio_por_mayor !== undefined && datosActualizacion.precio_por_mayor !== filaOriginal.precio_por_mayor) {
-            camposCompartidos.precio_por_mayor = datosActualizacion.precio_por_mayor;
-            hayCambiosCompartidos = true;
-        }
-
-        // Item
-        if (datosActualizacion.item !== undefined && datosActualizacion.item !== filaOriginal.item) {
-            camposCompartidos.item = datosActualizacion.item;
-            hayCambiosCompartidos = true;
-        }
-
-        // Foto URL
-        if (datosActualizacion.foto_url !== undefined && datosActualizacion.foto_url !== filaOriginal.foto_url) {
-            camposCompartidos.foto_url = datosActualizacion.foto_url;
-            hayCambiosCompartidos = true;
-        }
-
-        // Cantidad por bulto
-        if (datosActualizacion.cantidad_por_bulto !== undefined && datosActualizacion.cantidad_por_bulto !== filaOriginal.cantidad_por_bulto) {
-            camposCompartidos.cantidad_por_bulto = datosActualizacion.cantidad_por_bulto;
-            hayCambiosCompartidos = true;
-        }
-
-        // Código (si cambió, también hay que actualizarlo en hermanas)
-        const codigoCambio = datosActualizacion.codigo !== undefined && datosActualizacion.codigo !== codigoOriginal;
-        if (codigoCambio) {
-            camposCompartidos.codigo = datosActualizacion.codigo;
-            hayCambiosCompartidos = true;
-        }
-
-        // PASO 4: Si hay cambios en campos compartidos, actualizar filas hermanas
-        if (hayCambiosCompartidos) {
-            // Actualizar todas las OTRAS filas con el mismo código original y empresa_id
-            // (excluyendo la que acabamos de editar)
+        // PASO 4: los campos compartidos (nombre, código, precios, ITEM, foto, cantidad por bulto)
+        // se copian a las demás ubicaciones del producto; su cantidad no se toca.
+        if (Object.keys(compartidos).length > 0 && idsProducto.length > 0) {
             const { data: filasHermanas, error: syncError } = await this.cliente
                 .from('juguetes')
-                .update(camposCompartidos)
-                .eq('codigo', codigoOriginal)
-                .eq('empresa_id', empresaIdReal)
-                .neq('id', idNumerico)  // Excluir la fila ya actualizada
+                .update(compartidos)
+                .in('id', idsProducto)
                 .select('id');
 
             if (syncError) {
                 throw new Error(`Error al sincronizar campos compartidos: ${syncError.message}`);
             }
-
-            // No es error si no hay filas hermanas (podría ser el único producto con ese código)
             if (filasHermanas && filasHermanas.length > 0) {
                 console.log(`✓ Sincronizados campos compartidos en ${filasHermanas.length} ubicacion(es) adicional(es)`);
             }
         }
 
         return Juguete.desdeDatos(filaActualizada[0]);
+    }
+
+    /**
+     * Fila cruda de `juguetes` para editar (código, nombre, empresa y ubicación reales).
+     */
+    async obtenerFilaParaEdicion(id) {
+        const { data, error } = await this.cliente
+            .from('juguetes')
+            .select('id, codigo, nombre, empresa_id, tienda_id, bodega_id, cantidad, numero_bultos')
+            .eq('id', parseInt(id))
+            .single();
+
+        if (error) throw new Error(`Error al obtener juguete: ${error.message}`);
+        if (!data) throw new Error(`No se encontró el juguete con ID ${id}`);
+        return data;
+    }
+
+    /**
+     * Filas de la empresa cuyo código coincide sin distinguir mayúsculas, tildes ni espacios
+     * (misma comparación que "Agregar juguetes").
+     */
+    async buscarFilasPorCodigo(codigo, empresaId) {
+        const R = window.ReglasEdicionJuguete;
+        const limpio = String(codigo ?? '').trim();
+        if (!limpio) return [];
+        // ilike no distingue mayúsculas; los espacios internos repetidos se cubren con %.
+        const patron = limpio.replace(/[\\%_]/g, '\\$&').replace(/\s+/g, '%');
+        let consulta = this.cliente
+            .from('juguetes')
+            .select('id, codigo, nombre, empresa_id, tienda_id, bodega_id, cantidad, numero_bultos')
+            .ilike('codigo', patron);
+        if (empresaId !== null && empresaId !== undefined) consulta = consulta.eq('empresa_id', empresaId);
+        const { data, error } = await consulta;
+
+        if (error) throw new Error(`Error al buscar juguetes por código: ${error.message}`);
+        return (data || []).filter(f => R.mismoTexto(f.codigo, codigo));
     }
 
     /**

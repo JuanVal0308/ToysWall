@@ -904,31 +904,12 @@ async function registrarPago() {
     }
 }
 
-// Formateo del campo de monto a pagar (permite escribir solo números y los muestra con puntos)
+// Formateo del campo de monto a pagar en pesos colombianos ($18.244)
 document.addEventListener('DOMContentLoaded', function() {
     const montoInput = document.getElementById('pagoModalMonto');
     if (!montoInput) return;
 
-    montoInput.addEventListener('input', function(e) {
-        let value = e.target.value || '';
-        // Mantener solo dígitos
-        const numeric = value.replace(/[^\d]/g, '');
-
-        if (numeric === '') {
-            e.target.value = '';
-            e.target.dataset.numericValue = '';
-            return;
-        }
-
-        const num = parseInt(numeric, 10);
-        e.target.dataset.numericValue = num.toString();
-
-        // Mostrar con formato colombiano sin decimales (ej: 18244 -> 18.244)
-        e.target.value = num.toLocaleString('es-CO', {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0
-        });
-    });
+    window.FormatoMoneda.configurarInput(montoInput);
 });
 
 // Función para mostrar mensajes en modal de pago

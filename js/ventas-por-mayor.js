@@ -223,49 +223,7 @@ function initVentaPorMayor() {
 
     // Configurar formato del campo de abono (separadores de miles)
     if (abonoInput) {
-        abonoInput.addEventListener('input', function(e) {
-            let value = e.target.value;
-            const numericValue = value.replace(/[^\d]/g, '');
-
-            if (numericValue === '') {
-                e.target.value = '';
-                e.target.dataset.numericValue = '';
-                return;
-            }
-
-            const numValue = parseInt(numericValue, 10);
-            e.target.dataset.numericValue = numValue;
-
-            const formatted = numValue.toLocaleString('es-CO', {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 0
-            });
-
-            e.target.value = formatted;
-        });
-
-        abonoInput.addEventListener('blur', function(e) {
-            const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
-            if (numericValue && numericValue !== '') {
-                const numValue = parseInt(numericValue, 10);
-                e.target.value = numValue.toLocaleString('es-CO', {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0
-                });
-                e.target.dataset.numericValue = numValue;
-            }
-        });
-
-        abonoInput.addEventListener('focus', function(e) {
-            const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
-            if (numericValue && numericValue !== '') {
-                const numValue = parseInt(numericValue, 10);
-                e.target.value = numValue.toLocaleString('es-CO', {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0
-                });
-            }
-        });
+        window.FormatoMoneda.configurarInput(abonoInput);
     }
 
     // Mostrar/ocultar campo de abono según método de pago y si hay items agregados
@@ -277,8 +235,7 @@ function initVentaPorMayor() {
             } else {
                 abonoRow.style.display = 'none';
                 if (abonoInput) {
-                    abonoInput.value = '0';
-                    abonoInput.dataset.numericValue = '0';
+                    window.FormatoMoneda.asignar(abonoInput, 0);
                 }
             }
         });

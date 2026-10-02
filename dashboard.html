@@ -2123,9 +2123,16 @@
                     <small style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Opcional: Código ITEM del producto</small>
                 </div>
                 <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Cantidad</label>
-                    <input type="number" id="editarJugueteCantidad" required min="0"
+                    <label for="editarJugueteUbicacion" style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Ubicación de la cantidad</label>
+                    <select id="editarJugueteUbicacion"
+                            style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: white;"></select>
+                    <small id="editarJugueteUbicacionAyuda" style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Los precios y datos generales se guardan en todas las ubicaciones de este juguete.</small>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label for="editarJugueteCantidad" id="editarJugueteCantidadLabel" style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Cantidad en esta ubicación</label>
+                    <input type="number" id="editarJugueteCantidad" required min="0" step="1"
                            style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
+                    <small id="editarJugueteCantidadAyuda" style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Escribe la cantidad total que queda en esta ubicación (reemplaza la actual; no se suma ni se resta).</small>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
                     <div>
@@ -2156,31 +2163,31 @@
                 <div style="margin-bottom: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                     <div>
                         <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Precio Mínimo *</label>
-                        <input type="number" id="editarJuguetePrecioMin" required min="0" step="0.01"
+                        <input type="text" inputmode="numeric" autocomplete="off" placeholder="$0" id="editarJuguetePrecioMin" required
                                style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
                         <small style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Precio mínimo permitido para la venta</small>
                     </div>
                     <div>
                         <label style="display: block; margin-bottom: 8px; color: #1e293b; font-weight: 500;">Precio al por Mayor</label>
-                        <input type="number" id="editarJuguetePrecioPorMayor" min="0" step="0.01"
+                        <input type="text" inputmode="numeric" autocomplete="off" placeholder="$0" id="editarJuguetePrecioPorMayor"
                                style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;">
                         <small style="display: block; margin-top: 5px; color: #64748b; font-size: 12px;">Opcional: precio para ventas al por mayor</small>
                     </div>
                 </div>
                 <div id="editarJugueteErrorMessage" style="display: none; padding: 12px; background: #fee2e2; color: #dc2626; border-radius: 6px; margin-bottom: 15px; font-size: 14px;"></div>
                 <div id="editarJugueteSuccessMessage" style="display: none; padding: 12px; background: #d1fae5; color: #059669; border-radius: 6px; margin-bottom: 15px; font-size: 14px;"></div>
-                <div style="display: flex; gap: 10px; justify-content: space-between; align-items: center;">
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center;">
                     <button type="button" id="eliminarJugueteBtn" onclick="eliminarJugueteActual()" 
-                            style="padding: 10px 20px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px;">
+                            style="padding: 10px 20px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; white-space: nowrap;">
                         <i class="fas fa-trash"></i> Eliminar
                     </button>
-                    <div style="display: flex; gap: 10px;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-left: auto;">
                         <button type="button" onclick="cerrarModalEditarJuguete()" 
-                                style="padding: 10px 20px; background: #f1f5f9; color: #64748b; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                                style="padding: 10px 20px; background: #f1f5f9; color: #64748b; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; white-space: nowrap;">
                             Cancelar
                         </button>
                         <button type="submit" 
-                                style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">
+                                style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; white-space: nowrap;">
                             Guardar Cambios
                         </button>
                     </div>
@@ -2367,6 +2374,8 @@
     <script src="js/dominio/servicios/ReglasInventario.js"></script>
     <script src="js/dominio/servicios/ReglasAltaJuguete.js"></script>
     <script src="js/dominio/servicios/ReglasInventarioUbicacion.js"></script>
+    <script src="js/dominio/servicios/ReglasEdicionJuguete.js"></script>
+    <script src="js/dominio/servicios/FormatoMoneda.js"></script>
     <script src="js/dominio/servicios/ReglasImportacionInventario.js"></script>
     <script src="js/infraestructura/servicios/ServicioStockSupabase.js"></script>
     <script src="js/infraestructura/servicios/ServicioStockRpc.js"></script>

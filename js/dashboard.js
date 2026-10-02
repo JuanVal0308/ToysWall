@@ -1357,22 +1357,12 @@ document.addEventListener('DOMContentLoaded', async function() {
                 nombreInput.value = juguete.nombre;
             }
             if (juguete.precio_min !== null && juguete.precio_min !== undefined && precioMinInput) {
-                const precioFormateado = juguete.precio_min.toLocaleString('es-CO', {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0
-                });
-                precioMinInput.value = precioFormateado;
-                precioMinInput.dataset.numericValue = juguete.precio_min;
+                window.FormatoMoneda.asignar(precioMinInput, juguete.precio_min);
             }
             if (juguete.precio_por_mayor !== null && juguete.precio_por_mayor !== undefined) {
                 const precioPorMayorInput = document.getElementById('juguetePrecioPorMayorInput');
                 if (precioPorMayorInput) {
-                    const precioFormateado = juguete.precio_por_mayor.toLocaleString('es-CO', {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0
-                    });
-                    precioPorMayorInput.value = precioFormateado;
-                    precioPorMayorInput.dataset.numericValue = juguete.precio_por_mayor;
+                    window.FormatoMoneda.asignar(precioPorMayorInput, juguete.precio_por_mayor);
                 }
             }
             if (juguete.item) {
@@ -1497,113 +1487,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Configurar autocompletado
         configurarAutocompletadoJuguete();
         
-        // Configurar formato de precio mínimo con separadores de miles
-        const juguetePrecioMinInput = document.getElementById('juguetePrecioMinInput');
-        if (juguetePrecioMinInput) {
-            juguetePrecioMinInput.addEventListener('input', function(e) {
-                let value = e.target.value;
-                // Remover todos los caracteres que no sean números
-                const numericValue = value.replace(/[^\d]/g, '');
-                
-                if (numericValue === '') {
-                    e.target.value = '';
-                    e.target.dataset.numericValue = '';
-                    return;
-                }
-                
-                // Guardar el valor numérico
-                const numValue = parseInt(numericValue);
-                e.target.dataset.numericValue = numValue;
-                
-                // Formatear con separadores de miles
-                const formatted = numValue.toLocaleString('es-CO', {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0
-                });
-                
-                // Actualizar el valor mostrado
-                e.target.value = formatted;
-            });
-            
-            // Al hacer blur, asegurar que el valor esté formateado
-            juguetePrecioMinInput.addEventListener('blur', function(e) {
-                const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
-                if (numericValue && numericValue !== '') {
-                    const numValue = parseInt(numericValue);
-                    e.target.value = numValue.toLocaleString('es-CO', {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0
-                    });
-                    e.target.dataset.numericValue = numValue;
-                }
-            });
-            
-            // Al hacer focus, mantener el valor formateado
-            juguetePrecioMinInput.addEventListener('focus', function(e) {
-                const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
-                if (numericValue && numericValue !== '') {
-                    const numValue = parseInt(numericValue);
-                    e.target.value = numValue.toLocaleString('es-CO', {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0
-                    });
-                }
-            });
-        }
-        
-        // Configurar formato de precio al por mayor con separadores de miles
-        const juguetePrecioPorMayorInput = document.getElementById('juguetePrecioPorMayorInput');
-        if (juguetePrecioPorMayorInput) {
-            juguetePrecioPorMayorInput.addEventListener('input', function(e) {
-                let value = e.target.value;
-                // Remover todos los caracteres que no sean números
-                const numericValue = value.replace(/[^\d]/g, '');
-                
-                if (numericValue === '') {
-                    e.target.value = '';
-                    e.target.dataset.numericValue = '';
-                    return;
-                }
-                
-                // Guardar el valor numérico
-                const numValue = parseInt(numericValue);
-                e.target.dataset.numericValue = numValue;
-                
-                // Formatear con separadores de miles
-                const formatted = numValue.toLocaleString('es-CO', {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0
-                });
-                
-                // Actualizar el valor mostrado
-                e.target.value = formatted;
-            });
-            
-            // Al hacer blur, asegurar que el valor esté formateado
-            juguetePrecioPorMayorInput.addEventListener('blur', function(e) {
-                const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
-                if (numericValue && numericValue !== '') {
-                    const numValue = parseInt(numericValue);
-                    e.target.value = numValue.toLocaleString('es-CO', {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0
-                    });
-                    e.target.dataset.numericValue = numValue;
-                }
-            });
-            
-            // Al hacer focus, mantener el valor formateado
-            juguetePrecioPorMayorInput.addEventListener('focus', function(e) {
-                const numericValue = e.target.dataset.numericValue || e.target.value.replace(/[^\d]/g, '');
-                if (numericValue && numericValue !== '') {
-                    const numValue = parseInt(numericValue);
-                    e.target.value = numValue.toLocaleString('es-CO', {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0
-                    });
-                }
-            });
-        }
+        // Precios en pesos colombianos ($28.000): se muestran formateados y se guarda el número
+        window.FormatoMoneda.configurarInput(document.getElementById('juguetePrecioMinInput'));
+        window.FormatoMoneda.configurarInput(document.getElementById('juguetePrecioPorMayorInput'));
         
         // Configurar campo de URL de foto
         const jugueteFotoUrl = document.getElementById('jugueteFotoUrl');
@@ -2842,6 +2728,104 @@ document.addEventListener('DOMContentLoaded', async function() {
         codigoFilterInput.dataset.listenerAdded = 'true';
     }
 
+    // ---- Edición de juguete: ubicación cuya cantidad se corrige ----
+    // Cada juguete tiene una fila por tienda/bodega. Los precios y datos generales se guardan en
+    // todas; la cantidad es el valor NUEVO (absoluto) de la ubicación elegida.
+    let estadoEdicionJuguete = { idReferencia: null, filas: [] };
+
+    function nombreUbicacionFila(fila) {
+        if (fila.tienda_id) {
+            const t = tiendasInventario.find(x => Number(x.id) === Number(fila.tienda_id));
+            return `Tienda ${t ? capitalizarPrimeraLetra(t.nombre) : '#' + fila.tienda_id}`;
+        }
+        if (fila.bodega_id) {
+            const b = bodegasInventario.find(x => Number(x.id) === Number(fila.bodega_id));
+            return `Bodega ${b ? capitalizarPrimeraLetra(b.nombre) : '#' + fila.bodega_id}`;
+        }
+        return 'Sin ubicación';
+    }
+
+    function aplicarFilaEdicion(fila) {
+        const form = document.getElementById('editarJugueteForm');
+        const cantidadInput = document.getElementById('editarJugueteCantidad');
+        const numeroBultosInput = document.getElementById('editarJugueteNumeroBultos');
+        const etiqueta = document.getElementById('editarJugueteCantidadLabel');
+        const ayuda = document.getElementById('editarJugueteCantidadAyuda');
+        const eliminarBtn = document.getElementById('eliminarJugueteBtn');
+
+        if (fila) {
+            const nombre = nombreUbicacionFila(fila);
+            document.getElementById('editarJugueteId').value = fila.id;
+            form.dataset.ubicacion = nombre;
+            cantidadInput.disabled = false;
+            cantidadInput.required = true;
+            cantidadInput.value = fila.cantidad ?? 0;
+            if (numeroBultosInput) {
+                numeroBultosInput.disabled = false;
+                numeroBultosInput.value = fila.numero_bultos || '';
+            }
+            if (etiqueta) etiqueta.textContent = `Cantidad en ${nombre}`;
+            if (ayuda) ayuda.textContent = `Hoy hay ${fila.cantidad ?? 0}. Escribe la cantidad total que debe quedar en ${nombre} (reemplaza la actual; no se suma ni se resta).`;
+            if (eliminarBtn) { eliminarBtn.disabled = false; eliminarBtn.style.opacity = ''; }
+        } else {
+            document.getElementById('editarJugueteId').value = estadoEdicionJuguete.idReferencia;
+            form.dataset.ubicacion = '';
+            cantidadInput.value = '';
+            cantidadInput.disabled = true;
+            cantidadInput.required = false;
+            if (numeroBultosInput) {
+                numeroBultosInput.value = '';
+                numeroBultosInput.disabled = true;
+            }
+            if (etiqueta) etiqueta.textContent = 'Cantidad (elige primero la ubicación)';
+            if (ayuda) ayuda.textContent = 'Para corregir una cantidad elige arriba la tienda o bodega. Si no eliges, solo se guardan los precios y datos generales.';
+            if (eliminarBtn) { eliminarBtn.disabled = true; eliminarBtn.style.opacity = '0.5'; }
+        }
+    }
+
+    async function prepararUbicacionesEdicion(filaBase) {
+        const R = window.ReglasEdicionJuguete;
+        let filas = [filaBase];
+        try {
+            const repositorio = new RepositorioJuguetesSupabase(window.supabaseClient);
+            const candidatas = await repositorio.buscarFilasPorCodigo(filaBase.codigo, filaBase.empresa_id);
+            filas = R.filasDelProducto(candidatas, filaBase);
+            if (!filas.some(f => Number(f.id) === Number(filaBase.id))) filas.unshift(filaBase);
+        } catch (error) {
+            console.warn('No se pudieron cargar las demás ubicaciones del juguete:', error);
+        }
+        filas = filas.slice().sort((a, b) => nombreUbicacionFila(a).localeCompare(nombreUbicacionFila(b), 'es'));
+        estadoEdicionJuguete = { idReferencia: filaBase.id, filas };
+
+        const select = document.getElementById('editarJugueteUbicacion');
+        const preseleccion = R.filaPreseleccionada(filas, ubicacionInventario);
+        const repetidas = new Map();
+        filas.forEach(f => repetidas.set(nombreUbicacionFila(f), (repetidas.get(nombreUbicacionFila(f)) || 0) + 1));
+        const opciones = filas.map(f => {
+            const nombre = nombreUbicacionFila(f);
+            const extra = repetidas.get(nombre) > 1 ? ` (registro #${f.id})` : '';
+            return `<option value="${f.id}">${escaparTextoEdicion(nombre + extra)} — ${Number(f.cantidad) || 0} unidades</option>`;
+        });
+        const vacia = filas.length > 1 || !preseleccion
+            ? '<option value="">— Elige la ubicación para corregir su cantidad —</option>'
+            : '';
+        select.innerHTML = vacia + opciones.join('');
+        select.value = preseleccion ? String(preseleccion.id) : '';
+        aplicarFilaEdicion(preseleccion);
+
+        if (!select.dataset.listenerAdded) {
+            select.addEventListener('change', function() {
+                const fila = estadoEdicionJuguete.filas.find(f => String(f.id) === this.value) || null;
+                aplicarFilaEdicion(fila);
+            });
+            select.dataset.listenerAdded = 'true';
+        }
+    }
+
+    function escaparTextoEdicion(texto) {
+        return String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
     // Función global para abrir menú de editar juguete
     window.abrirMenuEditarJuguete = async function(jugueteId, event) {
         event.stopPropagation();
@@ -2868,30 +2852,24 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
             
             // Llenar el formulario con datos de la base de datos
-            document.getElementById('editarJugueteId').value = data.id;
-            // Guardar la ubicación para mostrarla al confirmar la eliminación
-            document.getElementById('editarJugueteForm').dataset.ubicacion = data.tiendas?.nombre
-                ? `Tienda ${data.tiendas.nombre}`
-                : (data.bodegas?.nombre ? `Bodega ${data.bodegas.nombre}` : 'Sin ubicación');
             document.getElementById('editarJugueteNombre').value = data.nombre;
             document.getElementById('editarJugueteCodigo').value = data.codigo;
-            document.getElementById('editarJugueteCantidad').value = data.cantidad;
-            document.getElementById('editarJuguetePrecioMin').value = data.precio_min || '';
-            
+
+            // Precios en pesos colombianos ($28.000); al guardar se vuelven número
+            const editarPrecioMinInput = document.getElementById('editarJuguetePrecioMin');
             const editarPrecioPorMayorInput = document.getElementById('editarJuguetePrecioPorMayor');
-            if (editarPrecioPorMayorInput) {
-                editarPrecioPorMayorInput.value = data.precio_por_mayor || '';
-            }
-            
-            // Llenar campos de bultos si existen
-            const numeroBultosInput = document.getElementById('editarJugueteNumeroBultos');
+            window.FormatoMoneda.configurarInput(editarPrecioMinInput);
+            window.FormatoMoneda.configurarInput(editarPrecioPorMayorInput);
+            window.FormatoMoneda.asignar(editarPrecioMinInput, data.precio_min);
+            window.FormatoMoneda.asignar(editarPrecioPorMayorInput, data.precio_por_mayor);
+
             const cantidadPorBultoInput = document.getElementById('editarJugueteCantidadPorBulto');
-            if (numeroBultosInput) {
-                numeroBultosInput.value = data.numero_bultos || '';
-            }
             if (cantidadPorBultoInput) {
                 cantidadPorBultoInput.value = data.cantidad_por_bulto || '';
             }
+
+            // Filas del mismo juguete en cada tienda/bodega: la cantidad se corrige en UNA de ellas
+            await prepararUbicacionesEdicion(data);
             
             // Llenar campo ITEM si existe
             const itemInput = document.getElementById('editarJugueteItem');
@@ -2963,6 +2941,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Función para eliminar juguete actual
     window.eliminarJugueteActual = async function() {
+        if (!document.getElementById('editarJugueteUbicacion')?.value) {
+            alert('Elige primero la tienda o bodega cuyo registro quieres eliminar.');
+            return;
+        }
         const jugueteId = parseInt(document.getElementById('editarJugueteId').value);
         const jugueteNombre = document.getElementById('editarJugueteNombre').value;
         const jugueteCodigo = document.getElementById('editarJugueteCodigo').value;
@@ -3043,12 +3025,12 @@ document.addEventListener('DOMContentLoaded', async function() {
                 const jugueteId = parseInt(document.getElementById('editarJugueteId').value);
                 const nombre = capitalizarPrimeraLetra(document.getElementById('editarJugueteNombre').value.trim());
                 const codigo = document.getElementById('editarJugueteCodigo').value.trim();
-                const cantidad = parseInt(document.getElementById('editarJugueteCantidad').value);
-                const precioMin = parseFloat(document.getElementById('editarJuguetePrecioMin').value);
-                const precioPorMayorInput = document.getElementById('editarJuguetePrecioPorMayor');
-                const precioPorMayor = precioPorMayorInput && precioPorMayorInput.value.trim() !== ''
-                    ? parseFloat(precioPorMayorInput.value)
-                    : null;
+                // Ubicación elegida: su cantidad es el valor NUEVO (no se suma ni se resta)
+                const ubicacionSelect = document.getElementById('editarJugueteUbicacion');
+                const filaElegida = estadoEdicionJuguete.filas.find(f => String(f.id) === ubicacionSelect.value) || null;
+                const nombreUbicacion = filaElegida ? nombreUbicacionFila(filaElegida) : '';
+                const precioMin = window.FormatoMoneda.leer(document.getElementById('editarJuguetePrecioMin'));
+                const precioPorMayor = window.FormatoMoneda.leer(document.getElementById('editarJuguetePrecioPorMayor'));
                 const fotoUrl = document.getElementById('editarJugueteFotoUrl')?.value.trim() || null;
                 // Obtener campos de bultos (opcionales)
                 const numeroBultosInput = document.getElementById('editarJugueteNumeroBultos');
@@ -3065,9 +3047,20 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         errorMsg.style.display = 'none';
         successMsg.style.display = 'none';
+
+                let cantidad;
+                if (filaElegida) {
+                    const validacionCantidad = window.ReglasEdicionJuguete.validarCantidad(document.getElementById('editarJugueteCantidad').value);
+                    if (!validacionCantidad.valido) {
+                        errorMsg.textContent = validacionCantidad.mensaje;
+                        errorMsg.style.display = 'block';
+                        return;
+                    }
+                    cantidad = validacionCantidad.valor;
+                }
         
-                if (!nombre || !codigo || cantidad < 0 || isNaN(precioMin) || precioMin < 0 || (precioPorMayor !== null && (isNaN(precioPorMayor) || precioPorMayor < 0))) {
-                    errorMsg.textContent = 'Por favor, completa todos los campos correctamente';
+                if (!nombre || !codigo || precioMin === null || precioMin < 0 || (precioPorMayor !== null && precioPorMayor < 0)) {
+                    errorMsg.textContent = 'Por favor, completa todos los campos correctamente (nombre, código y precio mínimo son obligatorios)';
                     errorMsg.style.display = 'block';
                     return;
                 }
@@ -3075,14 +3068,18 @@ document.addEventListener('DOMContentLoaded', async function() {
         try {
                     const user = JSON.parse(sessionStorage.getItem('user'));
                     
-                    // Preparar datos de actualización
+                    // Datos compartidos (se guardan en todas las ubicaciones del juguete)
                     const updateData = {
                         nombre: nombre,
                         codigo: codigo,
-                        cantidad: cantidad,
                         precio_min: precioMin,
                         precio_por_mayor: precioPorMayor
                     };
+                    // Datos de la ubicación elegida (solo esa fila). Sin ubicación no se tocan cantidades.
+                    if (filaElegida) {
+                        updateData.cantidad = cantidad;
+                        updateData.numero_bultos = (numeroBultos !== null && !isNaN(numeroBultos)) ? numeroBultos : null;
+                    }
                     
                     if (fotoUrl !== null) {
                         updateData.foto_url = fotoUrl || null;
@@ -3092,13 +3089,6 @@ document.addEventListener('DOMContentLoaded', async function() {
                     const itemInput = document.getElementById('editarJugueteItem');
                     if (itemInput) {
                         updateData.item = itemInput.value.trim() || null;
-                    }
-                    
-                    // Agregar campos de bultos si se proporcionan
-                    if (numeroBultos !== null && !isNaN(numeroBultos)) {
-                        updateData.numero_bultos = numeroBultos;
-                    } else {
-                        updateData.numero_bultos = null;
                     }
                     
                     if (cantidadPorBulto !== null && !isNaN(cantidadPorBulto)) {
@@ -3121,7 +3111,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                             return;
                         }
                         
-                        successMsg.textContent = 'Juguete actualizado correctamente. Recargando...';
+                        successMsg.textContent = filaElegida
+                            ? `Juguete actualizado. ${nombreUbicacion} queda con ${cantidad} unidades. Recargando...`
+                            : 'Precios y datos actualizados en todas las ubicaciones. Recargando...';
                         successMsg.style.display = 'block';
                     } else {
                         // Fallback a implementación directa si el controlador no está disponible
@@ -3130,7 +3122,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                         const repositorio = new RepositorioJuguetesSupabase(window.supabaseClient);
                         await repositorio.actualizar(jugueteId, updateData, user.empresa_id);
                         
-                        successMsg.textContent = 'Juguete actualizado correctamente. Recargando...';
+                        successMsg.textContent = filaElegida
+                            ? `Juguete actualizado. ${nombreUbicacion} queda con ${cantidad} unidades. Recargando...`
+                            : 'Precios y datos actualizados en todas las ubicaciones. Recargando...';
                         successMsg.style.display = 'block';
                     }
                     

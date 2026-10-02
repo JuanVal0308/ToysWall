@@ -63,6 +63,25 @@ class IRepositorioJuguetes {
     }
 
     /**
+     * Fila cruda de un juguete para editarlo (id, codigo, nombre, empresa_id, tienda_id, bodega_id, cantidad)
+     * @param {number} id
+     * @returns {Promise<Object>}
+     */
+    async obtenerFilaParaEdicion(id) {
+        throw new Error('Método obtenerFilaParaEdicion() debe ser implementado');
+    }
+
+    /**
+     * Filas cuyo código coincide sin distinguir mayúsculas, tildes ni espacios
+     * @param {string} codigo
+     * @param {number} empresaId
+     * @returns {Promise<Object[]>}
+     */
+    async buscarFilasPorCodigo(codigo, empresaId) {
+        throw new Error('Método buscarFilasPorCodigo() debe ser implementado');
+    }
+
+    /**
      * Verificar si existe un juguete con un código
      * @param {string} codigo - Código a verificar
      * @param {number} empresaId - ID de la empresa
