@@ -909,14 +909,14 @@
                                         </div>
                                         <div class="form-group">
                                             <label for="empleadoTienda">
-                                                <i class="fas fa-store"></i> Tienda
+                                                <i class="fas fa-store"></i> Ubicación de venta
                                             </label>
                                             <select 
                                                 id="empleadoTienda" 
                                                 name="tienda_id" 
                                                 class="form-select"
                                             >
-                                                <option value="">Sin tienda asignada</option>
+                                                <option value="">Sin ubicación asignada</option>
                                             </select>
                                         </div>
                                     </div>
@@ -1912,6 +1912,48 @@
         </div>
     </div>
 
+    <!-- Modal para eliminar tienda: mueve inventario y empleados a una bodega -->
+    <div class="modal-overlay" id="eliminarTiendaModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-trash"></i> Eliminar tienda</h3>
+                <button type="button" class="modal-close" id="closeEliminarTiendaModal" aria-label="Cerrar">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="eliminarTiendaForm" class="modal-body" autocomplete="off">
+                <p class="eliminar-tienda-aviso">
+                    Vas a eliminar la tienda <strong id="eliminarTiendaNombre"></strong>.
+                    Antes de eliminarla se moverá a una bodega todo lo que tiene asignado.
+                    Las ventas y movimientos anteriores se conservan.
+                </p>
+                <ul class="eliminar-tienda-resumen" id="eliminarTiendaResumen"></ul>
+                <div class="form-group" id="eliminarTiendaBodegaGrupo">
+                    <label for="eliminarTiendaBodegaSelect">
+                        <i class="fas fa-warehouse"></i> Bodega que recibirá el inventario y los empleados
+                    </label>
+                    <select id="eliminarTiendaBodegaSelect" class="form-select"></select>
+                </div>
+                <p class="eliminar-tienda-bodega-auto" id="eliminarTiendaBodegaAuto" style="display: none;"></p>
+                <p class="eliminar-tienda-traslado" id="eliminarTiendaTraslado"></p>
+                <div class="form-group">
+                    <label for="eliminarTiendaConfirmacion" class="eliminar-tienda-etiqueta">
+                        Para confirmar, escribe el nombre de la tienda: <strong id="eliminarTiendaNombreConfirmar"></strong>
+                    </label>
+                    <input type="text" id="eliminarTiendaConfirmacion" autocomplete="off" spellcheck="false">
+                </div>
+                <div id="eliminarTiendaErrorMessage" class="error-message" style="display: none;"></div>
+                <div id="eliminarTiendaSuccessMessage" class="success-message" style="display: none;"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="cancelEliminarTiendaBtn">Cancelar</button>
+                    <button type="submit" class="btn-peligro" id="confirmarEliminarTiendaBtn" disabled>
+                        <i class="fas fa-trash"></i> Eliminar tienda
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal para editar empleado -->
     <div class="modal-overlay" id="editEmpleadoModal" style="display: none;">
         <div class="modal-content">
@@ -1971,14 +2013,14 @@
                     </div>
                     <div class="form-group">
                         <label for="editEmpleadoTienda">
-                            <i class="fas fa-store"></i> Tienda
+                            <i class="fas fa-store"></i> Ubicación de venta
                         </label>
                         <select 
                             id="editEmpleadoTienda" 
                             name="tienda_id" 
                             class="form-select"
                         >
-                            <option value="">Sin tienda asignada</option>
+                            <option value="">Sin ubicación asignada</option>
                         </select>
                     </div>
                 </div>
@@ -2377,9 +2419,12 @@
     <script src="js/dominio/servicios/ReglasEdicionJuguete.js"></script>
     <script src="js/dominio/servicios/FormatoMoneda.js"></script>
     <script src="js/dominio/servicios/ReglasImportacionInventario.js"></script>
+    <script src="js/dominio/servicios/ReglasEliminarTienda.js"></script>
+    <script src="js/dominio/servicios/ReglasUbicacionEmpleado.js"></script>
     <script src="js/infraestructura/servicios/ServicioStockSupabase.js"></script>
     <script src="js/infraestructura/servicios/ServicioStockRpc.js"></script>
     <script src="js/infraestructura/servicios/ServicioUsuariosRpc.js"></script>
+    <script src="js/infraestructura/servicios/ServicioUbicacionesRpc.js"></script>
     <script src="js/infraestructura/servicios/ServicioFacturaXml.js"></script>
     <script src="js/infraestructura/servicios/ServicioImportacionInventario.js"></script>
     <script src="js/email-config.js"></script>

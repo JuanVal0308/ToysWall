@@ -3163,20 +3163,35 @@ document.addEventListener('DOMContentLoaded', async function() {
     let paginaActualEmpleados = 1;
     const itemsPorPaginaEmpleados = 10;
     let todosLosEmpleados = [];
+    let bodegasEmpleados = []; // para mostrar el nombre de la bodega de venta de cada empleado
+
+    /** true si la BD ya admite empleados en bodega (migración 2026_10_02_08); false si no o si falla la consulta. */
+    async function admiteBodegaEnEmpleados() {
+        try {
+            return window.servicioUbicaciones ? await window.servicioUbicaciones.admiteBodegaEnEmpleados() : false;
+        } catch (error) {
+            console.warn('No se pudo comprobar si los empleados admiten bodega:', error);
+            return false;
+        }
+    }
 
     async function loadEmpleados() {
         const empleadosList = document.getElementById('empleadosList');
         empleadosList.innerHTML = '<p style="text-align: center; color: #64748b;">Cargando empleados...</p>';
         
         try {
-            const { data: empleados, error } = await window.supabaseClient
-                .from('empleados')
-                .select('*, tiendas(nombre)')
-                .eq('empresa_id', user.empresa_id)
-                .order('nombre');
+            const [{ data: empleados, error }, { data: bodegas }] = await Promise.all([
+                window.supabaseClient
+                    .from('empleados')
+                    .select('*, tiendas(nombre)')
+                    .eq('empresa_id', user.empresa_id)
+                    .order('nombre'),
+                window.supabaseClient.from('bodegas').select('id, nombre').eq('empresa_id', user.empresa_id)
+            ]);
 
             if (error) throw error;
 
+            bodegasEmpleados = bodegas || [];
             todosLosEmpleados = empleados || [];
             paginaActualEmpleados = 1;
             renderizarPaginaEmpleados();
@@ -3296,52 +3311,68 @@ document.addEventListener('DOMContentLoaded', async function() {
         renderizarPaginaEmpleados();
     };
     
-    // Cargar tiendas para el select de empleados
+    // Cargar ubicaciones de venta (tiendas y, si la BD lo admite, bodegas) para el select de empleados.
+    // Valores: "tienda-3" / "bodega-1" ('' = sin ubicación)
     async function loadTiendasForSelect(selectId) {
         const select = document.getElementById(selectId);
         if (!select) return;
         
         const currentValue = select.value;
-        select.innerHTML = '<option value="">Sin tienda asignada</option>';
+        select.innerHTML = '<option value="">Sin ubicación asignada</option>';
         
         try {
-            const { data: tiendas, error } = await window.supabaseClient
-                .from('tiendas')
-                .select('*')
-                .eq('empresa_id', user.empresa_id)
-                .order('nombre');
+            const admiteBodega = await admiteBodegaEnEmpleados();
+            const [{ data: tiendas, error }, bodegasRes] = await Promise.all([
+                window.supabaseClient
+                    .from('tiendas')
+                    .select('id, nombre')
+                    .eq('empresa_id', user.empresa_id)
+                    .order('nombre'),
+                admiteBodega
+                    ? window.supabaseClient.from('bodegas').select('id, nombre').eq('empresa_id', user.empresa_id).order('nombre')
+                    : Promise.resolve({ data: [] })
+            ]);
 
             if (error) throw error;
+            if (bodegasRes.error) throw bodegasRes.error;
 
-            if (tiendas && tiendas.length > 0) {
-                tiendas.forEach(tienda => {
+            const agregarGrupo = (etiqueta, tipo, lista) => {
+                if (!lista || lista.length === 0) return;
+                const grupo = document.createElement('optgroup');
+                grupo.label = etiqueta;
+                lista.forEach(u => {
                     const option = document.createElement('option');
-                    option.value = tienda.id;
-                    option.textContent = tienda.nombre;
-                    select.appendChild(option);
+                    option.value = `${tipo}-${u.id}`;
+                    option.textContent = u.nombre;
+                    grupo.appendChild(option);
                 });
-            }
+                select.appendChild(grupo);
+            };
+            agregarGrupo('Tiendas', 'tienda', tiendas);
+            agregarGrupo('Bodegas', 'bodega', bodegasRes.data);
             
             if (currentValue) {
                 select.value = currentValue;
             }
         } catch (error) {
-            console.error('Error al cargar tiendas:', error);
+            console.error('Error al cargar ubicaciones:', error);
         }
     }
+
+    window.cargarUbicacionesVentaEmpleado = loadTiendasForSelect;
 
     // Crear tarjeta de empleado
     function createEmpleadoCard(empleado) {
         const card = document.createElement('div');
         card.className = 'bodega-card';
-        const tiendaNombre = empleado.tiendas ? empleado.tiendas.nombre : 'Sin tienda asignada';
+        const ubicacionVenta = ReglasUbicacionEmpleado.describir(empleado, [], bodegasEmpleados);
         card.innerHTML = `
             <div class="bodega-info">
                 <h3>${capitalizarPrimeraLetra(empleado.nombre)}</h3>
                 <p><i class="fas fa-phone"></i> ${empleado.telefono}</p>
                 <p><i class="fas fa-id-card"></i> Documento: ${empleado.documento || 'N/A'}</p>
                 <p><i class="fas fa-barcode"></i> Código: ${empleado.codigo}</p>
-                <p><i class="fas fa-store"></i> Tienda: ${tiendaNombre}</p>
+                <p><i class="fas ${empleado.bodega_id ? 'fa-warehouse' : 'fa-store'}"></i> Vende en: ${ubicacionVenta}</p>
             </div>
             <div class="bodega-actions">
                 <button class="menu-toggle" data-empleado-id="${empleado.id}">
@@ -3409,10 +3440,16 @@ document.addEventListener('DOMContentLoaded', async function() {
             const telefono = document.getElementById('empleadoTelefono').value.trim();
             const documento = document.getElementById('empleadoDocumento').value.trim();
             const codigo = document.getElementById('empleadoCodigo').value.trim();
-            const tiendaId = document.getElementById('empleadoTienda').value;
+            const claveUbicacion = document.getElementById('empleadoTienda').value;
             
             if (!nombre || !telefono || !documento || !codigo) {
                 showEmpleadoMessage('Por favor, completa todos los campos obligatorios', 'error');
+                return;
+            }
+
+            const ubicacion = ReglasUbicacionEmpleado.camposParaGuardar(claveUbicacion, await admiteBodegaEnEmpleados());
+            if (ubicacion.error) {
+                showEmpleadoMessage(ubicacion.error, 'error');
                 return;
             }
 
@@ -3435,12 +3472,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                     telefono: telefono,
                     documento: documento,
                     codigo: codigo,
-                    empresa_id: user.empresa_id
+                    empresa_id: user.empresa_id,
+                    ...ubicacion.campos // tienda_id o bodega_id (ubicación de venta)
                 };
-                
-                if (tiendaId) {
-                    empleadoData.tienda_id = tiendaId;
-                }
 
                 const { error } = await window.supabaseClient
                     .from('empleados')
@@ -3513,13 +3547,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             document.getElementById('editEmpleadoCodigo').value = empleado.codigo;
             currentEmpleadoId = empleadoId;
             
-            // Cargar tiendas y seleccionar la actual
+            // Cargar ubicaciones y seleccionar la actual (tienda o bodega)
             await loadTiendasForSelect('editEmpleadoTienda');
-            if (empleado.tienda_id) {
-                const select = document.getElementById('editEmpleadoTienda');
-                if (select) {
-                    select.value = empleado.tienda_id;
-                }
+            const selectUbicacion = document.getElementById('editEmpleadoTienda');
+            if (selectUbicacion) {
+                selectUbicacion.value = ReglasUbicacionEmpleado.claveDeEmpleado(empleado);
             }
             
             const modal = document.getElementById('editEmpleadoModal');
@@ -3540,10 +3572,16 @@ document.addEventListener('DOMContentLoaded', async function() {
             const telefono = document.getElementById('editEmpleadoTelefono').value.trim();
             const documento = document.getElementById('editEmpleadoDocumento').value.trim();
             const codigo = document.getElementById('editEmpleadoCodigo').value.trim();
-            const tiendaId = document.getElementById('editEmpleadoTienda').value;
+            const claveUbicacion = document.getElementById('editEmpleadoTienda').value;
             
             if (!nombre || !telefono || !documento || !codigo) {
                 showEditEmpleadoMessage('Por favor, completa todos los campos obligatorios', 'error');
+                return;
+            }
+
+            const ubicacion = ReglasUbicacionEmpleado.camposParaGuardar(claveUbicacion, await admiteBodegaEnEmpleados());
+            if (ubicacion.error) {
+                showEditEmpleadoMessage(ubicacion.error, 'error');
                 return;
             }
 
@@ -3566,14 +3604,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                     nombre: nombre,
                     telefono: telefono,
                     documento: documento,
-                    codigo: codigo
+                    codigo: codigo,
+                    ...ubicacion.campos // tienda_id / bodega_id (la otra queda en null)
                 };
-                
-                if (tiendaId) {
-                    updateData.tienda_id = tiendaId;
-                } else {
-                    updateData.tienda_id = null;
-                }
 
                 const { error } = await window.supabaseClient
                     .from('empleados')

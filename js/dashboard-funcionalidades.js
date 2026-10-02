@@ -484,6 +484,19 @@ function initRegistrarVenta() {
                 
                 if (esEmpleadoEspecial) {
                     tiendaInfo = '<br><small style="color: #8b5cf6;">⭐ Puede vender en cualquier ubicación</small>';
+                } else if (empleado.bodega_id) {
+                    // Empleado que vende desde una bodega
+                    try {
+                        const { data: bodega } = await window.supabaseClient
+                            .from('bodegas')
+                            .select('nombre')
+                            .eq('id', empleado.bodega_id)
+                            .limit(1);
+                        const nombreBodega = bodega && bodega.length > 0 ? escaparHtmlTienda(bodega[0].nombre) : '';
+                        tiendaInfo = `<br><small style="color: #10b981;">✓ Bodega: ${nombreBodega || 'asignada'}</small>`;
+                    } catch (error) {
+                        tiendaInfo = '<br><small style="color: #10b981;">✓ Asignado a una bodega</small>';
+                    }
                 } else if (empleado.tienda_id) {
                     // Obtener nombre de la tienda
                     try {
@@ -501,7 +514,7 @@ function initRegistrarVenta() {
                         tiendaInfo = '<br><small style="color: #10b981;">✓ Asignado a una tienda</small>';
                     }
                 } else {
-                    tiendaInfo = '<br><small style="color: #ef4444;">✗ Sin tienda asignada</small>';
+                    tiendaInfo = '<br><small style="color: #ef4444;">✗ Sin ubicación de venta asignada</small>';
                 }
                 empleadoInfo.innerHTML = `
                     <div class="info-box success">
@@ -590,8 +603,8 @@ function initRegistrarVenta() {
                 const empleadosEspeciales = ['Jose', 'Sindy'];
                 esEmpleadoEspecial = empleadosEspeciales.includes(empleado.nombre);
 
-                if (!esEmpleadoEspecial && !empleado.tienda_id) {
-                    showVentaMessage('El empleado no tiene una tienda asignada. No puede realizar ventas.', 'error');
+                if (!esEmpleadoEspecial && !ReglasUbicacionEmpleado.deEmpleado(empleado)) {
+                    showVentaMessage('El empleado no tiene una ubicación de venta (tienda o bodega) asignada. No puede realizar ventas.', 'error');
                     return;
                 }
             }
@@ -619,7 +632,8 @@ function initRegistrarVenta() {
             // Seleccionar la ubicación de la que se descontará (regla de dominio)
             const { fila: juguete, error: errorUbicacion } = ReglasInventario.seleccionarUbicacionVenta(juguetesData, {
                 cantidad,
-                tiendaEmpleadoId: empleado && !esEmpleadoEspecial ? empleado.tienda_id : null,
+                // Tienda o bodega del empleado (null = puede vender desde cualquier ubicación)
+                ubicacionEmpleado: empleado && !esEmpleadoEspecial ? ReglasUbicacionEmpleado.deEmpleado(empleado) : null,
                 reservado
             });
             if (!juguete) {
@@ -2254,30 +2268,10 @@ function createTiendaCard(tienda) {
 // ============================================
 
 async function loadTiendasForEmpleados() {
-    const select = document.getElementById('empleadoTienda');
-    if (!select) return;
-    
-    try {
-        const user = JSON.parse(sessionStorage.getItem('user'));
-        const { data: tiendas, error } = await window.supabaseClient
-            .from('tiendas')
-            .select('*')
-            .eq('empresa_id', user.empresa_id)
-            .order('nombre');
-
-        if (error) throw error;
-
-        select.innerHTML = '<option value="">Sin tienda asignada</option>';
-        if (tiendas) {
-            tiendas.forEach(tienda => {
-                const option = document.createElement('option');
-                option.value = tienda.id;
-                option.textContent = tienda.nombre;
-                select.appendChild(option);
-            });
-        }
-    } catch (error) {
-        console.error('Error al cargar tiendas:', error);
+    // Mismo cargador que el formulario de Empleados (dashboard.js): tiendas y bodegas con
+    // valores "tienda-3" / "bodega-1", para que el alta guarde la ubicación de venta correcta.
+    if (typeof window.cargarUbicacionesVentaEmpleado === 'function') {
+        await window.cargarUbicacionesVentaEmpleado('empleadoTienda');
     }
 }
 
@@ -4540,52 +4534,182 @@ if (editTiendaModal) {
     });
 }
 
-// Eliminar tienda
+// Eliminar tienda (solo administradores): modal que exige escribir el nombre y elegir la bodega
+// que recibe el inventario y los empleados. La RPC eliminar_tienda lo hace todo en una transacción.
+let eliminarTiendaEstado = null;
+
+function escaparHtmlTienda(texto) {
+    return String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function mostrarMensajeEliminarTienda(mensaje, tipo) {
+    const errorMsg = document.getElementById('eliminarTiendaErrorMessage');
+    const successMsg = document.getElementById('eliminarTiendaSuccessMessage');
+    if (errorMsg) errorMsg.style.display = 'none';
+    if (successMsg) successMsg.style.display = 'none';
+    if (!mensaje) return;
+    const destino = tipo === 'error' ? errorMsg : successMsg;
+    if (destino) {
+        destino.textContent = mensaje;
+        destino.style.display = 'flex';
+    }
+}
+
+/** Habilita el botón solo con el nombre correcto y una bodega válida. */
+function actualizarBotonEliminarTienda() {
+    const boton = document.getElementById('confirmarEliminarTiendaBtn');
+    if (!boton || !eliminarTiendaEstado) return;
+    const escrito = document.getElementById('eliminarTiendaConfirmacion').value;
+    const seleccion = document.getElementById('eliminarTiendaBodegaSelect').value;
+    const { bodega } = ReglasEliminarTienda.elegirBodegaDestino(eliminarTiendaEstado.bodegas, seleccion);
+    boton.disabled = eliminarTiendaEstado.enCurso ||
+        !bodega || !ReglasEliminarTienda.nombreConfirmado(escrito, eliminarTiendaEstado.tienda.nombre);
+}
+
+/** Muestra qué se sumará y qué se moverá en la bodega elegida. */
+async function actualizarTrasladoEliminarTienda() {
+    const traslado = document.getElementById('eliminarTiendaTraslado');
+    const estado = eliminarTiendaEstado;
+    if (!traslado || !estado) return;
+    const seleccion = document.getElementById('eliminarTiendaBodegaSelect').value;
+    const { bodega } = ReglasEliminarTienda.elegirBodegaDestino(estado.bodegas, seleccion);
+    if (!bodega || estado.juguetes.length === 0) {
+        traslado.textContent = '';
+        return;
+    }
+    try {
+        const filasBodega = await window.servicioUbicaciones.codigosDeBodega(bodega.id);
+        if (eliminarTiendaEstado !== estado) return; // el modal se cerró o cambió de tienda
+        const r = ReglasEliminarTienda.resumirTraslado(estado.juguetes, filasBodega);
+        traslado.textContent = `En la bodega ${bodega.nombre}: ${r.fusionados} producto(s) se sumarán a los que ya tiene ` +
+            `y ${r.movidos} producto(s) se moverán.`;
+    } catch (error) {
+        console.error('Error al consultar la bodega:', error);
+        traslado.textContent = '';
+    }
+}
+
 async function deleteTienda(tiendaId) {
-    // Validar que tiendaId existe y es válido
     if (!tiendaId || tiendaId === 'null' || tiendaId === 'undefined') {
         console.error('Error: tiendaId inválido:', tiendaId);
         alert('Error: No se pudo identificar la tienda a eliminar');
         return;
     }
-    
-    // No permitir borrar una tienda con juguetes: quedarían sin ubicación (ON DELETE SET NULL)
+    if (!window.servicioUbicaciones) {
+        alert('No se pudo iniciar el servicio de ubicaciones. Recarga la página.');
+        return;
+    }
+
+    let datos;
     try {
-        const resumen = await window.servicioStock.resumenUbicacion('tienda', tiendaId);
-        if (resumen.registros > 0) {
-            alert(`No se puede eliminar: la tienda tiene ${resumen.registros} juguete(s) registrados (${resumen.unidades} unidades). Muévelos primero con "Abastecer" o elimínalos.`);
+        datos = await window.servicioUbicaciones.datosParaEliminar(tiendaId);
+    } catch (error) {
+        console.error('Error al preparar la eliminación de la tienda:', error);
+        alert('No se pudo cargar la información de la tienda: ' + (error.message || error));
+        return;
+    }
+
+    eliminarTiendaEstado = { ...datos, enCurso: false };
+    const { tienda, juguetes, bodegas, empleados } = datos;
+    const unidades = juguetes.reduce((suma, j) => suma + (Number(j.cantidad) || 0), 0);
+
+    document.getElementById('eliminarTiendaNombre').textContent = tienda.nombre;
+    document.getElementById('eliminarTiendaNombreConfirmar').textContent = tienda.nombre;
+    document.getElementById('eliminarTiendaResumen').innerHTML = [
+        `<li>Inventario: ${juguetes.length} producto(s), ${unidades} unidad(es)</li>`,
+        `<li>Empleados asignados: ${empleados} (pasarán a vender desde la bodega)</li>`,
+        '<li>Los planes de movimiento pendientes con esta tienda se cancelarán</li>'
+    ].join('');
+
+    const grupo = document.getElementById('eliminarTiendaBodegaGrupo');
+    const select = document.getElementById('eliminarTiendaBodegaSelect');
+    const auto = document.getElementById('eliminarTiendaBodegaAuto');
+    const eleccion = ReglasEliminarTienda.elegirBodegaDestino(bodegas, null);
+    if (eleccion.automatica) {
+        select.innerHTML = `<option value="${eleccion.bodega.id}">${escaparHtmlTienda(eleccion.bodega.nombre)}</option>`;
+        select.value = String(eleccion.bodega.id);
+        grupo.style.display = 'none';
+        auto.innerHTML = `<i class="fas fa-warehouse"></i> Solo hay una bodega: todo pasará a <strong>${escaparHtmlTienda(eleccion.bodega.nombre)}</strong>.`;
+        auto.style.display = 'block';
+    } else {
+        select.innerHTML = '<option value="">Selecciona una bodega...</option>' +
+            bodegas.map(b => `<option value="${b.id}">${escaparHtmlTienda(b.nombre)}</option>`).join('');
+        select.value = '';
+        grupo.style.display = bodegas.length ? 'block' : 'none';
+        auto.style.display = 'none';
+    }
+
+    document.getElementById('eliminarTiendaConfirmacion').value = '';
+    document.getElementById('eliminarTiendaTraslado').textContent = '';
+    mostrarMensajeEliminarTienda(eleccion.error && bodegas.length === 0 ? eleccion.error : '', 'error');
+    actualizarBotonEliminarTienda();
+    actualizarTrasladoEliminarTienda();
+
+    document.getElementById('eliminarTiendaModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('eliminarTiendaConfirmacion')?.focus(), 50);
+}
+
+function closeEliminarTiendaModal() {
+    const modal = document.getElementById('eliminarTiendaModal');
+    if (eliminarTiendaEstado?.enCurso) return; // no cerrar mientras se elimina
+    if (modal) modal.style.display = 'none';
+    eliminarTiendaEstado = null;
+    mostrarMensajeEliminarTienda('', 'error');
+}
+
+(function configurarModalEliminarTienda() {
+    const modal = document.getElementById('eliminarTiendaModal');
+    const form = document.getElementById('eliminarTiendaForm');
+    if (!modal || !form) return;
+
+    document.getElementById('closeEliminarTiendaModal')?.addEventListener('click', closeEliminarTiendaModal);
+    document.getElementById('cancelEliminarTiendaBtn')?.addEventListener('click', closeEliminarTiendaModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeEliminarTiendaModal(); });
+    document.getElementById('eliminarTiendaConfirmacion').addEventListener('input', actualizarBotonEliminarTienda);
+    document.getElementById('eliminarTiendaBodegaSelect').addEventListener('change', () => {
+        mostrarMensajeEliminarTienda('', 'error');
+        actualizarBotonEliminarTienda();
+        actualizarTrasladoEliminarTienda();
+    });
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const estado = eliminarTiendaEstado;
+        if (!estado || estado.enCurso) return;
+        const escrito = document.getElementById('eliminarTiendaConfirmacion').value;
+        const seleccion = document.getElementById('eliminarTiendaBodegaSelect').value;
+        if (!ReglasEliminarTienda.nombreConfirmado(escrito, estado.tienda.nombre)) {
+            mostrarMensajeEliminarTienda(`Escribe el nombre exacto de la tienda: "${estado.tienda.nombre}"`, 'error');
             return;
         }
-    } catch (error) {
-        console.error('Error al verificar el inventario de la tienda:', error);
-        alert('No se pudo verificar el inventario de la tienda. Intenta de nuevo.');
-        return;
-    }
-
-    if (!confirm('¿Estás seguro de que deseas eliminar esta tienda? Esta acción no se puede deshacer.')) {
-        return;
-    }
-
-    try {
-        const tiendaIdNum = parseInt(tiendaId, 10);
-        if (isNaN(tiendaIdNum)) {
-            throw new Error('ID de tienda inválido');
+        const { bodega, automatica, error } = ReglasEliminarTienda.elegirBodegaDestino(estado.bodegas, seleccion);
+        if (!bodega) {
+            mostrarMensajeEliminarTienda(error, 'error');
+            return;
         }
-        
-        const { error } = await window.supabaseClient
-            .from('tiendas')
-            .delete()
-            .eq('id', tiendaIdNum);
 
-        if (error) throw error;
-
-        alert('Tienda eliminada correctamente');
-        loadTiendas();
-    } catch (error) {
-        console.error('Error al eliminar tienda:', error);
-        alert('Error al eliminar la tienda: ' + error.message);
-    }
-}
+        const boton = document.getElementById('confirmarEliminarTiendaBtn');
+        const textoOriginal = boton.innerHTML;
+        estado.enCurso = true;
+        boton.disabled = true;
+        boton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Eliminando...';
+        try {
+            const resultado = await window.servicioUbicaciones.eliminarTienda(
+                estado.tienda.id, automatica ? null : bodega.id, escrito.trim());
+            estado.enCurso = false;
+            closeEliminarTiendaModal();
+            alert(ReglasEliminarTienda.mensajeResultado(resultado));
+            loadTiendas();
+        } catch (err) {
+            (err.code === 'MIGRACION_PENDIENTE' ? console.warn : console.error)('Error al eliminar tienda:', err.message);
+            estado.enCurso = false;
+            mostrarMensajeEliminarTienda(err.code === 'MIGRACION_PENDIENTE' ? err.message : 'No se pudo eliminar la tienda: ' + err.message, 'error');
+        } finally {
+            boton.innerHTML = textoOriginal;
+            actualizarBotonEliminarTienda();
+        }
+    });
+})();
 
 // ============================================
 // CORRECCIÓN DE ABASTECER

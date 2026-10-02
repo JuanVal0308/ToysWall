@@ -2874,3 +2874,70 @@ button[disabled] {
     opacity: 0.7;
     cursor: not-allowed;
 }
+
+/* Modal de eliminar tienda */
+.btn-peligro {
+    background: #dc2626;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-peligro:hover:not(:disabled) {
+    background: #b91c1c;
+}
+
+.btn-peligro:disabled {
+    background: #fca5a5;
+    cursor: not-allowed;
+}
+
+.eliminar-tienda-aviso {
+    color: #334155;
+    margin: 0 0 12px;
+    line-height: 1.5;
+}
+
+.eliminar-tienda-resumen {
+    margin: 0 0 16px;
+    padding: 12px 12px 12px 32px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    color: #7f1d1d;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.eliminar-tienda-bodega-auto,
+.eliminar-tienda-traslado {
+    margin: 0 0 16px;
+    color: #475569;
+    font-size: 14px;
+}
+
+#eliminarTiendaModal .eliminar-tienda-etiqueta {
+    display: block;
+    line-height: 1.5;
+}
+
+#eliminarTiendaModal .form-select,
+#eliminarTiendaModal input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+@media (max-width: 480px) {
+    #eliminarTiendaModal .modal-footer {
+        flex-direction: column-reverse;
+        gap: 8px;
+    }
+
+    #eliminarTiendaModal .modal-footer button {
+        width: 100%;
+    }
+}
