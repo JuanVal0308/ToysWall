@@ -43,9 +43,8 @@ const ReglasInventario = {
 
     /**
      * Elige de qué registro (ubicación) se descontará una venta.
-     * - Empleado con ubicación asignada (tienda o bodega, y no especial): solo esa ubicación.
-     * - Admin / empleado especial / sin empleado: primero tiendas con stock suficiente,
-     *   luego bodegas con stock suficiente.
+     * - Empleado con ubicación asignada (tienda o bodega): solo esa ubicación.
+     * - Admin / sin empleado: primero tiendas con stock suficiente, luego bodegas con stock suficiente.
      * Tiene en cuenta las unidades ya reservadas por otros items de la venta en curso.
      *
      * @param {Array<Object>} filas - Registros del juguete (mismo código) en todas las ubicaciones

@@ -479,12 +479,8 @@ function initRegistrarVenta() {
             if (empleados && empleados.length > 0) {
                 const empleado = empleados[0];
                 let tiendaInfo = '';
-                const empleadosEspeciales = ['Jose', 'Sindy'];
-                const esEmpleadoEspecial = empleadosEspeciales.includes(empleado.nombre);
-                
-                if (esEmpleadoEspecial) {
-                    tiendaInfo = '<br><small style="color: #8b5cf6;">⭐ Puede vender en cualquier ubicación</small>';
-                } else if (empleado.bodega_id) {
+                // Todos los empleados (incluido Jose/Sindy) descuentan solo de su ubicación asignada
+                if (empleado.bodega_id) {
                     // Empleado que vende desde una bodega
                     try {
                         const { data: bodega } = await window.supabaseClient
@@ -575,8 +571,7 @@ function initRegistrarVenta() {
             const user = JSON.parse(sessionStorage.getItem('user'));
             
             let empleado = null;
-            let esEmpleadoEspecial = false;
-            
+
             // Si se proporcionó código de empleado, validarlo
             if (empleadoCodigo) {
                 const { data: empleadosData, error: empleadoError } = await window.supabaseClient
@@ -599,11 +594,7 @@ function initRegistrarVenta() {
 
                 empleado = empleadosData[0];
                 
-                // Empleados especiales que pueden vender en cualquier parte: Jose y Sindy
-                const empleadosEspeciales = ['Jose', 'Sindy'];
-                esEmpleadoEspecial = empleadosEspeciales.includes(empleado.nombre);
-
-                if (!esEmpleadoEspecial && !ReglasUbicacionEmpleado.deEmpleado(empleado)) {
+                if (!ReglasUbicacionEmpleado.deEmpleado(empleado)) {
                     showVentaMessage('El empleado no tiene una ubicación de venta (tienda o bodega) asignada. No puede realizar ventas.', 'error');
                     return;
                 }
@@ -632,8 +623,8 @@ function initRegistrarVenta() {
             // Seleccionar la ubicación de la que se descontará (regla de dominio)
             const { fila: juguete, error: errorUbicacion } = ReglasInventario.seleccionarUbicacionVenta(juguetesData, {
                 cantidad,
-                // Tienda o bodega del empleado (null = puede vender desde cualquier ubicación)
-                ubicacionEmpleado: empleado && !esEmpleadoEspecial ? ReglasUbicacionEmpleado.deEmpleado(empleado) : null,
+                // Tienda o bodega del empleado (null = admin / sin empleado: cualquier ubicación con stock)
+                ubicacionEmpleado: empleado ? ReglasUbicacionEmpleado.deEmpleado(empleado) : null,
                 reservado
             });
             if (!juguete) {
@@ -756,6 +747,8 @@ function initRegistrarVenta() {
                 updateVentaItemsList();
                 form.reset();
                 if (typeof loadDashboardSummary === 'function') loadDashboardSummary();
+                // Refrescar inventario para que General y por ubicación muestren el stock ya descontado
+                if (typeof loadInventario === 'function') loadInventario();
                 return;
             }
             
@@ -815,10 +808,11 @@ function initRegistrarVenta() {
             updateVentaItemsList(); // Esto restaurará los atributos required automáticamente
             form.reset();
             
-            // Recargar resumen
+            // Recargar resumen e inventario (stock ya descontado)
             if (typeof loadDashboardSummary === 'function') {
                 loadDashboardSummary();
             }
+            if (typeof loadInventario === 'function') loadInventario();
         } catch (error) {
             console.error('Error al registrar venta:', error);
             if (ventasRegistradas.length > 0) {
@@ -6364,20 +6358,30 @@ async function cargarTodasLasVentas() {
             const jugueteCodigos = [...new Set(ventasSimples.map(v => v.juguete_codigo).filter(c => c))];
             const empleadoIds = [...new Set(ventasSimples.map(v => v.empleado_id).filter(id => id))];
             
-            const [juguetesData, empleadosData] = await Promise.all([
+            const [juguetesData, empleadosData, tiendasData, bodegasData] = await Promise.all([
                 jugueteCodigos.length > 0 ? window.supabaseClient.from('juguetes').select('id, nombre, codigo').in('codigo', jugueteCodigos).eq('empresa_id', user.empresa_id) : { data: [] },
-                empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] }
+                empleadoIds.length > 0 ? window.supabaseClient.from('empleados').select('id, nombre, codigo').in('id', empleadoIds) : { data: [] },
+                window.supabaseClient.from('tiendas').select('id, nombre').eq('empresa_id', user.empresa_id),
+                window.supabaseClient.from('bodegas').select('id, nombre').eq('empresa_id', user.empresa_id)
             ]);
 
             const juguetesMap = new Map((juguetesData.data || []).map(j => [j.codigo, j]));
             const empleadosMap = new Map((empleadosData.data || []).map(e => [e.id, e]));
+            const tiendasMap = new Map((tiendasData.data || []).map(t => [t.id, t.nombre]));
+            const bodegasMap = new Map((bodegasData.data || []).map(b => [b.id, b.nombre]));
 
-            // Combinar datos
-            ventas = ventasSimples.map(v => ({
-                ...v,
-                juguetes: juguetesMap.get(v.juguete_codigo) || null,
-                empleados: empleadosMap.get(v.empleado_id) || null
-            }));
+            // Combinar datos (incluye de qué ubicación se descontó el stock)
+            ventas = ventasSimples.map(v => {
+                let ubicacionNombre = null;
+                if (v.tienda_id) ubicacionNombre = `Tienda ${tiendasMap.get(v.tienda_id) || '#' + v.tienda_id}`;
+                else if (v.bodega_id) ubicacionNombre = `Bodega ${bodegasMap.get(v.bodega_id) || '#' + v.bodega_id}`;
+                return {
+                    ...v,
+                    juguetes: juguetesMap.get(v.juguete_codigo) || null,
+                    empleados: empleadosMap.get(v.empleado_id) || null,
+                    ubicacion_nombre: ubicacionNombre
+                };
+            });
         }
         
         todasLasVentas = ventas || [];
@@ -6462,6 +6466,7 @@ function renderizarVentasTabla() {
                 <td>
                     <strong>${venta.juguetes?.nombre || 'N/A'}</strong>
                     <br><small style="color: #64748b;">${venta.juguetes?.codigo || ''}</small>
+                    ${venta.ubicacion_nombre ? `<br><small style="color: #6366f1;">Sale de: ${venta.ubicacion_nombre}</small>` : ''}
                 </td>
                 <td style="text-align: center;">${venta.cantidad || 1}</td>
                 <td style="font-weight: bold; color: #10b981;">$${parseFloat(venta.precio_venta || 0).toLocaleString('es-CO', { minimumFractionDigits: 0 })}</td>

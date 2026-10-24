@@ -54,3 +54,17 @@ test('seleccionarUbicacionVenta: tienda del empleado y venta libre siguen igual'
     assert.match(RI.seleccionarUbicacionVenta(filas, { cantidad: 3, tiendaEmpleadoId: 1 }).error, /tienda del empleado/);
     assert.equal(RI.seleccionarUbicacionVenta(filas, { cantidad: 20 }).fila.id, 11); // admin: tiendas y luego bodegas
 });
+
+test('seleccionarUbicacionVenta: con bodega asignada no toma stock de una tienda aunque baste', () => {
+    // Antes Jose/Sindy podían vender desde cualquier ubicación; ahora respetan la asignada.
+    const filas = [
+        { id: 10, tienda_id: 7, bodega_id: null, cantidad: 500, nombre: 'en tienda' },
+        { id: 11, tienda_id: null, bodega_id: 1, cantidad: 238, nombre: 'en bodega' }
+    ];
+    const r = RI.seleccionarUbicacionVenta(filas, {
+        cantidad: 200,
+        ubicacionEmpleado: { tipo: 'bodega', id: 1 }
+    });
+    assert.equal(r.fila.id, 11);
+    assert.equal(r.error, null);
+});
