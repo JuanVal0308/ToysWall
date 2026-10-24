@@ -418,7 +418,7 @@ function initVentaPorMayor() {
             const jugueteInfo = document.getElementById('juguetePorMayorInfo');
             if (jugueteInfo) jugueteInfo.style.display = 'none';
             
-            showVentaPorMayorMessage('Item agregado correctamente', 'success');
+            showVentaPorMayorMessage(`Item agregado correctamente (se descontará de ${ubicacionNombre || 'la ubicación seleccionada'})`, 'success');
         } catch (error) {
             console.error('Error al agregar item:', error);
             showVentaPorMayorMessage('Error al agregar item: ' + error.message, 'error');
@@ -564,9 +564,12 @@ function initVentaPorMayor() {
             form.reset();
             if (abonoInput) abonoInput.dataset.numericValue = '';
             
-            // Recargar dashboard si existe
+            // Recargar dashboard e inventario (stock ya descontado de la ubicación elegida)
             if (typeof loadDashboardSummary === 'function') {
                 loadDashboardSummary();
+            }
+            if (typeof loadInventario === 'function') {
+                loadInventario();
             }
         } catch (error) {
             console.error('Error al registrar venta al por mayor:', error);

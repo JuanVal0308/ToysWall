@@ -56,7 +56,6 @@ test('seleccionarUbicacionVenta: tienda del empleado y venta libre siguen igual'
 });
 
 test('seleccionarUbicacionVenta: con bodega asignada no toma stock de una tienda aunque baste', () => {
-    // Antes Jose/Sindy podían vender desde cualquier ubicación; ahora respetan la asignada.
     const filas = [
         { id: 10, tienda_id: 7, bodega_id: null, cantidad: 500, nombre: 'en tienda' },
         { id: 11, tienda_id: null, bodega_id: 1, cantidad: 238, nombre: 'en bodega' }
@@ -67,4 +66,41 @@ test('seleccionarUbicacionVenta: con bodega asignada no toma stock de una tienda
     });
     assert.equal(r.fila.id, 11);
     assert.equal(r.error, null);
+});
+
+test('puedeElegirUbicacion: solo Jose y Sindy', () => {
+    assert.equal(R.puedeElegirUbicacion({ nombre: 'Jose' }), true);
+    assert.equal(R.puedeElegirUbicacion({ nombre: 'Sindy' }), true);
+    assert.equal(R.puedeElegirUbicacion({ nombre: 'Maria' }), false);
+    assert.equal(R.puedeElegirUbicacion(null), false);
+});
+
+test('resolverUbicacionVenta: Jose/Sindy obligan a elegir; otros usan la asignada', () => {
+    const jose = { nombre: 'Jose', bodega_id: 1 };
+    assert.match(R.resolverUbicacionVenta(jose, '').error, /Elige de qué tienda o bodega/);
+    assert.deepEqual(R.resolverUbicacionVenta(jose, 'tienda-7').ubicacion, { tipo: 'tienda', id: 7 });
+    assert.equal(R.resolverUbicacionVenta(jose, 'tienda-7').etiqueta, 'seleccionada');
+
+    const maria = { nombre: 'Maria', tienda_id: 3 };
+    assert.deepEqual(R.resolverUbicacionVenta(maria, 'tienda-7').ubicacion, { tipo: 'tienda', id: 3 });
+    assert.match(R.resolverUbicacionVenta({ nombre: 'Pedro' }, '').error, /no tiene una ubicación/);
+
+    assert.equal(R.resolverUbicacionVenta(null, '').ubicacion, null);
+});
+
+test('seleccionarUbicacionVenta: ubicación elegida (Jose) no toma de otra aunque baste', () => {
+    const filas = [
+        { id: 10, tienda_id: 7, bodega_id: null, cantidad: 500 },
+        { id: 11, tienda_id: null, bodega_id: 1, cantidad: 50 }
+    ];
+    // Jose eligió tienda 7 → descuenta ahí
+    assert.equal(RI.seleccionarUbicacionVenta(filas, {
+        cantidad: 200, ubicacionEmpleado: { tipo: 'tienda', id: 7 }, etiqueta: 'seleccionada'
+    }).fila.id, 10);
+    // Jose eligió bodega 1 sin stock suficiente → rechazo, no usa la tienda
+    const r = RI.seleccionarUbicacionVenta(filas, {
+        cantidad: 200, ubicacionEmpleado: { tipo: 'bodega', id: 1 }, etiqueta: 'seleccionada'
+    });
+    assert.equal(r.fila, null);
+    assert.match(r.error, /bodega seleccionada.*Disponible: 50/);
 });

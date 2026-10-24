@@ -56,7 +56,7 @@ const ReglasInventario = {
      * @param {Object<number, number>} [opciones.reservado] - Unidades ya reservadas por id de registro
      * @returns {{fila: Object|null, error: string|null}}
      */
-    seleccionarUbicacionVenta(filas, { cantidad, ubicacionEmpleado = null, tiendaEmpleadoId = null, reservado = {} }) {
+    seleccionarUbicacionVenta(filas, { cantidad, ubicacionEmpleado = null, tiendaEmpleadoId = null, reservado = {}, etiqueta = 'del empleado' }) {
         const disponible = f => (f.cantidad || 0) - (reservado[f.id] || 0);
         const ubicacion = ubicacionEmpleado || (tiendaEmpleadoId ? { tipo: 'tienda', id: tiendaEmpleadoId } : null);
 
@@ -67,12 +67,13 @@ const ReglasInventario = {
         if (ubicacion) {
             const campo = ubicacion.tipo === 'bodega' ? 'bodega_id' : 'tienda_id';
             const lugar = ubicacion.tipo === 'bodega' ? 'la bodega' : 'la tienda';
+            const sufijo = etiqueta === 'seleccionada' ? ' seleccionada' : ` ${etiqueta}`;
             const fila = filas.find(f => String(f[campo]) === String(ubicacion.id));
             if (!fila) {
-                return { fila: null, error: `El juguete no está disponible en ${lugar} del empleado.` };
+                return { fila: null, error: `El juguete no está disponible en ${lugar}${sufijo}.` };
             }
             if (disponible(fila) < cantidad) {
-                return { fila: null, error: `No hay suficiente cantidad en ${lugar} del empleado. Disponible: ${Math.max(0, disponible(fila))}` };
+                return { fila: null, error: `No hay suficiente cantidad en ${lugar}${sufijo}. Disponible: ${Math.max(0, disponible(fila))}` };
             }
             return { fila, error: null };
         }

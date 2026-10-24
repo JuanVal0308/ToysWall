@@ -459,6 +459,27 @@ function initRegistrarVenta() {
         });
     }
 
+
+    /** Muestra u oculta el selector "Sale desde" (solo Jose/Sindy). */
+    async function mostrarSelectorUbicacionVenta(mostrar) {
+        const grupo = document.getElementById('ventaUbicacionGrupo');
+        const select = document.getElementById('ventaUbicacionClave');
+        if (!grupo || !select) return;
+        if (!mostrar) {
+            grupo.style.display = 'none';
+            select.value = '';
+            return;
+        }
+        grupo.style.display = '';
+        if (typeof window.cargarUbicacionesVentaEmpleado === 'function') {
+            await window.cargarUbicacionesVentaEmpleado('ventaUbicacionClave');
+        }
+        // El cargador pone "Sin ubicación" como primera opción vacía; pedimos elección explícita
+        if (select.options.length && select.options[0].value === '') {
+            select.options[0].textContent = 'Elige tienda o bodega';
+        }
+    }
+
     // Buscar empleado por código
     empleadoCodigoInput.addEventListener('blur', async function() {
         const codigo = this.value.trim();
@@ -479,8 +500,12 @@ function initRegistrarVenta() {
             if (empleados && empleados.length > 0) {
                 const empleado = empleados[0];
                 let tiendaInfo = '';
-                // Todos los empleados (incluido Jose/Sindy) descuentan solo de su ubicación asignada
-                if (empleado.bodega_id) {
+                // Jose/Sindy eligen ubicación; el resto vende solo desde la asignada
+                if (ReglasUbicacionEmpleado.puedeElegirUbicacion(empleado)) {
+                    tiendaInfo = '<br><small style="color: #8b5cf6;">⭐ Puede vender en cualquier ubicación (elige "Sale desde")</small>';
+                    await mostrarSelectorUbicacionVenta(true);
+                } else if (empleado.bodega_id) {
+                    await mostrarSelectorUbicacionVenta(false);
                     // Empleado que vende desde una bodega
                     try {
                         const { data: bodega } = await window.supabaseClient
@@ -494,6 +519,7 @@ function initRegistrarVenta() {
                         tiendaInfo = '<br><small style="color: #10b981;">✓ Asignado a una bodega</small>';
                     }
                 } else if (empleado.tienda_id) {
+                    await mostrarSelectorUbicacionVenta(false);
                     // Obtener nombre de la tienda
                     try {
                         const { data: tienda } = await window.supabaseClient
@@ -510,6 +536,7 @@ function initRegistrarVenta() {
                         tiendaInfo = '<br><small style="color: #10b981;">✓ Asignado a una tienda</small>';
                     }
                 } else {
+                    await mostrarSelectorUbicacionVenta(false);
                     tiendaInfo = '<br><small style="color: #ef4444;">✗ Sin ubicación de venta asignada</small>';
                 }
                 empleadoInfo.innerHTML = `
@@ -521,6 +548,7 @@ function initRegistrarVenta() {
                 `;
                 empleadoInfo.style.display = 'block';
             } else {
+                await mostrarSelectorUbicacionVenta(false);
                 empleadoInfo.innerHTML = `
                     <div class="info-box error">
                         Empleado no encontrado
@@ -530,6 +558,15 @@ function initRegistrarVenta() {
             }
         } catch (error) {
             console.error('Error al buscar empleado:', error);
+        }
+    });
+
+    // Si borran el código del empleado, ocultar el selector de ubicación libre
+    empleadoCodigoInput.addEventListener('input', function() {
+        if (!this.value.trim()) {
+            mostrarSelectorUbicacionVenta(false);
+            const empleadoInfo = document.getElementById('empleadoInfo');
+            if (empleadoInfo) empleadoInfo.style.display = 'none';
         }
     });
 
@@ -593,13 +630,15 @@ function initRegistrarVenta() {
                 }
 
                 empleado = empleadosData[0];
-                
-                if (!ReglasUbicacionEmpleado.deEmpleado(empleado)) {
-                    showVentaMessage('El empleado no tiene una ubicación de venta (tienda o bodega) asignada. No puede realizar ventas.', 'error');
-                    return;
-                }
             }
             // Sin empleado: el usuario actual (admin) puede vender desde cualquier ubicación
+
+            const claveUbicacion = document.getElementById('ventaUbicacionClave')?.value || '';
+            const resUbic = ReglasUbicacionEmpleado.resolverUbicacionVenta(empleado, claveUbicacion);
+            if (resUbic.error) {
+                showVentaMessage(resUbic.error, 'error');
+                return;
+            }
 
             // Buscar TODOS los registros con ese código (uno por ubicación)
             const { data: juguetesData, error: jugueteError } = await window.supabaseClient
@@ -623,8 +662,9 @@ function initRegistrarVenta() {
             // Seleccionar la ubicación de la que se descontará (regla de dominio)
             const { fila: juguete, error: errorUbicacion } = ReglasInventario.seleccionarUbicacionVenta(juguetesData, {
                 cantidad,
-                // Tienda o bodega del empleado (null = admin / sin empleado: cualquier ubicación con stock)
-                ubicacionEmpleado: empleado ? ReglasUbicacionEmpleado.deEmpleado(empleado) : null,
+                // Jose/Sindy: la elegida en "Sale desde". Otros: la asignada. Admin: null (cualquier una con stock).
+                ubicacionEmpleado: resUbic.ubicacion,
+                etiqueta: resUbic.etiqueta,
                 reservado
             });
             if (!juguete) {
@@ -746,6 +786,7 @@ function initRegistrarVenta() {
                 ventaItems = [];
                 updateVentaItemsList();
                 form.reset();
+                await mostrarSelectorUbicacionVenta(false);
                 if (typeof loadDashboardSummary === 'function') loadDashboardSummary();
                 // Refrescar inventario para que General y por ubicación muestren el stock ya descontado
                 if (typeof loadInventario === 'function') loadInventario();
@@ -807,6 +848,7 @@ function initRegistrarVenta() {
             ventaItems = [];
             updateVentaItemsList(); // Esto restaurará los atributos required automáticamente
             form.reset();
+            await mostrarSelectorUbicacionVenta(false);
             
             // Recargar resumen e inventario (stock ya descontado)
             if (typeof loadDashboardSummary === 'function') {

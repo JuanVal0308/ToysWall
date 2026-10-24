@@ -3,6 +3,52 @@
  * En los formularios se usa una clave "tienda-3" / "bodega-1" ('' = sin ubicación).
  */
 const ReglasUbicacionEmpleado = {
+    /**
+     * Empleados que pueden vender desde cualquier tienda o bodega.
+     * Deben elegir la ubicación en la pantalla de Venta; el stock solo se
+     * descuenta de esa fila (no se toma de otra automáticamente).
+     */
+    NOMBRES_VENTA_LIBRE: ['Jose', 'Sindy'],
+
+    /** true si el empleado puede elegir de dónde sale el stock. */
+    puedeElegirUbicacion(empleado) {
+        if (!empleado || !empleado.nombre) return false;
+        return this.NOMBRES_VENTA_LIBRE.includes(String(empleado.nombre).trim());
+    },
+
+    /**
+     * Ubicación desde la que se descontará la venta.
+     * - Jose/Sindy: obligatoria la clave elegida en el selector ("tienda-3" / "bodega-1").
+     * - Otros empleados: su tienda o bodega asignada (sin selector).
+     * - Sin empleado (admin): null → cualquier ubicación con stock.
+     * @returns {{ubicacion: {tipo:string,id:number}|null, error: string|null, etiqueta: string}}
+     */
+    resolverUbicacionVenta(empleado, claveElegida = '') {
+        if (!empleado) {
+            return { ubicacion: null, error: null, etiqueta: 'disponible' };
+        }
+        if (this.puedeElegirUbicacion(empleado)) {
+            const elegida = this.parsearClave(claveElegida);
+            if (!elegida) {
+                return {
+                    ubicacion: null,
+                    error: 'Elige de qué tienda o bodega sale esta venta (obligatorio para ' + empleado.nombre + ').',
+                    etiqueta: 'seleccionada'
+                };
+            }
+            return { ubicacion: elegida, error: null, etiqueta: 'seleccionada' };
+        }
+        const asignada = this.deEmpleado(empleado);
+        if (!asignada) {
+            return {
+                ubicacion: null,
+                error: 'El empleado no tiene una ubicación de venta (tienda o bodega) asignada. No puede realizar ventas.',
+                etiqueta: 'del empleado'
+            };
+        }
+        return { ubicacion: asignada, error: null, etiqueta: 'del empleado' };
+    },
+
     /** {tipo, id} de la ubicación de venta del empleado o null si no tiene. */
     deEmpleado(empleado) {
         if (!empleado) return null;
