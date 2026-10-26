@@ -30,3 +30,25 @@ test('registrarVenta sin vendedor ni método por item usa null (la RPC toma el g
     await new ServicioStockRpc(cliente).registrarVenta({ items: [{ juguete_id: 1, cantidad: 1, precio_unitario: 10 }], metodoPago: 'efectivo' });
     assert.deepEqual(cliente.llamadas[0].parametros.p_items, [{ juguete_id: 1, cantidad: 1, precio_unitario: 10, empleado_id: null, metodo_pago: null }]);
 });
+
+test('registrarVenta al por mayor marca es_por_mayor y envía el juguete_id de la ubicación', async () => {
+    const cliente = clienteFalso();
+    await new ServicioStockRpc(cliente).registrarVenta({
+        items: [
+            { juguete_id: 1340, cantidad: 200, precio_unitario: 12000, empleado_id: 9, metodo_pago: 'credito' }
+        ],
+        metodoPago: 'credito',
+        clienteId: 55,
+        esPorMayor: true,
+        abono: 100000
+    });
+    const { funcion, parametros } = cliente.llamadas[0];
+    assert.equal(funcion, 'registrar_venta');
+    assert.equal(parametros.p_es_por_mayor, true);
+    assert.equal(parametros.p_cliente_id, 55);
+    assert.equal(parametros.p_abono, 100000);
+    // La ubicación sale del registro juguete_id (fila de tienda/bodega), no de params aparte
+    assert.deepEqual(parametros.p_items, [
+        { juguete_id: 1340, cantidad: 200, precio_unitario: 12000, empleado_id: 9, metodo_pago: 'credito' }
+    ]);
+});

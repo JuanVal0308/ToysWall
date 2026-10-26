@@ -345,7 +345,24 @@ function initVentaPorMayor() {
                 return;
             }
 
-            const juguete = juguetes[0];
+            // Unidades ya reservadas por items anteriores de esta misma venta (por registro)
+            const reservado = {};
+            ventaPorMayorItems.forEach(it => {
+                if (it.juguete_id) reservado[it.juguete_id] = (reservado[it.juguete_id] || 0) + it.cantidad;
+            });
+
+            // Elegir la fila de esa ubicación con stock suficiente (no siempre juguetes[0]:
+            // si hay filas duplicadas, [0] puede tener 0 y otra sí tener stock)
+            const { fila: juguete, error: errorUbicacion } = ReglasInventario.seleccionarUbicacionVenta(juguetes, {
+                cantidad,
+                ubicacionEmpleado: { tipo: ubicacionTipo, id: ubicacionId },
+                etiqueta: 'seleccionada',
+                reservado
+            });
+            if (!juguete) {
+                showVentaPorMayorMessage(errorUbicacion || 'Cantidad insuficiente en la ubicación seleccionada', 'error');
+                return;
+            }
             
             // Verificar que tenga precio al por mayor
             if (!juguete.precio_por_mayor || juguete.precio_por_mayor <= 0) {
@@ -372,16 +389,6 @@ function initVentaPorMayor() {
             }
 
             const precio = juguete.precio_por_mayor;
-
-            // Verificar cantidad disponible descontando lo ya agregado a esta venta del mismo registro
-            const yaReservado = ventaPorMayorItems
-                .filter(it => it.juguete_id === juguete.id)
-                .reduce((sum, it) => sum + it.cantidad, 0);
-            const disponible = (juguete.cantidad || 0) - yaReservado;
-            if (cantidad > disponible) {
-                showVentaPorMayorMessage(`Cantidad insuficiente en la ubicación seleccionada. Disponible: ${Math.max(0, disponible)}${yaReservado ? ` (ya agregaste ${yaReservado} a esta venta)` : ''}`, 'error');
-                return;
-            }
 
             // Obtener nombre de la ubicación desde el select
             const ubicacionNombre = ubicacionSelect ? ubicacionSelect.options[ubicacionSelect.selectedIndex]?.textContent || '' : '';
@@ -496,6 +503,8 @@ function initVentaPorMayor() {
                 form.reset();
                 if (abonoInput) abonoInput.dataset.numericValue = '';
                 if (typeof loadDashboardSummary === 'function') loadDashboardSummary();
+                // Con RPC el stock ya bajó en BD; sin esto el Inventario se ve desactualizado (igual que en venta normal)
+                if (typeof loadInventario === 'function') loadInventario();
                 return;
             }
             
@@ -747,6 +756,7 @@ async function deshacerUltimaVentaPorMayor() {
             actualizarBotonDeshacerVentaPorMayor(false);
             showVentaPorMayorMessage('Venta al por mayor deshecha correctamente', 'success');
             if (typeof loadDashboardSummary === 'function') await loadDashboardSummary();
+            if (typeof loadInventario === 'function') await loadInventario();
             return;
         }
         
@@ -786,9 +796,12 @@ async function deshacerUltimaVentaPorMayor() {
         
         showVentaPorMayorMessage('Venta al por mayor deshecha correctamente', 'success');
         
-        // Recargar dashboard si existe
+        // Recargar dashboard e inventario (stock ya repuesto en la ubicación de origen)
         if (typeof loadDashboardSummary === 'function') {
             await loadDashboardSummary();
+        }
+        if (typeof loadInventario === 'function') {
+            await loadInventario();
         }
     } catch (error) {
         console.error('Error al deshacer venta al por mayor:', error);

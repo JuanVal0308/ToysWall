@@ -68,12 +68,17 @@ const ReglasInventario = {
             const campo = ubicacion.tipo === 'bodega' ? 'bodega_id' : 'tienda_id';
             const lugar = ubicacion.tipo === 'bodega' ? 'la bodega' : 'la tienda';
             const sufijo = etiqueta === 'seleccionada' ? ' seleccionada' : ` ${etiqueta}`;
-            const fila = filas.find(f => String(f[campo]) === String(ubicacion.id));
-            if (!fila) {
+            const candidatas = filas.filter(f => String(f[campo]) === String(ubicacion.id));
+            if (candidatas.length === 0) {
                 return { fila: null, error: `El juguete no está disponible en ${lugar}${sufijo}.` };
             }
-            if (disponible(fila) < cantidad) {
-                return { fila: null, error: `No hay suficiente cantidad en ${lugar}${sufijo}. Disponible: ${Math.max(0, disponible(fila))}` };
+            // Si hay filas duplicadas en la misma ubicación, elegir una con stock suficiente
+            // (antes se tomaba la primera y podía fallar aunque otra sí tuviera).
+            const fila = candidatas.find(f => disponible(f) >= cantidad);
+            if (!fila) {
+                // Disponible = máximo en una sola fila (una venta descuenta de un solo registro)
+                const disp = candidatas.reduce((max, f) => Math.max(max, Math.max(0, disponible(f))), 0);
+                return { fila: null, error: `No hay suficiente cantidad en ${lugar}${sufijo}. Disponible: ${disp}` };
             }
             return { fila, error: null };
         }

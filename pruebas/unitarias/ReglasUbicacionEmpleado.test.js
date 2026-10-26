@@ -104,3 +104,20 @@ test('seleccionarUbicacionVenta: ubicación elegida (Jose) no toma de otra aunqu
     assert.equal(r.fila, null);
     assert.match(r.error, /bodega seleccionada.*Disponible: 50/);
 });
+
+test('seleccionarUbicacionVenta: filas duplicadas en la misma ubicación usa la que tiene stock', () => {
+    const filas = [
+        { id: 1, tienda_id: 7, bodega_id: null, cantidad: 0 },
+        { id: 2, tienda_id: 7, bodega_id: null, cantidad: 40 },
+        { id: 3, tienda_id: null, bodega_id: 1, cantidad: 100 }
+    ];
+    // Antes fallaba al tomar id=1 (cantidad 0) aunque id=2 sí tenía stock
+    assert.equal(RI.seleccionarUbicacionVenta(filas, {
+        cantidad: 10, ubicacionEmpleado: { tipo: 'tienda', id: 7 }, etiqueta: 'seleccionada'
+    }).fila.id, 2);
+    const r = RI.seleccionarUbicacionVenta(filas, {
+        cantidad: 50, ubicacionEmpleado: { tipo: 'tienda', id: 7 }, etiqueta: 'seleccionada'
+    });
+    assert.equal(r.fila, null);
+    assert.match(r.error, /Disponible: 40/);
+});
