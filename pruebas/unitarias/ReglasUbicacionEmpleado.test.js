@@ -121,3 +121,51 @@ test('seleccionarUbicacionVenta: filas duplicadas en la misma ubicación usa la 
     assert.equal(r.fila, null);
     assert.match(r.error, /Disponible: 40/);
 });
+
+
+test('validarMismaUbicacionVenta: rechaza mezcla tienda+bodega (caso VENT-20261026-017)', () => {
+    const mezclada = [
+        { juguete_id: 1533, tienda_id: 7, bodega_id: null, cantidad: 2 },
+        { juguete_id: 1455, tienda_id: 7, bodega_id: null, cantidad: 5 },
+        { juguete_id: 899, tienda_id: null, bodega_id: 1, cantidad: 3 }
+    ];
+    const r = RI.validarMismaUbicacionVenta(mezclada);
+    assert.equal(r.ok, false);
+    assert.match(r.error, /misma tienda o bodega/);
+});
+
+test('validarMismaUbicacionVenta / ubicacionFijaDeCarrito: una sola ubicación OK', () => {
+    const items = [
+        { tienda_id: null, bodega_id: 1, cantidad: 3 },
+        { tienda_id: null, bodega_id: 1, cantidad: 4 }
+    ];
+    const r = RI.validarMismaUbicacionVenta(items);
+    assert.equal(r.ok, true);
+    assert.equal(r.clave, 'bodega-1');
+    assert.deepEqual(RI.ubicacionFijaDeCarrito(items), { tipo: 'bodega', id: 1 });
+    assert.equal(RI.ubicacionFijaDeCarrito([]), null);
+});
+
+test('seleccionarUbicacionVenta: carrito fijo en Santa Isabel no cae a San Victorino', () => {
+    // Repro del patrón de VENT-20261026-017: code 24 pedía 4; SV tenía 3 → antes iba a SI.
+    // Con ubicación fija del carrito (bodega 1) debe rechazar si no alcanza en SI... 
+    // y si SI sí alcanza, NUNCA elegir la tienda aunque baste.
+    const filas = [
+        { id: 1480, tienda_id: 7, bodega_id: null, cantidad: 3, nombre: 'en SV' },
+        { id: 1307, tienda_id: null, bodega_id: 1, cantidad: 58, nombre: 'en SI' }
+    ];
+    const si = { tipo: 'bodega', id: 1 };
+    assert.equal(RI.seleccionarUbicacionVenta(filas, {
+        cantidad: 4, ubicacionEmpleado: si, etiqueta: 'de esta venta'
+    }).fila.id, 1307);
+    // Sin stock suficiente en la ubicación fija → rechazo (no usar SV)
+    const filasCortas = [
+        { id: 1480, tienda_id: 7, bodega_id: null, cantidad: 100 },
+        { id: 899, tienda_id: null, bodega_id: 1, cantidad: 2 }
+    ];
+    const r = RI.seleccionarUbicacionVenta(filasCortas, {
+        cantidad: 3, ubicacionEmpleado: si, etiqueta: 'de esta venta'
+    });
+    assert.equal(r.fila, null);
+    assert.match(r.error, /bodega de esta venta.*Disponible: 2/);
+});

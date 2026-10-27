@@ -6,6 +6,33 @@ let ventaPorMayorItems = []; // Array para almacenar items de la venta al por ma
 let registrarVentaPorMayorInitialized = false;
 let ultimaVentaPorMayor = null; // Última venta al por mayor registrada (para deshacer)
 
+
+/** Con ítems en el carrito, la ubicación de venta al por mayor queda fija. */
+function bloquearUbicacionPorMayorAlCarrito() {
+    const tipoSelect = document.getElementById('ventaPorMayorUbicacionTipo');
+    const ubicSelect = document.getElementById('ventaPorMayorUbicacion');
+    if (!tipoSelect || !ubicSelect) return;
+    const fija = ReglasInventario.ubicacionFijaDeCarrito(ventaPorMayorItems);
+    if (!fija) {
+        tipoSelect.disabled = false;
+        ubicSelect.disabled = false;
+        return;
+    }
+    tipoSelect.value = fija.tipo;
+    tipoSelect.disabled = true;
+    // Asegurar opción y valor
+    const idStr = String(fija.id);
+    if (![...ubicSelect.options].some(o => o.value === idStr)) {
+        const opt = document.createElement('option');
+        opt.value = idStr;
+        const nombre = (ventaPorMayorItems[0] && ventaPorMayorItems[0].ubicacion_nombre) || idStr;
+        opt.textContent = nombre;
+        ubicSelect.appendChild(opt);
+    }
+    ubicSelect.value = idStr;
+    ubicSelect.disabled = true;
+}
+
 function initVentaPorMayor() {
     const form = document.getElementById('registrarVentaPorMayorForm');
     const jugueteCodigoInput = document.getElementById('ventaPorMayorJugueteCodigo');
@@ -307,8 +334,24 @@ function initVentaPorMayor() {
         const codigoEmpleado = empleadoCodigoInput.value.trim();
         const cantidad = ReglasInventario.parsearCantidad(document.getElementById('ventaPorMayorCantidad').value);
         const metodoPago = document.getElementById('ventaPorMayorMetodoPago').value;
-        const ubicacionTipo = ubicacionTipoSelect ? ubicacionTipoSelect.value : '';
-        const ubicacionId = ubicacionSelect ? ubicacionSelect.value : '';
+        let ubicacionTipo = ubicacionTipoSelect ? ubicacionTipoSelect.value : '';
+        let ubicacionId = ubicacionSelect ? ubicacionSelect.value : '';
+
+        // Una sola ubicación por venta: el carrito fija tienda/bodega (no mezclar)
+        const ubicacionCarrito = ReglasInventario.ubicacionFijaDeCarrito(ventaPorMayorItems);
+        if (ubicacionCarrito) {
+            const tipoSel = ubicacionTipo;
+            const idSel = ubicacionId;
+            if (tipoSel && idSel && (tipoSel !== ubicacionCarrito.tipo || String(idSel) !== String(ubicacionCarrito.id))) {
+                showVentaPorMayorMessage(
+                    'Esta venta ya descuenta de una ubicación. Quita los ítems del carrito si quieres vender desde otra tienda o bodega.',
+                    'error'
+                );
+                return;
+            }
+            ubicacionTipo = ubicacionCarrito.tipo;
+            ubicacionId = String(ubicacionCarrito.id);
+        }
 
         // El empleado es opcional (igual que en Registrar Venta)
         if (!codigoJuguete || !metodoPago || !ubicacionTipo || !ubicacionId) {
@@ -415,6 +458,7 @@ function initVentaPorMayor() {
 
             // Actualizar lista de items en pantalla
             updateVentaPorMayorItemsList();
+            bloquearUbicacionPorMayorAlCarrito();
             
             // Limpiar solo campos del juguete y cantidad; mantener empleado, cliente y método de pago
             if (jugueteItemInput) {
@@ -436,6 +480,12 @@ function initVentaPorMayor() {
     preventFormDoubleSubmit(form, async function(e) {
         if (ventaPorMayorItems.length === 0) {
             showVentaPorMayorMessage('Debes agregar al menos un item a la venta', 'error');
+            return;
+        }
+
+        const mismaUbic = ReglasInventario.validarMismaUbicacionVenta(ventaPorMayorItems);
+        if (!mismaUbic.ok) {
+            showVentaPorMayorMessage(mismaUbic.error, 'error');
             return;
         }
 
@@ -616,6 +666,10 @@ function updateVentaPorMayorItemsList() {
     
     if (ventaPorMayorItems.length === 0) {
         itemsList.innerHTML = '<p style="text-align: center; color: #64748b;">No hay items agregados</p>';
+        const tipoSelect = document.getElementById('ventaPorMayorUbicacionTipo');
+        const ubicSelect = document.getElementById('ventaPorMayorUbicacion');
+        if (tipoSelect) tipoSelect.disabled = false;
+        if (ubicSelect) ubicSelect.disabled = false;
         // Si no hay items, ocultar el campo de abono
         if (abonoRow) {
             abonoRow.style.display = 'none';
@@ -694,6 +748,7 @@ function updateVentaPorMayorItemsList() {
 window.removeVentaPorMayorItem = function(index) {
     ventaPorMayorItems.splice(index, 1);
     updateVentaPorMayorItemsList();
+    bloquearUbicacionPorMayorAlCarrito();
 
     // Ocultar campo de abono si ya no hay items o el método no es crédito
     const abonoRow = document.getElementById('ventaPorMayorAbonoRow');

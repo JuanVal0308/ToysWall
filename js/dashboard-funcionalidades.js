@@ -468,6 +468,7 @@ function initRegistrarVenta() {
         if (!mostrar) {
             grupo.style.display = 'none';
             select.value = '';
+            select.disabled = false;
             return;
         }
         grupo.style.display = '';
@@ -478,7 +479,35 @@ function initRegistrarVenta() {
         if (select.options.length && select.options[0].value === '') {
             select.options[0].textContent = 'Elige tienda o bodega';
         }
+        // Si el carrito ya tiene ubicación, dejarla fija
+        bloquearUbicacionVentaAlCarrito();
     }
+
+    /** Con ítems en el carrito, "Sale desde" queda fija a esa ubicación (no se mezcla). */
+    function bloquearUbicacionVentaAlCarrito() {
+        const select = document.getElementById('ventaUbicacionClave');
+        const grupo = document.getElementById('ventaUbicacionGrupo');
+        if (!select) return;
+        const fija = ReglasInventario.ubicacionFijaDeCarrito(ventaItems);
+        if (!fija) {
+            select.disabled = false;
+            return;
+        }
+        const clave = `${fija.tipo}-${fija.id}`;
+        if (select.value !== clave) {
+            // Asegurar que la opción exista (por si el select se recargó)
+            if (![...select.options].some(o => o.value === clave)) {
+                const opt = document.createElement('option');
+                opt.value = clave;
+                opt.textContent = ventaItems[0]?.ubicacion_nombre || clave;
+                select.appendChild(opt);
+            }
+            select.value = clave;
+        }
+        select.disabled = true;
+        if (grupo) grupo.style.display = '';
+    }
+    window.bloquearUbicacionVentaAlCarrito = bloquearUbicacionVentaAlCarrito;
 
     // Buscar empleado por código
     empleadoCodigoInput.addEventListener('blur', async function() {
@@ -640,6 +669,29 @@ function initRegistrarVenta() {
                 return;
             }
 
+            // Una sola ubicación por venta: si el carrito ya tiene ítems, no se cambia ni se usa otra.
+            const ubicacionCarrito = ReglasInventario.ubicacionFijaDeCarrito(ventaItems);
+            let ubicacionVenta = ubicacionCarrito || resUbic.ubicacion;
+            let etiquetaUbicacion = ubicacionCarrito
+                ? 'de esta venta'
+                : resUbic.etiqueta;
+            if (ubicacionCarrito && resUbic.ubicacion) {
+                const misma = ubicacionCarrito.tipo === resUbic.ubicacion.tipo
+                    && Number(ubicacionCarrito.id) === Number(resUbic.ubicacion.id);
+                if (!misma) {
+                    showVentaMessage(
+                        'Esta venta ya descuenta de una ubicación. Quita los ítems del carrito si quieres vender desde otra tienda o bodega.',
+                        'error'
+                    );
+                    return;
+                }
+            }
+            // Con ítems en el carrito nunca caemos al fallback admin (tiendas→bodegas).
+            if (ventaItems.length > 0 && !ubicacionVenta) {
+                showVentaMessage('No se pudo determinar la ubicación fija de esta venta. Quita los ítems e inténtalo de nuevo.', 'error');
+                return;
+            }
+
             // Buscar TODOS los registros con ese código (uno por ubicación)
             const { data: juguetesData, error: jugueteError } = await window.supabaseClient
                 .from('juguetes')
@@ -662,9 +714,10 @@ function initRegistrarVenta() {
             // Seleccionar la ubicación de la que se descontará (regla de dominio)
             const { fila: juguete, error: errorUbicacion } = ReglasInventario.seleccionarUbicacionVenta(juguetesData, {
                 cantidad,
-                // Jose/Sindy: la elegida en "Sale desde". Otros: la asignada. Admin: null (cualquier una con stock).
-                ubicacionEmpleado: resUbic.ubicacion,
-                etiqueta: resUbic.etiqueta,
+                // Jose/Sindy: "Sale desde". Otros: asignada. Admin (primer ítem): cualquier una con stock.
+                // Ítems siguientes: SIEMPRE la ubicación del primer ítem (sin fallback cruzado).
+                ubicacionEmpleado: ubicacionVenta,
+                etiqueta: etiquetaUbicacion,
                 reservado
             });
             if (!juguete) {
@@ -694,6 +747,8 @@ function initRegistrarVenta() {
             ventaItems.push({
                 juguete_id: juguete.id,
                 ubicacion_nombre: ReglasInventario.describirUbicacion(juguete),
+                tienda_id: juguete.tienda_id || null,
+                bodega_id: juguete.bodega_id || null,
                 juguete_codigo: juguete.codigo,
                 juguete_nombre: juguete.nombre,
                 juguete_item: juguete.item || null,
@@ -705,6 +760,8 @@ function initRegistrarVenta() {
                 precio: precio,
                 metodo_pago: metodoPago
             });
+            // Fijar "Sale desde" a la ubicación real del primer ítem (evita mezclar a mitad de venta)
+            bloquearUbicacionVentaAlCarrito();
 
             // Actualizar lista de items (esto también removerá los atributos required)
             updateVentaItemsList();
@@ -753,6 +810,12 @@ function initRegistrarVenta() {
 
         try {
             const user = JSON.parse(sessionStorage.getItem('user'));
+
+            const mismaUbic = ReglasInventario.validarMismaUbicacionVenta(ventaItems);
+            if (!mismaUbic.ok) {
+                showVentaMessage(mismaUbic.error, 'error');
+                return;
+            }
 
             if (window.usarStockRpc && window.usarStockRpc()) {
                 // Una sola transacción en la BD: descuenta stock y registra todas las líneas (o nada)
@@ -900,6 +963,12 @@ function initRegistrarVenta() {
 window.removeVentaItem = function(index) {
     ventaItems.splice(index, 1);
     updateVentaItemsList();
+    if (typeof window.bloquearUbicacionVentaAlCarrito === 'function') {
+        window.bloquearUbicacionVentaAlCarrito();
+    } else {
+        const select = document.getElementById('ventaUbicacionClave');
+        if (select && ventaItems.length === 0) select.disabled = false;
+    }
 };
 
 // ============================================
@@ -1070,6 +1139,8 @@ window.updateVentaItemsList = function() {
             });
             form.removeAttribute('novalidate');
         }
+        const selectUbic = document.getElementById('ventaUbicacionClave');
+        if (selectUbic) selectUbic.disabled = false;
         return;
     }
 

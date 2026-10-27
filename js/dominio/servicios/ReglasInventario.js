@@ -41,6 +41,55 @@ const ReglasInventario = {
         return 'Sin ubicación';
     },
 
+
+    /**
+     * Clave estable de la ubicación de un registro o item de venta ("tienda-7", "bodega-1").
+     * null si no tiene tienda ni bodega.
+     */
+    claveUbicacion(fila) {
+        if (!fila) return null;
+        if (fila.bodega_id != null && fila.bodega_id !== '') return `bodega-${Number(fila.bodega_id)}`;
+        if (fila.tienda_id != null && fila.tienda_id !== '') return `tienda-${Number(fila.tienda_id)}`;
+        if (fila.ubicacion_tipo && fila.ubicacion_id != null && fila.ubicacion_id !== '') {
+            return `${fila.ubicacion_tipo}-${Number(fila.ubicacion_id)}`;
+        }
+        return null;
+    },
+
+    /**
+     * Una venta no puede mezclar tiendas/bodegas (VENT-20261026-017).
+     * @param {Array<Object>} items - items del carrito o filas con tienda_id/bodega_id
+     * @returns {{ok: boolean, error: string|null, clave: string|null}}
+     */
+    validarMismaUbicacionVenta(items) {
+        const lista = items || [];
+        if (lista.length === 0) return { ok: true, error: null, clave: null };
+        const claves = [...new Set(lista.map(i => this.claveUbicacion(i)).filter(Boolean))];
+        if (claves.length === 0) {
+            return { ok: false, error: 'Cada ítem de la venta debe indicar de qué tienda o bodega sale el stock.', clave: null };
+        }
+        if (claves.length > 1) {
+            return {
+                ok: false,
+                error: 'Todos los ítems de una venta deben salir de la misma tienda o bodega. Quita los ítems o elige una sola ubicación.',
+                clave: null
+            };
+        }
+        return { ok: true, error: null, clave: claves[0] };
+    },
+
+    /**
+     * Ubicación fija del carrito (la del primer ítem). Se usa para no cambiar
+     * de tienda/bodega a mitad de la venta ni caer al fallback admin.
+     * @returns {{tipo:'tienda'|'bodega', id:number}|null}
+     */
+    ubicacionFijaDeCarrito(items) {
+        const v = this.validarMismaUbicacionVenta(items);
+        if (!v.clave) return null;
+        const m = /^(tienda|bodega)-(\d+)$/.exec(v.clave);
+        return m ? { tipo: m[1], id: Number(m[2]) } : null;
+    },
+
     /**
      * Elige de qué registro (ubicación) se descontará una venta.
      * - Empleado con ubicación asignada (tienda o bodega): solo esa ubicación.
